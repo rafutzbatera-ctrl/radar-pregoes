@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -14,6 +15,11 @@ router = APIRouter(prefix="/pregoes", tags=["pregoes"])
 class PregaoPatch(BaseModel):
     salvo: bool | None = None
     novo: bool | None = None
+    # pipeline de disputa (P2); null em status_pipeline = sai do funil
+    status_pipeline: Literal["cotacao", "habilitacao", "disputando",
+                             "ganho", "perdido", "suspenso"] | None = None
+    data_disputa: str | None = None
+    valor_final: float | None = None
 
 
 def _resumo_pregao(con: sqlite3.Connection, p: sqlite3.Row) -> dict:
@@ -79,16 +85,24 @@ def detalhe(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
 @router.patch("/{pregao_id}")
 def atualizar(pregao_id: int, corpo: PregaoPatch,
               con: sqlite3.Connection = Depends(get_db)):
-    campos = corpo.model_dump(exclude_none=True)
+    # exclude_unset: distingue "não enviado" de "enviado como null" —
+    # null limpa o campo (ex.: tirar do funil), ausente não toca
+    campos = corpo.model_dump(exclude_unset=True)
     if not campos:
         raise HTTPException(400, "Nada para atualizar")
     sets = ", ".join(f"{c}=?" for c in campos)
+    valores = [int(v) if isinstance(v, bool) else v for v in campos.values()]
     cur = con.execute(
-        f"UPDATE pregoes SET {sets} WHERE id=?",
-        (*[int(v) for v in campos.values()], pregao_id),
+        f"UPDATE pregoes SET {sets} WHERE id=?", (*valores, pregao_id)
     )
     if not cur.rowcount:
         raise HTTPException(404, "Pregão não encontrado")
+    # entrada no funil: salvar pregão ainda sem status → cotacao
+    if campos.get("salvo") is True:
+        con.execute(
+            "UPDATE pregoes SET status_pipeline='cotacao' "
+            "WHERE id=? AND status_pipeline IS NULL", (pregao_id,)
+        )
     con.commit()
     return detalhe(pregao_id, con)
 
