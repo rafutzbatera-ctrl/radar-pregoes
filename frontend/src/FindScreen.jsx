@@ -304,6 +304,19 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
       .finally(() => setAvaliando(false));
   };
 
+  // P6.1 — avaliação AUTOMÁTICA: o valor real NÃO vem na busca do PNCP
+  // (medido: 0 de 20 hits com valor_global), só na API de itens. Então cada
+  // página carregada se avalia sozinha ~1,5s após assentar (o debounce da
+  // digitação já segura novas buscas); itens com erro não re-disparam
+  // (naoAvaliavel sai de aValiar) e o botão segue como retry manual.
+  const avaliarRef = React.useRef(avaliar);
+  avaliarRef.current = avaliar;
+  React.useEffect(() => {
+    if (!aoVivo || avaliando || aValiar === 0) return;
+    const t = setTimeout(() => avaliarRef.current(), 1500);
+    return () => clearTimeout(t);
+  }, [aoVivo, avaliando, aValiar]);
+
   // P6: faixa de valor + ordenação aplicadas CLIENT-SIDE aos itens carregados.
   // valor efetivo do item = valorItens (avaliado) ▸ valorTotal do hit.
   const valorEfetivoVivo = (i) => (i.valorItens != null ? i.valorItens : i.valorTotal);
