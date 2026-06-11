@@ -117,6 +117,11 @@ export function adaptarPregao(p) {
     beneficio: null, // por item no PNCP; o agregado aparece na tabela de itens
     valorTotal: p.valor_global,
     valorItens: p.valor_itens,   // Σ valor_total dos itens (oficial; fallback rotulado)
+    // P5: potencial aderente — itens do meu ramo (sugeridos/confirmados) com
+    // preço esperado. receitaAderente é a Σ persistida; o potencial exibido =
+    // receitaAderente × margem_alvo da config (sempre rotulado "sim.").
+    receitaAderente: p.receita_aderente,
+    itensAderentes: p.itens_aderentes,
     prazo: dataBr(p.data_fim_vigencia),
     inicioPropostas: dataBr(p.data_inicio_vigencia),
     divulgacao: dataBr(jb.data_publicacao_pncp),
@@ -213,6 +218,10 @@ export const api = {
     if (filtros.novos != null) q.set("novos", filtros.novos);
     if (filtros.salvos != null) q.set("salvos", filtros.salvos);
     if (filtros.uf) q.set("uf", filtros.uf);
+    // P5: faixa de valor (mín/máx sobre o valor efetivo) e ordenação
+    if (filtros.valorMin != null) q.set("valor_min", filtros.valorMin);
+    if (filtros.valorMax != null) q.set("valor_max", filtros.valorMax);
+    if (filtros.ordem && filtros.ordem !== "recente") q.set("ordem", filtros.ordem);
     const s = q.toString();
     return req("/pregoes" + (s ? `?${s}` : "")).then((ps) => ps.map(adaptarPregao));
   },

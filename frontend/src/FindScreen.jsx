@@ -134,7 +134,7 @@ function ChipsInput({ termos, excluir, aoMudar }) {
   );
 }
 
-export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, aoImportar, mudarPipeline }) {
+export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, aoImportar, mudarPipeline, margemAlvo = 0.2 }) {
   const { reduzido, estatico } = React.useContext(MotionCtx);
   const [busca, setBusca] = React.useState("");          // input texto (modo radar)
   const [uf, setUf] = React.useState("todas");
@@ -144,6 +144,17 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
   // fonte: "radar" (pregões já descobertos) | "vivo" (busca ao vivo no PNCP)
   const [fonte, setFonte] = React.useState("radar");
   const aoVivo = !apenasSalvos && fonte === "vivo";
+
+  // ----- P5: faixa de valor + ordenação (radar e Meus pregões; NÃO no ao vivo) -----
+  // O App mantém `pregoes` global como fonte do resto do app; aqui, quando algum
+  // filtro/ordem ≠ default, buscamos a lista filtrada LOCAL no backend (debounce
+  // 400ms) e a usamos no lugar da global. Default → usa a global.
+  const [valorMin, setValorMin] = React.useState("");
+  const [valorMax, setValorMax] = React.useState("");
+  const [ordem, setOrdem] = React.useState("recente");
+  const [listaFiltrada, setListaFiltrada] = React.useState(null); // null = usa global
+  const filtroValorOuOrdemAtivo =
+    valorMin.trim() !== "" || valorMax.trim() !== "" || ordem !== "recente";
 
   // ----- funil de disputa (Meus pregões): faixa-resumo + alternância Lista | Quadro -----
   const [resumo, setResumo] = React.useState(null);
@@ -170,8 +181,33 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
   const [tipoVivo, setTipoVivo] = React.useState("edital");
   const [ordemVivo, setOrdemVivo] = React.useState("-data");
 
+  // parse pt-BR ("1.234,50" ou "1234.50") → número | null
+  const parseValor = (s) => {
+    const t = String(s).trim();
+    if (t === "") return null;
+    const n = parseFloat(t.replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  };
+
+  // refetch local filtrado/ordenado (debounce 400ms). Só dispara fora do ao vivo.
+  React.useEffect(() => {
+    if (aoVivo) return;
+    if (!filtroValorOuOrdemAtivo) { setListaFiltrada(null); return; }
+    const id = setTimeout(() => {
+      api.listarPregoes({
+        salvos: apenasSalvos ? true : undefined,
+        valorMin: parseValor(valorMin),
+        valorMax: parseValor(valorMax),
+        ordem,
+      }).then(setListaFiltrada).catch(() => setListaFiltrada(null));
+    }, 400);
+    return () => clearTimeout(id);
+  }, [aoVivo, apenasSalvos, filtroValorOuOrdemAtivo, valorMin, valorMax, ordem]);
+
   const carregando = pregoes == null && !erro;
-  const base = (pregoes || []).filter((p) => !apenasSalvos || p.salvo);
+  // fonte da lista do radar/Meus pregões: global (default) ou filtrada (P5)
+  const fonteLista = filtroValorOuOrdemAtivo && listaFiltrada ? listaFiltrada : (pregoes || []);
+  const base = fonteLista.filter((p) => !apenasSalvos || p.salvo);
   const ufs = Array.from(new Set(base.map((p) => p.uf).filter(Boolean))).sort();
   const modalidades = Array.from(new Set(base.map((p) => p.modalidade).filter(Boolean))).sort();
 
@@ -358,6 +394,26 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
             <span className="led" aria-hidden="true"></span>Só novos {qtdNovos > 0 && <em className="filtro-badge">{qtdNovos}</em>}
           </button>
         )}
+        {/* P5: faixa de valor + ordenação (radar e Meus pregões) */}
+        {!aoVivo && (
+          <div className="filtro-valor mono" role="group" aria-label="Faixa de valor">
+            <input type="text" inputMode="decimal" className="filtro-valor-input"
+              value={valorMin} onChange={(e) => setValorMin(e.target.value)}
+              placeholder="valor mín" aria-label="Valor mínimo" />
+            <span className="filtro-valor-sep" aria-hidden="true">–</span>
+            <input type="text" inputMode="decimal" className="filtro-valor-input"
+              value={valorMax} onChange={(e) => setValorMax(e.target.value)}
+              placeholder="valor máx" aria-label="Valor máximo" />
+          </div>
+        )}
+        {!aoVivo && (
+          <select className="filtro-sel" value={ordem} onChange={(e) => setOrdem(e.target.value)} aria-label="Ordenar pregões">
+            <option value="recente">Mais recentes</option>
+            <option value="potencial">Potencial p/ você</option>
+            <option value="valor">Maior valor</option>
+            <option value="prazo">Prazo</option>
+          </select>
+        )}
       </motion.div>
       )}
 
@@ -392,7 +448,7 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
             {apenasSalvos ? " salvas" : " encontradas"}
           </motion.div>
           {lista.map((p) => (
-            <CartaoPregao key={p.id} pregao={p} variants={entrada} onClick={() => aoAbrir(p.id)} />
+            <CartaoPregao key={p.id} pregao={p} variants={entrada} margemAlvo={margemAlvo} onClick={() => aoAbrir(p.id)} />
           ))}
           {lista.length === 0 && (
             <motion.div variants={entrada} className="estado-vazio mod">
@@ -494,7 +550,7 @@ export function CartaoPregaoVivo({ pregao, variants, importar, importando, aoAbr
   );
 }
 
-export function CartaoPregao({ pregao, variants, onClick }) {
+export function CartaoPregao({ pregao, variants, onClick, margemAlvo = 0.2 }) {
   const ag = pregao.agregados || {};
   const veredito = normalizarVeredito(ag.veredito);
   const linhaSilk = [
@@ -502,6 +558,12 @@ export function CartaoPregao({ pregao, variants, onClick }) {
     pregao.municipio ? pregao.municipio + "/" + pregao.uf : pregao.uf,
     pregao.status,
   ].filter(Boolean).join(" · ");
+  // P5: potencial aderente (cenário, nunca promessa). Com itens do meu ramo →
+  // chip âmbar "N itens seus · potencial R$ X sim."; enriquecido mas sem item
+  // do ramo → chip silk; sem itens ainda → nada.
+  const nAderentes = pregao.itensAderentes || 0;
+  const potencial = nAderentes > 0 && pregao.receitaAderente != null
+    ? pregao.receitaAderente * margemAlvo : null;
   return (
     <motion.button type="button" className="card-pregao mod" variants={variants} onClick={onClick}
       aria-label={"Abrir análise de " + pregao.titulo + (veredito ? " — veredito prévio: " + VEREDITO_TXT[veredito] : "")}>
@@ -520,6 +582,14 @@ export function CartaoPregao({ pregao, variants, onClick }) {
         <span><span className="k">Itens</span>{ag.itensTotal > 0 ? ag.itensTotal : "—"}</span>
         <span className="desktop-only"><span className="k">Cobertura</span>{ag.itensTotal > 0 ? ag.itensConfirmados + "/" + ag.itensTotal + " no catálogo" : "—"}</span>
       </span>
+      {potencial != null ? (
+        <span className="card-potencial">
+          {nAderentes} {nAderentes === 1 ? "item seu" : "itens seus"} · potencial{" "}
+          {fmtBRL(potencial)} <em className="margem-pill sim">sim.</em>
+        </span>
+      ) : ag.itensTotal > 0 && nAderentes === 0 ? (
+        <span className="card-potencial vazio silk">nenhum item do seu ramo</span>
+      ) : null}
       <span className="card-vered">
         {veredito
           ? <Etiqueta veredito={veredito} />
@@ -619,7 +689,7 @@ export function BuscasScreen({ buscas, erro, recarregar, rodar, criar, alternar 
                 <button type="button" className={"btn-rodar" + (rodando === b.id ? " rodando" : "")}
                   disabled={rodando != null} onClick={() => aoRodar(b.id)}>
                   {rodando === b.id
-                    ? <React.Fragment><span className="spin" aria-hidden="true"></span> Rodando…</React.Fragment>
+                    ? <React.Fragment><span className="spin" aria-hidden="true"></span> buscando e analisando itens (pode levar ~1 min)…</React.Fragment>
                     : <React.Fragment>{Ico.raio} Rodar agora</React.Fragment>}
                 </button>
               </div>

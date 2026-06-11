@@ -485,6 +485,13 @@ export default function App() {
           : null)
     : null;
 
+  // P5: margem alvo da config (guia o potencial aderente exibido nos cartões;
+  // só cenário, nunca promessa). default 0.20 quando inválida/ausente.
+  const margemAlvoConfig = (() => {
+    const v = parseFloat((config || {}).margem_alvo);
+    return Number.isFinite(v) ? v : 0.2;
+  })();
+
   const chaveTela = tela.nome === "analise" ? "analise-" + tela.pregaoId : tela.nome;
   const transTela = semFramer
     ? {}
@@ -510,12 +517,12 @@ export default function App() {
       {tela.nome === "find" && (
         <FindScreen aoAbrir={abrirPregao} apenasSalvos={false}
           pregoes={pregoes} erro={erros.pregoes} recarregar={carregarTudo}
-          aoImportar={importarPregao} />
+          aoImportar={importarPregao} margemAlvo={margemAlvoConfig} />
       )}
       {tela.nome === "meus" && (
         <FindScreen aoAbrir={abrirPregao} apenasSalvos={true}
           pregoes={pregoes} erro={erros.pregoes} recarregar={carregarTudo}
-          mudarPipeline={mudarPipeline} />
+          mudarPipeline={mudarPipeline} margemAlvo={margemAlvoConfig} />
       )}
       {tela.nome === "buscas" && (
         <BuscasScreen buscas={buscas} erro={erros.buscas} recarregar={carregarTudo}
