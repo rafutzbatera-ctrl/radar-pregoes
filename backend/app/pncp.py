@@ -21,7 +21,8 @@ BASE_SEARCH = "https://pncp.gov.br/api/search/"
 BASE_API = "https://pncp.gov.br/api/pncp/v1"
 
 _MIN_INTERVALO = 1.0  # segundos entre requisições
-_TENTATIVAS = 4
+# a busca do PNCP costuma derrubar as primeiras conexões (WAF); o backoff resolve
+_TENTATIVAS = 5
 _CACHE_TTL = 6 * 3600  # 6 h
 
 

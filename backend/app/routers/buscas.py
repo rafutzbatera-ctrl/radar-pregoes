@@ -77,3 +77,5 @@ def rodar(busca_id: int, con: sqlite3.Connection = Depends(get_db)):
         return descoberta.rodar_busca(con, busca_id, usar_cache=False)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
+    except RuntimeError as exc:  # PNCP fora do ar após os retries
+        raise HTTPException(503, str(exc))
