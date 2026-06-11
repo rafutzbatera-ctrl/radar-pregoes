@@ -1455,3 +1455,8 @@ button.busca-card-status:focus-visible { outline: 2px solid var(--tinta); outlin
 
 /* veredito pendente (sem item confirmado): palavra apagada, sem cor de chute */
 .hero-veredito-palavra.pendente { color: rgba(255,255,255,0.28); text-shadow: none; font-size: clamp(30px, 3.2vw, 44px); }
+
+/* chips de arquivo clicaveis (PDF oficial do PNCP a um clique) */
+a.arq-link { text-decoration: none; cursor: pointer; }
+a.arq-link:hover { border-color: var(--tinta); box-shadow: 0 4px 12px -6px rgba(18,24,20,.3); }
+.arquivos-inline { margin-bottom: 12px; }

@@ -107,6 +107,18 @@ export default function App() {
               : null,
           };
         });
+        // PDF oficial a um clique mesmo sem sincronizar: se o pregão ainda não
+        // tem arquivos no banco, busca só os metadados na API do PNCP
+        const pregaoOk = rp.status === "fulfilled" ? rp.value : null;
+        if (pregaoOk && !(pregaoOk.arquivos || []).length) {
+          api.carregarArquivos(id).then((arqs) => {
+            if (!arqs.length) return;
+            setDetalhe((d) => {
+              if (!d || d.id !== id || !d.pregao) return d;
+              return { ...d, pregao: { ...d.pregao, arquivos: arqs } };
+            });
+          }).catch(() => {}); // melhor-esforço; o link "Ver no PNCP" cobre
+        }
       });
     });
   }, []);

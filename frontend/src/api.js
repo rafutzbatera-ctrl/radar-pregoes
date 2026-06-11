@@ -178,6 +178,9 @@ export const api = {
       is.map((i) => adaptarItem(i, produtosPorId))),
   carregarHabilitacao: (pregaoId) =>
     req(`/pregoes/${pregaoId}/habilitacao`).then((hs) => hs.map(adaptarHabilitacao)),
+  carregarArquivos: (pregaoId) =>
+    req(`/pregoes/${pregaoId}/arquivos`).then((as) =>
+      as.map((a) => ({ titulo: a.titulo, tipo: a.tipo, url: a.url }))),
   fiscal: (pregaoId) => req(`/pregoes/${pregaoId}/fiscal`),
 
   // matching (human-in-the-loop)

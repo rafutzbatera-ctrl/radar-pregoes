@@ -114,8 +114,42 @@ def test_fiscal_endpoint(client, con):
     assert "contador" in r.json()["aviso"]
 
 
+def test_arquivos_do_banco_quando_sincronizado(client, con):
+    con.execute("INSERT INTO pregoes (cnpj, ano, seq, numero_controle) "
+                "VALUES ('1',2026,1,'NC-1')")
+    pregao_id = con.execute("SELECT id FROM pregoes").fetchone()["id"]
+    con.execute(
+        """INSERT INTO arquivos (pregao_id, titulo, tipo, url, caminho_local)
+           VALUES (?,'Edital X','Edital','https://pncp.gov.br/x/arquivos/1','/tmp/x.pdf')""",
+        (pregao_id,))
+    con.commit()
+    r = client.get(f"/pregoes/{pregao_id}/arquivos")
+    assert r.status_code == 200
+    assert r.json()[0]["url"] == "https://pncp.gov.br/x/arquivos/1"
+    assert r.json()[0]["tipo"] == "Edital"
+
+
+def test_arquivos_sem_sincronizar_consulta_pncp(client, con, cliente_fake, monkeypatch):
+    """Pregão não sincronizado: o endpoint relê só os METADADOS na API do PNCP
+    (sem download) para o PDF oficial ficar a um clique."""
+    from app import pncp as pncp_mod
+    monkeypatch.setattr(pncp_mod, "cliente", lambda: cliente_fake)
+    con.execute("INSERT INTO pregoes (cnpj, ano, seq, numero_controle) "
+                "VALUES ('01613770000172',2026,67,'NC-67')")
+    pregao_id = con.execute("SELECT id FROM pregoes").fetchone()["id"]
+    con.commit()
+    r = client.get(f"/pregoes/{pregao_id}/arquivos")
+    assert r.status_code == 200
+    corpo = r.json()
+    assert len(corpo) == 1                      # fixture real: 1 arquivo (Edital)
+    assert corpo[0]["url"].startswith("https://pncp.gov.br/")
+    assert corpo[0]["caminho_local"] is None    # metadados, nada baixado
+    assert cliente_fake.chamadas["baixar"] == 0
+
+
 def test_404s(client):
     assert client.get("/pregoes/999").status_code == 404
+    assert client.get("/pregoes/999/arquivos").status_code == 404
     assert client.post("/itens/999/match", json={"produto_id": None}).status_code == 404
     assert client.patch("/habilitacao/999", json={"status_usuario": "ok"}).status_code == 404
     assert client.patch("/catalogo/999", json={"nome": "x"}).status_code == 404

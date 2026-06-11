@@ -9,6 +9,19 @@ export const HABIL_STATUS = {
 };
 const ORDEM_CAT = ["juridica", "fiscal", "tecnica", "economico_financeira", "proposta", "outros"];
 
+// chip de arquivo: link direto para o binário oficial no PNCP (abre/baixa o PDF)
+export function ArquivoChip({ arq }) {
+  if (!arq.url) {
+    return <span className="arq-chip">{Ico.doc} {arq.titulo}{arq.tipo && <em> · {arq.tipo}</em>}</span>;
+  }
+  return (
+    <a className="arq-chip arq-link" href={arq.url} target="_blank" rel="noopener noreferrer"
+       title="Abrir o arquivo oficial no PNCP">
+      {Ico.doc} {arq.titulo}{arq.tipo && <em> · {arq.tipo}</em>} {Ico.externo}
+    </a>
+  );
+}
+
 export function HabilitacaoTab({ pregao, habilStatus, setHabil, sincronizar, sincronizando }) {
   const habil = pregao.habilitacao;
 
@@ -35,7 +48,7 @@ export function HabilitacaoTab({ pregao, habilStatus, setHabil, sincronizar, sin
         {(pregao.arquivos || []).length > 0 && (
           <div className="estado-arquivos">
             {pregao.arquivos.map((arq) => (
-              <span key={arq.titulo} className="arq-chip">{Ico.doc} {arq.titulo}{arq.tipo && <em> · {arq.tipo}</em>}</span>
+              <ArquivoChip key={arq.titulo} arq={arq} />
             ))}
           </div>
         )}
@@ -73,6 +86,15 @@ export function HabilitacaoTab({ pregao, habilStatus, setHabil, sincronizar, sin
       <div className="tbl-titulo">
         <span className="silk">Documentos de habilitação — extraídos do edital com citação</span>
       </div>
+
+      {/* o PDF oficial sempre a um clique — a extração é apoio, não substituto */}
+      {(pregao.arquivos || []).length > 0 && (
+        <div className="estado-arquivos arquivos-inline">
+          {pregao.arquivos.map((arq) => (
+            <ArquivoChip key={arq.titulo} arq={arq} />
+          ))}
+        </div>
+      )}
 
       <div className="gate-aviso mod">
         <span className="gate-ico" aria-hidden="true">{Ico.escudo}</span>

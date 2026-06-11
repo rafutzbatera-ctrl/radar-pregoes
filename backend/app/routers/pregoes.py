@@ -4,6 +4,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from .. import pncp
 from ..deps import get_db
 from ..services import analise, fiscal, sincronizacao
 
@@ -125,6 +126,30 @@ def itens(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
         d["lucro"] = conta["lucro"]
         saida.append(d)
     return saida
+
+
+@router.get("/{pregao_id}/arquivos")
+def arquivos_pregao(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
+    """Arquivos do edital com link direto para o binário oficial no PNCP.
+
+    Se o pregão ainda não foi sincronizado, consulta só os METADADOS na API
+    (sem download) — o PDF oficial fica a um clique mesmo sem sincronizar.
+    """
+    p = con.execute("SELECT * FROM pregoes WHERE id=?", (pregao_id,)).fetchone()
+    if p is None:
+        raise HTTPException(404, "Pregão não encontrado")
+    linhas = con.execute(
+        "SELECT titulo, tipo, url, caminho_local FROM arquivos WHERE pregao_id=?",
+        (pregao_id,),
+    ).fetchall()
+    if linhas:
+        return [dict(ln) for ln in linhas]
+    try:
+        lista = pncp.cliente().arquivos(p["cnpj"], p["ano"], p["seq"])
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+    return [{"titulo": a.get("titulo"), "tipo": a.get("tipoDocumentoNome"),
+             "url": a.get("url"), "caminho_local": None} for a in lista]
 
 
 @router.get("/{pregao_id}/fiscal")
