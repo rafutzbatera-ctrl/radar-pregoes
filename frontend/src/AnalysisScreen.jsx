@@ -148,7 +148,8 @@ export default function AnalysisScreen({
                    : pregao.valorItens != null ? fmtBRL(pregao.valorItens) : "—"}
                 sub={pregao.valorTotal == null && pregao.valorItens != null
                      ? "Σ dos itens do edital" : undefined} />
-              <Resumo k="Cobertura do catálogo" v={a.cobertos + " de " + a.total} sub={a.sugeridos > 0 ? a.sugeridos + " sugeridos a confirmar" : "sem pendências"} />
+              {/* cobertura agora é por CUSTO (manual ou catálogo) — rótulo fiel */}
+              <Resumo k="Cobertura de custos" v={a.cobertos + " de " + a.total} sub={a.sugeridos > 0 ? a.sugeridos + " sugeridos a confirmar" : "sem pendências"} />
               <Resumo k="Habilitação"
                 v={habil.length ? pendentesHabil + " pendentes" : !habilCarregada ? "carregando…" : pregao.sincronizado ? "sem requisitos" : "não sincronizada"}
                 sub={habil.length ? "de " + habil.length + " requisitos" : undefined} />
@@ -306,7 +307,7 @@ function ItensTab({ a, pregao, abrir, setCusto, confirmarCusto, limparCusto, def
             </div>
           )}
           <motion.div className="tbl-total" variants={linha} role="row">
-            <div className="t-label" role="cell">Total · {a.cobertos} de {a.total} itens confirmados</div>
+            <div className="t-label" role="cell">Total · {a.cobertos} de {a.total} itens com custo</div>
             <div className="t-resto" role="cell"></div>
             <div className="t-resto" role="cell"></div>
             <div className="t-margem" role="cell">

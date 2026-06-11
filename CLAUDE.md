@@ -45,9 +45,10 @@ Não é consultoria jurídica nem contábil. Não dá lances. Não emite NF-e.
   para saída Pydantic validada. A chave vem de `ANTHROPIC_API_KEY` no `.env`
   (runtime do app ≠ assinatura do agente de código).
 - **Matching de itens ↔ catálogo:** embeddings locais
-  `intfloat/multilingual-e5-small` + similaridade de cosseno; threshold 0.83
-  para sugerir match; matches são SEMPRE confirmados pelo usuário na UI antes
-  de entrar na conta (human-in-the-loop).
+  `intfloat/multilingual-e5-small` + similaridade de cosseno; threshold 0.90
+  (atualizado 11/06/2026 — decisão do dono; era 0.83) para sugerir match;
+  matches são SEMPRE confirmados pelo usuário na UI antes de entrar na conta
+  (human-in-the-loop). Recusas são memorizadas por item.
 - **Frontend:** React + Vite + Framer Motion. A UI premium já existe como mock
   (gerado no Claude Design) — portar os componentes e ligar nos endpoints.
 - **Testes:** pytest; cada milestone fecha com testes verdes.
