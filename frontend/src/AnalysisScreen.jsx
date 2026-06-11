@@ -34,8 +34,10 @@ export default function AnalysisScreen({
   const margemAlvo = config && config.margem_alvo != null
     ? parseFloat(config.margem_alvo) || 0 : 0;
   const a = analisar(pregao, estado, catalogoPorCod, false, desagio, margemAlvo);
-  // hero usa a camada simulada quando NÃO há nenhum custo real — sempre rotulada
-  const heroSim = !a.veredito && a.sim;
+  // manchete do hero = MISTURA (reais digitados + simulados no alvo) sempre que
+  // houver item simulado; a simulação só cessa item a item, quando o usuário
+  // digita o custo real (decisão do dono 12/06). Sempre rotulada.
+  const temBlend = !!a.sim;
   const [aba, setAba] = React.useState("itens");
   const [itemAberto, setItemAberto] = React.useState(null);
   const linhaOrigem = React.useRef(null);
@@ -129,40 +131,44 @@ export default function AnalysisScreen({
             <motion.section className="hero" variants={entrada} aria-label="Veredito de viabilidade">
               <div className="hero-top">
                 <div>
-                  <div className="silk">Lucro potencial estimado{heroSim ? " · simulação" : ""}</div>
-                  <div className={"hero-lucro" + (heroSim ? " hero-sim" : "")}>
-                    {a.veredito ? <NumBRL value={a.lucroTotal} />
-                     : heroSim ? <NumBRL value={a.sim.lucroTotal} />
+                  <div className="silk">Lucro potencial estimado{temBlend ? " · com simulação" : ""}</div>
+                  <div className={"hero-lucro" + (temBlend ? " hero-sim" : "")}>
+                    {temBlend ? <NumBRL value={a.sim.lucroTotal} />
+                     : a.veredito ? <NumBRL value={a.lucroTotal} />
                      : <span className="mono">—</span>}
                   </div>
                 </div>
                 <div>
-                  <div className="silk">Margem média{heroSim ? " · simulação" : ""}</div>
-                  <div className={"hero-margem" + (heroSim ? " hero-sim" : "")}>
-                    {a.veredito ? <NumPct value={a.margemAgregada} />
-                     : heroSim ? <NumPct value={a.sim.margemAgregada} />
+                  <div className="silk">Margem média{temBlend ? " · com simulação" : ""}</div>
+                  <div className={"hero-margem" + (temBlend ? " hero-sim" : "")}>
+                    {temBlend ? <NumPct value={a.sim.margemAgregada} />
+                     : a.veredito ? <NumPct value={a.margemAgregada} />
                      : <span className="mono">—</span>}
                   </div>
                 </div>
                 <div className="hero-veredito">
-                  <div className="silk">Veredito{heroSim ? " · simulação" : ""}</div>
-                  {/* sem custo real: cenário SIMULADO (custos assumidos no alvo),
-                      sempre rotulado — chute disfarçado de fato é proibido */}
-                  <div className={"hero-veredito-palavra " + (a.veredito || (heroSim ? a.sim.veredito + " hero-sim" : "pendente"))} aria-live="polite">
-                    {a.veredito ? VEREDITO_TXT[a.veredito]
-                     : heroSim ? VEREDITO_TXT[a.sim.veredito]
+                  <div className="silk">Veredito{temBlend ? " · com simulação" : ""}</div>
+                  {/* a manchete é a MISTURA: custos reais onde digitados + simulados
+                      no alvo para o resto (assume-se o guia correto até ser editado);
+                      a linha de cenário abaixo declara a composição — nada escondido */}
+                  <div className={"hero-veredito-palavra " + (temBlend ? a.sim.veredito + " hero-sim" : a.veredito || "pendente")} aria-live="polite">
+                    {temBlend ? VEREDITO_TXT[a.sim.veredito]
+                     : a.veredito ? VEREDITO_TXT[a.veredito]
                      : "A casar"}
-                  </div>
-                  {/* P4: cenário de preço sob o veredito (teto | deságio | lances) */}
-                  <div className="hero-cenario silk" title="Base do preço usado na conta — o teto oficial do PNCP segue na tabela">
-                    cenário: {cenarioTexto(a.cenario)}
-                    {heroSim ? ` · SIMULAÇÃO: custos assumidos na margem alvo de ${Math.round(a.sim.alvo)}% — digite custos reais para o veredito valer` : ""}
-                    {a.veredito && a.sim ? ` · com simulação dos ${a.sim.itens} sem custo: ${fmtBRL(a.sim.lucroTotal)} (${VEREDITO_TXT[a.sim.veredito]})` : ""}
                   </div>
                 </div>
               </div>
-              {/* sem análise o VU repousa no mínimo; em simulação aponta a margem alvo */}
-              <Medidor valor={a.veredito ? a.margemAgregada : heroSim ? a.sim.margemAgregada : -10} variante={meterVariant} delay={reduzido ? 0 : 0.35} />
+              {/* linha de cenário em LARGURA TOTAL (fora da coluna do veredito —
+                  texto longo cobria o hero) */}
+              <div className="hero-cenario silk" title="Base do preço usado na conta — o teto oficial do PNCP segue na tabela">
+                cenário: {cenarioTexto(a.cenario)}
+                {temBlend && a.cobertos > 0 &&
+                  ` · ${a.cobertos} ${a.cobertos === 1 ? "custo real" : "custos reais"} + ${a.sim.itens} simulados no alvo de ${Math.round(a.sim.alvo)}% · só com os reais: ${fmtBRL(a.lucroTotal)}${a.veredito ? ` (${VEREDITO_TXT[a.veredito]})` : ""}`}
+                {temBlend && a.cobertos === 0 &&
+                  ` · SIMULAÇÃO: todos os custos assumidos no alvo de ${Math.round(a.sim.alvo)}% — digite custos reais para refinar`}
+              </div>
+              {/* sem análise o VU repousa no mínimo; com simulação aponta a margem da mistura */}
+              <Medidor valor={temBlend ? a.sim.margemAgregada : a.veredito ? a.margemAgregada : -10} variante={meterVariant} delay={reduzido ? 0 : 0.35} />
               <div className="hero-regra">
                 Regra: <strong>Vale</strong> se margem ≥ 20% e cobertura ≥ 60% e lucro ≥ R$ 1.000 · <strong>Não vale</strong> se margem &lt; 8% ou lucro &lt; R$ 300 · senão <strong>Talvez</strong>. O veredito nunca esconde a conta.
               </div>

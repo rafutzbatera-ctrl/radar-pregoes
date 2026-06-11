@@ -1729,3 +1729,6 @@ a.arq-link:hover { border-color: var(--tinta); box-shadow: 0 4px 12px -6px rgba(
 }
 .card-potencial .margem-pill.sim { font-size: 10.5px; padding: 1px 6px; }
 .card-potencial.vazio { color: var(--silk); font-style: italic; }
+
+/* linha de cenario do hero: largura total, nunca cobre os numeros */
+.hero .hero-cenario { display: block; width: 100%; text-align: right; color: rgba(255,255,255,0.55); margin: 2px 0 10px; line-height: 1.6; white-space: normal; }
