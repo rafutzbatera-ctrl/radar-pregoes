@@ -1,9 +1,13 @@
-"""Extrator de requisitos de habilitação via LLM + gate de citação (CLAUDE.md §6.3).
+"""Requisitos de habilitação: modelo, gate de citação e persistência (CLAUDE.md §6.3).
 
 Princípios 1 e 2: NUNCA inventar. Todo requisito sai com excerto literal e
 página; o gate confere se o excerto existe de fato no texto extraído do PDF
 (normalização: caixa baixa + espaços colapsados). Citação que falha vira
 verificada=false — nunca é descartada em silêncio, a UI mostra o aviso.
+
+A extração em si é PLUGÁVEL (CLAUDE.md §6.3): `extrair_requisitos` delega ao
+dispatcher em `extratores/` (heurístico local por padrão, ou API/CLI). O modelo
+`RequisitoHabilitacao` vive aqui para os extratores importarem sem ciclo.
 """
 import logging
 import re
@@ -12,8 +16,6 @@ import unicodedata
 from typing import Literal
 
 from pydantic import BaseModel, Field
-
-from .. import settings
 
 log = logging.getLogger("radar.habilitacao")
 
@@ -27,57 +29,32 @@ class RequisitoHabilitacao(BaseModel):
     excerto: str = Field(description="Trecho LITERAL do edital que exige o documento, copiado sem alteração")
 
 
-PROMPT_SISTEMA = """Você extrai requisitos de habilitação de editais de licitação \
-(Lei 14.133/2021) para um fornecedor que disputa pregões.
+def extrair_requisitos(paginas: list[str], modo: str | None = None) -> list[RequisitoHabilitacao]:
+    """Delega ao extrator plugável (CLAUDE.md §6.3).
 
-REGRAS INEGOCIÁVEIS:
-1. Extraia SOMENTE o que está escrito no texto fornecido. Nunca complete com \
-conhecimento próprio sobre o que editais "costumam" exigir.
-2. O campo `excerto` deve ser um trecho LITERAL copiado do texto, sem parafrasear, \
-sem corrigir ortografia, sem completar frases. Curto (1 a 3 frases) e suficiente \
-para comprovar a exigência.
-3. `pagina` é o número da página marcado no texto como [página N].
-4. Se o edital não tiver seção de habilitação ou documentos exigidos, retorne lista \
-VAZIA — isso é permitido e correto.
-5. Categorias: juridica (atos constitutivos, declarações societárias), fiscal \
-(certidões de regularidade fiscal/trabalhista/FGTS), tecnica (atestados de \
-capacidade), economico_financeira (balanço, certidão de falência), proposta \
-(validade, forma de apresentação) e outros."""
-
-
-def extrair_requisitos(paginas: list[str], modelo: str | None = None) -> list[RequisitoHabilitacao]:
-    """Chama o LLM via instructor (saída Pydantic validada)."""
-    import anthropic
-    import instructor
-
-    if not settings.ANTHROPIC_API_KEY:
-        raise RuntimeError(
-            "ANTHROPIC_API_KEY ausente no .env — necessário para extrair habilitação"
-        )
-
-    texto = "\n\n".join(
-        f"[página {n}]\n{conteudo}" for n, conteudo in enumerate(paginas, start=1)
-    )
-    cliente = instructor.from_anthropic(
-        anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-    )
-    return cliente.messages.create(
-        model=modelo or settings.LLM_MODEL,
-        max_tokens=8192,
-        system=PROMPT_SISTEMA,
-        messages=[{
-            "role": "user",
-            "content": ("Extraia os requisitos de habilitação deste edital:\n\n" + texto),
-        }],
-        response_model=list[RequisitoHabilitacao],
-    )
+    `modo` default = settings.EXTRATOR_HABILITACAO ("heuristico" | "api" | "claude_cli").
+    Import local evita ciclo (os extratores importam RequisitoHabilitacao daqui).
+    """
+    from .extratores import extrair
+    return extrair(paginas, modo=modo)
 
 
 # ---------- gate de citação (princípio 2) ----------
 
 def _normalizar(texto: str) -> str:
-    """Caixa baixa + espaços colapsados (inclui quebras de linha) + acentos NFC."""
+    """Caixa baixa + espaços colapsados (inclui quebras de linha) + acentos NFC.
+
+    Também remove a marcação markdown leve (`*`, `#`, `_`) que o pymupdf4llm
+    injeta (negrito **x**, headings #). A marcação só é descartada quando NÃO
+    está entre dois caracteres de palavra (fronteira de token), e vira ESPAÇO —
+    nunca string vazia. Assim a marcação real (`60**dias**` → `60 dias`) some
+    sem JAMAIS fundir tokens distintos: um excerto fabricado como `60dias`,
+    `abc` (de `a_b_c`) ou `1020` (de `10*20`) passaria a casar se a remoção
+    fundisse os lados — por isso a substituição por espaço é o que fecha o
+    buraco no gate. Aplicada antes do colapso de `\\s+`.
+    """
     texto = unicodedata.normalize("NFC", texto).lower()
+    texto = re.sub(r"(?<!\w)[*_#]+|[*_#]+(?!\w)", " ", texto)
     return re.sub(r"\s+", " ", texto).strip()
 
 

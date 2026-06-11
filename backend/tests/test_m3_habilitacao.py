@@ -36,6 +36,18 @@ def test_excerto_vazio_cai():
     assert not verificar_citacao("   ", PAGINAS)
 
 
+def test_gate_nao_funde_tokens_por_negrito():
+    """Marcação só some em fronteira de token e vira espaço: `60**dias**` no doc
+    casa o excerto correto `60 dias`, mas rejeita o fabricado `60dias`."""
+    assert not verificar_citacao("60dias", ["prazo de 60**dias** corridos"])
+    assert verificar_citacao("60 dias", ["prazo de 60**dias** corridos"])
+
+
+def test_gate_underscore_nao_funde_tokens():
+    """`a_b_c` no doc não pode casar o fabricado `abc` (underscore = separador)."""
+    assert not verificar_citacao("abc", ["a_b_c"])
+
+
 def _requisitos():
     return [
         RequisitoHabilitacao(

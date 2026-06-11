@@ -16,6 +16,12 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 LLM_MODEL = os.getenv("RADAR_LLM_MODEL", "claude-sonnet-4-6")
 SCHEDULER_ATIVO = os.getenv("RADAR_SCHEDULER", "1") == "1"
 
+# extrator de habilitação (CLAUDE.md §6.3) — plugável.
+# "heuristico" (padrão, sem IA, 100% local), "api" (Anthropic), "claude_cli".
+EXTRATOR_HABILITACAO = os.getenv("RADAR_EXTRATOR", "heuristico")
+CLAUDE_CLI_BIN = os.getenv("RADAR_CLAUDE_CLI", "claude")
+CLAUDE_CLI_TIMEOUT = int(os.getenv("RADAR_CLAUDE_CLI_TIMEOUT", "600"))
+
 USER_AGENT = "RadarPregoes/0.1 (uso pessoal)"
 
 # matching (CLAUDE.md §3)

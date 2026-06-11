@@ -4,7 +4,8 @@ Etapas (cada uma é melhor-esforço; falha de uma não derruba as outras,
 mas é reportada no resultado):
 1. Itens do PNCP (4.2) → upsert sem sobrescrever decisões de match do usuário.
 2. Arquivos (4.3) → download para data/arquivos/{cnpj}_{ano}_{seq}/.
-3. Habilitação: extrai texto dos PDFs tipo "Edital", roda LLM + gate de citação.
+3. Habilitação: extrai texto dos PDFs tipo "Edital", roda o extrator plugável
+   (heurístico local por padrão; ou API/CLI) + gate de citação.
 4. Sugestões de matching (e5).
 5. Recalcula análise/veredito.
 """
@@ -20,7 +21,7 @@ log = logging.getLogger("radar.sincronizacao")
 
 def sincronizar(con: sqlite3.Connection, pregao_id: int,
                 cliente: pncp.ClientePNCP | None = None,
-                com_llm: bool = True, embed=None) -> dict:
+                com_habilitacao: bool = True, embed=None) -> dict:
     cliente = cliente or pncp.cliente()
     pregao = con.execute("SELECT * FROM pregoes WHERE id=?", (pregao_id,)).fetchone()
     if pregao is None:
@@ -46,8 +47,8 @@ def sincronizar(con: sqlite3.Connection, pregao_id: int,
         log.exception("Falha ao sincronizar arquivos do pregão %s", pregao_id)
         resultado["erros"].append(f"arquivos: {exc}")
 
-    # 3) habilitação (LLM + gate)
-    if com_llm and pdfs_edital:
+    # 3) habilitação (extrator plugável + gate) — roda com qualquer modo
+    if com_habilitacao and pdfs_edital:
         try:
             paginas: list[str] = []
             for pdf in pdfs_edital:

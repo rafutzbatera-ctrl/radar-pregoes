@@ -4,14 +4,18 @@ Sistema real: backend FastAPI + SQLite, frontend React/Vite, dados do PNCP.
 
 ## 1. Pré-requisitos
 - Python 3.11+ e Node 18+
-- Uma chave da Anthropic API (para o extrator de habilitação — M3)
+- Chave da Anthropic API: **OPCIONAL**. O extrator de habilitação (M3) usa por
+  padrão regras locais (`RADAR_EXTRATOR=heuristico`, sem IA). A chave só é
+  necessária se você trocar para `RADAR_EXTRATOR=api`.
 
 ## 2. Configuração (uma vez)
 ```powershell
 # na raiz do projeto
 Copy-Item .env.example .env
-# edite .env e cole sua ANTHROPIC_API_KEY (sem ela tudo funciona,
-# exceto a extração do checklist de habilitação dos editais)
+# Por padrão (RADAR_EXTRATOR=heuristico) a extração de habilitação roda 100%
+# local, por regras — não precisa de chave. Para usar IA, edite .env:
+#   RADAR_EXTRATOR=api  + cole sua ANTHROPIC_API_KEY  (ou)
+#   RADAR_EXTRATOR=claude_cli  (usa o Claude Code CLI instalado/logado)
 
 # backend
 cd backend
