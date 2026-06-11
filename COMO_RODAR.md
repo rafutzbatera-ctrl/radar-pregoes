@@ -37,8 +37,10 @@ Dois terminais:
 
 ```powershell
 # terminal 1 — API (porta 8000) + monitoramento 2x/dia (06:00/18:00)
+# --reload: reinicia sozinho quando o código muda (recomendado no dev —
+# evita rodar versão velha sem perceber)
 cd backend
-.\.venv\Scripts\python -m uvicorn app.main:app --port 8000
+.\.venv\Scripts\python -m uvicorn app.main:app --port 8000 --reload
 
 # terminal 2 — UI (porta 5173, proxy /api -> 8000)
 cd frontend
