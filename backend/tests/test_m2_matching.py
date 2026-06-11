@@ -1,6 +1,7 @@
-"""M2 — matching: threshold 0.83, sugestão nunca vira confirmação,
-decisão do usuário nunca é sobrescrita. Embedder determinístico injetado
-(a matemática é a mesma do e5 real: cosseno sobre vetores normalizados)."""
+"""M2/P3 — matching: threshold 0.90 (conservador), sugestão nunca vira
+confirmação, decisão do usuário nunca é sobrescrita, recusa memorizada não
+re-sugere o produto. Embedder determinístico injetado (a matemática é a mesma
+do e5 real: cosseno sobre vetores normalizados)."""
 import math
 
 from app.services import matching
@@ -11,6 +12,7 @@ _VETORES = {
     "query: Canaleta PVC com tampa para piso": (0.6, 0.8),
     "passage: Microfone de mesa USB": (1.0, 0.0),                  # cos=1.0 c/ item 1
     "passage: Caixa de som ativa 200W": (0.0, 1.0),                # cos=0.8 c/ item 2
+    "passage: Microfone USB de bancada": (1.0, 0.0),              # cos=1.0 c/ item 1 (alternativo)
 }
 
 
@@ -45,7 +47,30 @@ def test_sugere_acima_do_threshold_e_nada_abaixo(con):
     assert item1["match_confirmado"] == 0  # sugestão NUNCA entra confirmada
 
     item2 = con.execute("SELECT * FROM itens_pregao WHERE numero=2").fetchone()
-    assert item2["produto_id"] is None     # melhor score 0.8 < 0.83
+    assert item2["produto_id"] is None     # melhor score 0.8 < 0.90 (threshold P3)
+
+
+def test_recusa_memorizada_nao_re_sugere_mas_aceita_outro(con):
+    """Recusar prod1 no item1 não pode re-sugerir prod1; outro produto acima
+    do threshold ainda pode ser sugerido (recusa é por produto, não por item)."""
+    pregao_id = _montar(con)
+    item1 = con.execute("SELECT id FROM itens_pregao WHERE numero=1").fetchone()["id"]
+    # usuário recusou o produto 1 para o item 1 (memorizado)
+    con.execute("UPDATE itens_pregao SET produtos_recusados='[1]' WHERE id=?", (item1,))
+    con.commit()
+
+    # sem alternativa: prod1 (recusado) e prod2 (0.8) → nada sugerido p/ item1
+    matching.sugerir_matches(con, pregao_id, embed=_embed)
+    r1 = con.execute("SELECT produto_id FROM itens_pregao WHERE id=?", (item1,)).fetchone()
+    assert r1["produto_id"] is None  # prod1 pulado, prod2 abaixo do threshold
+
+    # agora existe um produto ALTERNATIVO que casa 1.0 com o item1
+    con.execute("INSERT INTO catalogo_produtos (id, nome, custo_unit) "
+                "VALUES (3, 'Microfone USB de bancada', 700)")
+    con.commit()
+    matching.sugerir_matches(con, pregao_id, embed=_embed)
+    r2 = con.execute("SELECT produto_id FROM itens_pregao WHERE id=?", (item1,)).fetchone()
+    assert r2["produto_id"] == 3      # prod1 segue recusado; prod3 sugerido
 
 
 def test_nao_sobrescreve_decisao_do_usuario(con):

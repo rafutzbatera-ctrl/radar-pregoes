@@ -24,9 +24,9 @@ CLAUDE_CLI_TIMEOUT = int(os.getenv("RADAR_CLAUDE_CLI_TIMEOUT", "600"))
 
 USER_AGENT = "RadarPregoes/0.1 (uso pessoal)"
 
-# matching (CLAUDE.md §3)
+# matching (CLAUDE.md §3 — atualizado P3: conservador, 0.90)
 MATCH_MODELO = "intfloat/multilingual-e5-small"
-MATCH_THRESHOLD = 0.83
+MATCH_THRESHOLD = 0.90
 
 # regras do veredito (CLAUDE.md §6.2) — sobreponíveis via tabela config
 VEREDITO_PADRAO = {

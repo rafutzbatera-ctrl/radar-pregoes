@@ -1,4 +1,5 @@
 """Endpoints FastAPI (CLAUDE.md §7) sobre banco de teste."""
+import json
 
 
 def test_raiz_tem_aviso(client):
@@ -79,6 +80,114 @@ def test_fluxo_match_recalcula_pregao(client, con):
     # detalhe do pregão traz agregados
     d = client.get(f"/pregoes/{pregao_id}").json()
     assert d["itens_total"] == 1 and d["itens_confirmados"] == 0
+
+
+def test_patch_custo_manual_recalcula(client, con):
+    """PATCH /itens/{id} grava custo_manual (override do pregão) e recalcula.
+    Item SEM match entra na conta; null limpa e volta ao catálogo."""
+    con.execute("INSERT INTO pregoes (cnpj, ano, seq, numero_controle) "
+                "VALUES ('1',2026,1,'NC-1')")
+    pregao_id = con.execute("SELECT id FROM pregoes").fetchone()["id"]
+    con.execute("""INSERT INTO itens_pregao
+        (pregao_id, numero, descricao, qtd, valor_unit_estimado)
+        VALUES (?,1,'Item sem match',10,150)""", (pregao_id,))
+    con.commit()
+    item_id = con.execute("SELECT id FROM itens_pregao").fetchone()["id"]
+
+    # custo manual sem match → entra na conta
+    r = client.patch(f"/itens/{item_id}", json={"custo_manual": 100})
+    assert r.status_code == 200
+    corpo = r.json()
+    assert corpo["item"]["custo_manual"] == 100
+    assert corpo["pregao"]["lucro_potencial"] == 500.0   # (150-100)*10
+    assert corpo["pregao"]["itens_com_custo"] == 1
+    assert corpo["pregao"]["itens_confirmados"] == 0     # sem match
+
+    # GET itens expõe custo_efetivo/fonte
+    itens = client.get(f"/pregoes/{pregao_id}/itens").json()
+    assert itens[0]["custo_efetivo"] == 100
+    assert itens[0]["fonte_custo"] == "manual"
+    assert itens[0]["simulacao_custo_max"] is None       # já tem custo efetivo
+
+    # limpar → sem custo, volta a simulação
+    r = client.patch(f"/itens/{item_id}", json={"custo_manual": None})
+    assert r.json()["pregao"]["lucro_potencial"] is None
+    itens = client.get(f"/pregoes/{pregao_id}/itens").json()
+    assert itens[0]["custo_efetivo"] is None
+    assert itens[0]["fonte_custo"] is None
+
+
+def test_patch_custo_manual_negativo_422_e_404(client, con):
+    con.execute("INSERT INTO pregoes (cnpj, ano, seq, numero_controle) "
+                "VALUES ('1',2026,1,'NC-1')")
+    pregao_id = con.execute("SELECT id FROM pregoes").fetchone()["id"]
+    con.execute("INSERT INTO itens_pregao (pregao_id, numero, descricao, "
+                "valor_unit_estimado) VALUES (?,1,'Item',100)", (pregao_id,))
+    con.commit()
+    item_id = con.execute("SELECT id FROM itens_pregao").fetchone()["id"]
+    assert client.patch(f"/itens/{item_id}", json={"custo_manual": -1}).status_code == 422
+    assert client.patch("/itens/999", json={"custo_manual": 10}).status_code == 404
+
+
+def test_custo_manual_prevalece_e_simulacao(client, con):
+    """custo_manual ▸ catálogo no GET itens; simulação por margem alvo só
+    quando não há custo efetivo."""
+    con.execute("INSERT INTO pregoes (cnpj, ano, seq, numero_controle) "
+                "VALUES ('1',2026,1,'NC-1')")
+    pregao_id = con.execute("SELECT id FROM pregoes").fetchone()["id"]
+    con.execute("INSERT INTO catalogo_produtos (id, nome, custo_unit) VALUES (1,'P',100)")
+    con.execute("""INSERT INTO itens_pregao
+        (pregao_id, numero, descricao, qtd, valor_unit_estimado, produto_id, match_confirmado)
+        VALUES (?,1,'Item',4,200,1,1)""", (pregao_id,))
+    con.commit()
+    item_id = con.execute("SELECT id FROM itens_pregao").fetchone()["id"]
+
+    # sem custo manual: fonte catálogo
+    itens = client.get(f"/pregoes/{pregao_id}/itens").json()
+    assert itens[0]["fonte_custo"] == "catalogo" and itens[0]["custo_efetivo"] == 100
+
+    # custo manual prevalece sobre o catálogo
+    client.patch(f"/itens/{item_id}", json={"custo_manual": 150})
+    itens = client.get(f"/pregoes/{pregao_id}/itens").json()
+    assert itens[0]["fonte_custo"] == "manual" and itens[0]["custo_efetivo"] == 150
+    assert itens[0]["margem"] == (200 - 150) / 200
+
+    # margem alvo 25% num item SEM custo → simulação custo_max = 200*0.75 = 150
+    client.patch("/config", json={"margem_alvo": "0.25"})
+    con.execute("INSERT INTO itens_pregao (pregao_id, numero, descricao, qtd, "
+                "valor_unit_estimado) VALUES (?,2,'Sem custo',2,200)", (pregao_id,))
+    con.commit()
+    itens = client.get(f"/pregoes/{pregao_id}/itens").json()
+    item2 = next(i for i in itens if i["numero"] == 2)
+    assert item2["simulacao_custo_max"] == 150.0
+    assert item2["simulacao_lucro"] == (200 - 150) * 2
+
+
+def test_config_margem_alvo_validacao(client):
+    assert client.patch("/config", json={"margem_alvo": "0.3"}).json()["margem_alvo"] == "0.3"
+    assert client.patch("/config", json={"margem_alvo": "0.96"}).status_code == 422
+    assert client.patch("/config", json={"margem_alvo": "-0.1"}).status_code == 422
+    assert client.patch("/config", json={"margem_alvo": "abc"}).status_code == 422
+
+
+def test_recusa_memoriza_produto(client, con):
+    """POST match com produto_id null appenda o produto atual em
+    produtos_recusados (recusa memorizada)."""
+    con.execute("INSERT INTO pregoes (cnpj, ano, seq, numero_controle) "
+                "VALUES ('1',2026,1,'NC-1')")
+    pregao_id = con.execute("SELECT id FROM pregoes").fetchone()["id"]
+    con.execute("INSERT INTO catalogo_produtos (id, nome, custo_unit) VALUES (1,'P',100)")
+    con.execute("""INSERT INTO itens_pregao
+        (pregao_id, numero, descricao, produto_id, match_score)
+        VALUES (?,1,'Item',1,0.91)""", (pregao_id,))
+    con.commit()
+    item_id = con.execute("SELECT id FROM itens_pregao").fetchone()["id"]
+
+    r = client.post(f"/itens/{item_id}/match", json={"produto_id": None})
+    assert r.status_code == 200
+    rec = con.execute("SELECT produtos_recusados pr FROM itens_pregao WHERE id=?",
+                      (item_id,)).fetchone()["pr"]
+    assert json.loads(rec) == [1]
 
 
 def test_habilitacao_patch_status(client, con):

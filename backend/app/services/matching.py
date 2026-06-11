@@ -1,10 +1,13 @@
 """Matching itens ↔ catálogo via embeddings locais (CLAUDE.md §3 e §6.2).
 
 Modelo intfloat/multilingual-e5-small com prefixos "query:" (item do edital)
-e "passage:" (produto do catálogo); similaridade de cosseno; threshold 0.83
-para SUGERIR. O usuário sempre confirma na UI antes de o item entrar na conta
-(human-in-the-loop) — aqui nunca se grava match_confirmado=1.
+e "passage:" (produto do catálogo); similaridade de cosseno; threshold 0.90
+(conservador, P3) para SUGERIR. O usuário sempre confirma na UI antes de o
+item entrar na conta (human-in-the-loop) — aqui nunca se grava
+match_confirmado=1. Produtos já RECUSADOS pelo usuário para um item não voltam
+como sugestão (recusa memorizada em itens_pregao.produtos_recusados).
 """
+import json
 import logging
 import sqlite3
 import threading
@@ -12,6 +15,19 @@ import threading
 from .. import settings
 
 log = logging.getLogger("radar.matching")
+
+
+def _recusados(valor) -> set[int]:
+    """Parse tolerante de produtos_recusados (NULL/JSON inválido → vazio)."""
+    if not valor:
+        return set()
+    try:
+        dados = json.loads(valor)
+    except (ValueError, TypeError):
+        return set()
+    if not isinstance(dados, list):
+        return set()
+    return {int(x) for x in dados if isinstance(x, (int, float))}
 
 _modelo = None
 _lock = threading.Lock()
@@ -48,7 +64,7 @@ def sugerir_matches(con: sqlite3.Connection, pregao_id: int,
     ).fetchall()
     # itens sem produto e sem confirmação (não sobrescreve decisão do usuário)
     itens = con.execute(
-        """SELECT id, descricao FROM itens_pregao
+        """SELECT id, descricao, produtos_recusados FROM itens_pregao
            WHERE pregao_id=? AND produto_id IS NULL AND match_confirmado=0""",
         (pregao_id,),
     ).fetchall()
@@ -60,9 +76,12 @@ def sugerir_matches(con: sqlite3.Connection, pregao_id: int,
 
     sugeridos = 0
     for i, item in enumerate(itens):
+        recusados = _recusados(item["produtos_recusados"])  # recusa memorizada
         melhor_score = -1.0
         melhor_prod = None
         for j, prod in enumerate(produtos):
+            if prod["id"] in recusados:
+                continue  # não re-sugere produto recusado para este item
             score = float(_dot(vet_itens[i], vet_prod[j]))
             if score > melhor_score:
                 melhor_score = score
