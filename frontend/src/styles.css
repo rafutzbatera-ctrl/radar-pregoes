@@ -1678,3 +1678,11 @@ a.arq-link:hover { border-color: var(--tinta); box-shadow: 0 4px 12px -6px rgba(
 .painel-custo-edit { display: inline-flex; align-items: center; gap: 6px; }
 .painel-custo-linha.simulacao { color: var(--silk); }
 .painel-custo-linha.simulacao .mono { font-size: 12px; }
+
+/* ==== camada simulada (custos assumidos na margem alvo) — sempre rotulada ==== */
+.margem-pill.sim { background: rgba(201,138,4,0.12); color: var(--pico); border: 1px dashed var(--pico); }
+.margem-pill.sim em, .lucro-sim em { font-style: normal; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.8; }
+.lucro-sim { color: var(--pico); font-style: italic; }
+.hero-sim { opacity: 0.82; font-style: italic; }
+.hero-veredito-palavra.hero-sim { text-decoration: underline dashed; text-underline-offset: 8px; }
+.total-sim { font-weight: 400; text-transform: none; letter-spacing: 0; }

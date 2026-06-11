@@ -31,7 +31,11 @@ export default function AnalysisScreen({
   // P4: deságio esperado da config (string do backend → número)
   const desagio = config && config.desagio_esperado != null
     ? parseFloat(config.desagio_esperado) || 0 : 0;
-  const a = analisar(pregao, estado, catalogoPorCod, false, desagio);
+  const margemAlvo = config && config.margem_alvo != null
+    ? parseFloat(config.margem_alvo) || 0 : 0;
+  const a = analisar(pregao, estado, catalogoPorCod, false, desagio, margemAlvo);
+  // hero usa a camada simulada quando NÃO há nenhum custo real — sempre rotulada
+  const heroSim = !a.veredito && a.sim;
   const [aba, setAba] = React.useState("itens");
   const [itemAberto, setItemAberto] = React.useState(null);
   const linhaOrigem = React.useRef(null);
@@ -125,27 +129,40 @@ export default function AnalysisScreen({
             <motion.section className="hero" variants={entrada} aria-label="Veredito de viabilidade">
               <div className="hero-top">
                 <div>
-                  <div className="silk">Lucro potencial estimado</div>
-                  <div className="hero-lucro">{a.veredito ? <NumBRL value={a.lucroTotal} /> : <span className="mono">—</span>}</div>
+                  <div className="silk">Lucro potencial estimado{heroSim ? " · simulação" : ""}</div>
+                  <div className={"hero-lucro" + (heroSim ? " hero-sim" : "")}>
+                    {a.veredito ? <NumBRL value={a.lucroTotal} />
+                     : heroSim ? <NumBRL value={a.sim.lucroTotal} />
+                     : <span className="mono">—</span>}
+                  </div>
                 </div>
                 <div>
-                  <div className="silk">Margem média</div>
-                  <div className="hero-margem">{a.veredito ? <NumPct value={a.margemAgregada} /> : <span className="mono">—</span>}</div>
+                  <div className="silk">Margem média{heroSim ? " · simulação" : ""}</div>
+                  <div className={"hero-margem" + (heroSim ? " hero-sim" : "")}>
+                    {a.veredito ? <NumPct value={a.margemAgregada} />
+                     : heroSim ? <NumPct value={a.sim.margemAgregada} />
+                     : <span className="mono">—</span>}
+                  </div>
                 </div>
                 <div className="hero-veredito">
-                  <div className="silk">Veredito</div>
-                  {/* sem item confirmado não há veredito — mostrar chute é proibido */}
-                  <div className={"hero-veredito-palavra " + (a.veredito || "pendente")} aria-live="polite">
-                    {a.veredito ? VEREDITO_TXT[a.veredito] : "A casar"}
+                  <div className="silk">Veredito{heroSim ? " · simulação" : ""}</div>
+                  {/* sem custo real: cenário SIMULADO (custos assumidos no alvo),
+                      sempre rotulado — chute disfarçado de fato é proibido */}
+                  <div className={"hero-veredito-palavra " + (a.veredito || (heroSim ? a.sim.veredito + " hero-sim" : "pendente"))} aria-live="polite">
+                    {a.veredito ? VEREDITO_TXT[a.veredito]
+                     : heroSim ? VEREDITO_TXT[a.sim.veredito]
+                     : "A casar"}
                   </div>
                   {/* P4: cenário de preço sob o veredito (teto | deságio | lances) */}
                   <div className="hero-cenario silk" title="Base do preço usado na conta — o teto oficial do PNCP segue na tabela">
                     cenário: {cenarioTexto(a.cenario)}
+                    {heroSim ? ` · SIMULAÇÃO: custos assumidos na margem alvo de ${Math.round(a.sim.alvo)}% — digite custos reais para o veredito valer` : ""}
+                    {a.veredito && a.sim ? ` · com simulação dos ${a.sim.itens} sem custo: ${fmtBRL(a.sim.lucroTotal)} (${VEREDITO_TXT[a.sim.veredito]})` : ""}
                   </div>
                 </div>
               </div>
-              {/* sem análise o VU repousa no mínimo, como aparelho desligado */}
-              <Medidor valor={a.veredito ? a.margemAgregada : -10} variante={meterVariant} delay={reduzido ? 0 : 0.35} />
+              {/* sem análise o VU repousa no mínimo; em simulação aponta a margem alvo */}
+              <Medidor valor={a.veredito ? a.margemAgregada : heroSim ? a.sim.margemAgregada : -10} variante={meterVariant} delay={reduzido ? 0 : 0.35} />
               <div className="hero-regra">
                 Regra: <strong>Vale</strong> se margem ≥ 20% e cobertura ≥ 60% e lucro ≥ R$ 1.000 · <strong>Não vale</strong> se margem &lt; 8% ou lucro &lt; R$ 300 · senão <strong>Talvez</strong>. O veredito nunca esconde a conta.
               </div>
@@ -325,7 +342,10 @@ function ItensTab({ a, pregao, abrir, setCusto, confirmarCusto, limparCusto, def
             </div>
           )}
           <motion.div className="tbl-total" variants={linha} role="row">
-            <div className="t-label" role="cell">Total · {a.cobertos} de {a.total} itens com custo</div>
+            <div className="t-label" role="cell">
+              Total · {a.cobertos} de {a.total} itens com custo
+              {a.sim && <span className="total-sim silk"> · com simulação ({a.sim.itens} no alvo): {fmtBRL(a.sim.lucroTotal)}</span>}
+            </div>
             <div className="t-resto" role="cell"></div>
             <div className="t-resto" role="cell"></div>
             <div className="t-resto" role="cell"></div>
@@ -501,16 +521,23 @@ function LinhaItem({ item, variants, ativa, abrir, setCusto, confirmarCusto, lim
         </div>
         <div className="c-margem" role="cell">
           <span className="m-label mobile-only">Margem</span>
-          {/* só item COBERTO (com custo efetivo) mostra margem — sugerido sem prévia */}
+          {/* item com custo real mostra margem; sem custo mostra a SIMULADA
+              (custo assumido no alvo), sempre com a tag "sim." */}
           {item.coberto && item.margemPct != null
             ? <span className={"margem-pill " + item.status}><NumPct value={item.margemPct} /></span>
-            : <span style={{ color: "var(--silk)" }}>—</span>}
+            : item.simulado
+              ? <span className="margem-pill sim" title={"Simulação: custo assumido em " + fmtBRL(item.custoSim)}><NumPct value={item.margemSim} /> <em>sim.</em></span>
+              : <span style={{ color: "var(--silk)" }}>—</span>}
         </div>
         <div className="c-lucro" role="cell">
           <span className="m-label mobile-only">Lucro do item</span>
-          {item.lucro == null || sigiloso
-            ? <span style={{ color: "var(--silk)" }}>{sigiloso ? "valor sigiloso" : "—"}</span>
-            : <span style={item.coberto ? undefined : { color: "var(--silk)" }}><NumBRL value={item.lucro} /></span>}
+          {sigiloso && item.lucro == null && item.lucroSim == null
+            ? <span style={{ color: "var(--silk)" }}>valor sigiloso</span>
+            : item.lucro != null
+              ? <span style={item.coberto ? undefined : { color: "var(--silk)" }}><NumBRL value={item.lucro} /></span>
+              : item.simulado
+                ? <span className="lucro-sim" title="Simulação — custo assumido na margem alvo"><NumBRL value={item.lucroSim} /> <em>sim.</em></span>
+                : <span style={{ color: "var(--silk)" }}>—</span>}
         </div>
         <div className="c-status" role="cell">
           <span className={"st-led " + (item.coberto ? item.status : item.status === "sugerido" ? "pico" : "off")} aria-hidden="true"></span>

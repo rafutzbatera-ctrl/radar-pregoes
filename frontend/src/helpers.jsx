@@ -43,12 +43,16 @@ export const normalizarVeredito = (v) => (v === "nao_vale" ? "nao" : v || null);
 // oficial (it.unit) nunca some — é mostrado ao lado do esperado na UI.
 // Sugeridos NÃO têm prévia de margem (sem custo efetivo → sem conta).
 // catalogoPorCod vem da API (App) — o mock morreu.
-export function analisar(pregao, estado, catalogoPorCod, previa, desagio) {
+export function analisar(pregao, estado, catalogoPorCod, previa, desagio, margemAlvo) {
   const custos = (estado && estado.custos) || {};
   const lances = (estado && estado.lances) || {};
   const matches = (estado && estado.matches) || {};
   const cat = catalogoPorCod || {};
   const dg = Number.isFinite(desagio) && desagio > 0 ? desagio : 0;
+  // margem alvo: base da camada SIMULADA (item sem custo assume custo no alvo).
+  // Por construção a margem simulada = alvo — o que o cenário informa de
+  // verdade é o TAMANHO do lucro possível; por isso é sempre rotulado.
+  const alvo = Number.isFinite(margemAlvo) && margemAlvo > 0 && margemAlvo < 1 ? margemAlvo : 0;
   let nLances = 0;
   const itens = (pregao.itens || []).map((it) => {
     const m = matches[it.n] !== undefined ? matches[it.n] : it.match;
@@ -78,11 +82,18 @@ export function analisar(pregao, estado, catalogoPorCod, previa, desagio) {
       const status = m && !confirmado && custo == null ? "sugerido" : it.sigiloso ? "sigiloso" : "fora";
       return { ...it, matchAtual: m || null, produto, custo, preco: null, fontePreco: null, coberto: false, margemPct: null, lucro: null, status };
     }
-    // sem custo efetivo: item ainda fora da conta. Pode estar sugerido (match
-    // não confirmado) ou sem match — sem prévia de margem em nenhum caso.
+    // sem custo efetivo: fora da conta REAL, mas ganha a camada SIMULADA
+    // (custo assumido no alvo) — exibida sempre com rótulo "sim."
     if (custo == null) {
       const status = m && !confirmado ? "sugerido" : "fora";
-      return { ...it, matchAtual: m || null, produto, custo: null, preco, fontePreco, coberto: false, margemPct: null, lucro: null, status };
+      const custoSim = alvo > 0 ? preco * (1 - alvo) : null;
+      const lucroSim = custoSim != null ? (preco - custoSim) * it.qtd : null;
+      return {
+        ...it, matchAtual: m || null, produto, custo: null, preco, fontePreco,
+        coberto: false, margemPct: null, lucro: null, status,
+        simulado: custoSim != null, custoSim, lucroSim,
+        margemSim: custoSim != null ? alvo * 100 : null,
+      };
     }
     const margemPct = ((preco - custo) / preco) * 100;
     const lucro = (preco - custo) * it.qtd;
@@ -104,9 +115,30 @@ export function analisar(pregao, estado, catalogoPorCod, previa, desagio) {
   else veredito = "talvez";
   // cenário do hero: teto (sem deságio, sem lance) | deságio N% | N lances [· deságio M%]
   const cenario = { desagio: dg, lances: nLances };
+
+  // camada SIMULADA agregada: real + itens sem custo assumidos no alvo.
+  // Nunca substitui o real em silêncio — a UI sempre rotula "simulação".
+  const simulados = itens.filter((i) => i.simulado);
+  let sim = null;
+  if (simulados.length > 0) {
+    const lucroSimTotal = lucroTotal + simulados.reduce((s, i) => s + i.lucroSim, 0);
+    const receitaSim = receitaCoberta + simulados.reduce((s, i) => s + i.preco * i.qtd, 0);
+    const margemSim = receitaSim > 0 ? (lucroSimTotal / receitaSim) * 100 : 0;
+    const coberturaSim = itens.length > 0 ? (cobertos.length + simulados.length) / itens.length : 0;
+    let vereditoSim;
+    if (margemSim >= 20 && coberturaSim >= 0.6 && lucroSimTotal >= 1000) vereditoSim = "vale";
+    else if (margemSim < 8 || lucroSimTotal < 300) vereditoSim = "nao";
+    else vereditoSim = "talvez";
+    sim = {
+      itens: simulados.length, lucroTotal: lucroSimTotal,
+      margemAgregada: margemSim, cobertura: coberturaSim,
+      veredito: vereditoSim, alvo: alvo * 100,
+    };
+  }
+
   return {
     itens, lucroTotal, receitaCoberta, margemAgregada, sugeridos,
-    cobertos: cobertos.length, total: itens.length, cobertura, veredito, cenario,
+    cobertos: cobertos.length, total: itens.length, cobertura, veredito, cenario, sim,
   };
 }
 
