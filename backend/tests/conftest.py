@@ -19,6 +19,11 @@ def carregar_fixture(nome: str):
 @pytest.fixture
 def con(tmp_path):
     c = db.abrir(tmp_path / "radar_test.db")
+    # baseline dos testes: conta no TETO (deságio 0). O default de PRODUTO é
+    # 0.20 (cenário realista de leilão reverso); testes que exercitam deságio
+    # setam o valor explicitamente.
+    c.execute("UPDATE config SET valor='0.00' WHERE chave='desagio_esperado'")
+    c.commit()
     yield c
     c.close()
 

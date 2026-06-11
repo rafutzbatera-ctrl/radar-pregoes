@@ -154,7 +154,9 @@ config(chave, valor)  -- regime_tributario: simples|presumido, uf_origem
   valor do edital é TETO (leilão reverso, menor preço vence); a conta no teto
   superestima lucro/veredito. Preço esperado do item = `lance_previsto`
   (digitado) ▸ `valor_unit_estimado * (1 - desagio_esperado)` (config global,
-  default 0.00) ▸ teto. Item sigiloso (teto nulo) só entra na conta se houver
+  default 0.20 — decisão do dono 11/06/2026: o sistema já abre no cenário
+  realista de −20%, sempre declarado no hero e editável) ▸ teto. Item
+  sigiloso (teto nulo) só entra na conta se houver
   `lance_previsto`. Margem/lucro/veredito/medidor passam a usar o preço
   esperado; o **teto oficial do PNCP nunca some da tela** (princípio 1) — o
   preço esperado aparece ao lado, identificado pela fonte (lance/−N%). Pisos

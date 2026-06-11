@@ -135,7 +135,9 @@ function PainelConteudo({ item, pregao, fechar, setCusto, confirmarCusto, limpar
               <span className="painel-fonte">Seu lance previsto (editável)</span>
               <span className="painel-custo-edit">
                 <CostInput valor={item.lancePrevisto}
-                  placeholder={sigiloso ? "lance" : item.unit != null ? "teto" : ""}
+                  placeholder={sigiloso ? "lance"
+                    : item.preco != null ? fmtBRL(item.preco)
+                    : item.unit != null ? "teto" : ""}
                   aoEditar={(v) => setLance && setLance(item.n, v)}
                   aoConfirmar={(v) => confirmarLance && confirmarLance(item, v)}
                   rotulo={"Seu lance previsto do item " + item.n + " — editável"} />

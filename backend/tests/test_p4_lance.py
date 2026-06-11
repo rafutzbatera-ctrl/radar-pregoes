@@ -13,7 +13,7 @@ from app.services import analise
 
 def test_migracao_v4_lance_e_desagio(tmp_path):
     """v4 sobre v3 populado: preserva dados, ganha a coluna lance_previsto e a
-    config desagio_esperado=0.00. Idempotente."""
+    config desagio_esperado=0.20 (default realista — decisão do dono). Idempotente."""
     caminho = tmp_path / "radar.db"
     con = sqlite3.connect(caminho)
     con.row_factory = sqlite3.Row
@@ -34,9 +34,9 @@ def test_migracao_v4_lance_e_desagio(tmp_path):
     # dados v3 preservados (custo_manual mantido)
     assert c2.execute("SELECT custo_manual FROM itens_pregao").fetchone()[
         "custo_manual"] == 55
-    # nova chave de config presente com o padrão 0.00
+    # nova chave de config presente com o padrão 0.20 (cenário realista)
     assert c2.execute("SELECT valor FROM config WHERE chave='desagio_esperado'"
-                      ).fetchone()["valor"] == "0.00"
+                      ).fetchone()["valor"] == "0.20"
     assert c2.execute("PRAGMA user_version").fetchone()[0] == len(db.MIGRACOES)
 
     # idempotente

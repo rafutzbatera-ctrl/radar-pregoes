@@ -461,7 +461,10 @@ function LinhaItem({ item, variants, ativa, abrir, setCusto, confirmarCusto, lim
             </div>
           ) : (
             <div className="custo-cel">
-              <CostInput valor={item.lancePrevisto} placeholder={item.unit != null ? "teto" : ""}
+              {/* placeholder = preço esperado vigente (deságio/teto): já abre
+                  num valor de disputa realista em vez da palavra "teto" */}
+              <CostInput valor={item.lancePrevisto}
+                placeholder={item.preco != null ? fmtBRL(item.preco) : item.unit != null ? "teto" : ""}
                 aoEditar={(v) => setLance(item.n, v)}
                 aoConfirmar={(v) => confirmarLance(item, v)}
                 rotulo={"Seu lance previsto do item " + item.n + " — editável"} />

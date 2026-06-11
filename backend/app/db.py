@@ -133,12 +133,13 @@ MIGRACOES = [
     # v4 — preço esperado de disputa (P4). O valor do edital é TETO (leilão
     # reverso, menor preço vence); a conta no teto superestima lucro/veredito.
     # lance_previsto: preço esperado digitado por item (NULL = sem lance).
-    # desagio_esperado: % global abaixo do teto (default 0.00 = teto, sem
-    # deságio inventado). Preço esperado = lance_previsto ▸ teto×(1−deságio) ▸
-    # teto. Agregados/veredito passam a usar o preço esperado.
+    # desagio_esperado: % global abaixo do teto. Default 0.20 (decisão do dono,
+    # 11/06/2026): pregão é leilão reverso, então o sistema já abre num cenário
+    # realista de -20% — o cenário fica sempre declarado no hero e é editável.
+    # Preço esperado = lance_previsto ▸ teto×(1−deságio) ▸ teto.
     """
     ALTER TABLE itens_pregao ADD COLUMN lance_previsto REAL;
-    INSERT OR IGNORE INTO config(chave, valor) VALUES ('desagio_esperado', '0.00');
+    INSERT OR IGNORE INTO config(chave, valor) VALUES ('desagio_esperado', '0.20');
     """,
 ]
 
