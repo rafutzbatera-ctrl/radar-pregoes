@@ -68,6 +68,12 @@ export function adaptarItem(i, produtosPorId) {
     ncmPncp: i.ncm_pncp,
     beneficio: i.beneficio,
     criterio: i.criterio,
+    // P3: custo efetivo (manual ▸ catálogo) e simulação por margem alvo
+    custoManual: i.custo_manual ?? null,
+    custoEfetivo: i.custo_efetivo ?? null,
+    fonteCusto: i.fonte_custo ?? null,             // "manual" | "catalogo" | null
+    simulacaoCustoMax: i.simulacao_custo_max ?? null,
+    simulacaoLucro: i.simulacao_lucro ?? null,
     match: produto
       ? { cod: produto.cod, score: i.match_score, confirmado: !!i.match_confirmado }
       : null,
@@ -226,6 +232,13 @@ export const api = {
     req(`/itens/${itemId}/match`, {
       method: "POST",
       body: JSON.stringify({ produto_id: produtoId, confirmado }),
+    }),
+
+  // custo manual por item (override local do pregão, P3) — null limpa
+  definirCustoItem: (itemId, valor) =>
+    req(`/itens/${itemId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ custo_manual: valor }),
     }),
 
   // catálogo

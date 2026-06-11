@@ -1604,3 +1604,66 @@ a.arq-link:hover { border-color: var(--tinta); box-shadow: 0 4px 12px -6px rgba(
 .disputa-salvar { padding: 6px 12px; }
 @media (max-width: 1100px) { .kanban { grid-template-columns: repeat(3, minmax(180px, 1fr)); } }
 @media (max-width: 720px) { .disputa-campos { grid-template-columns: 1fr; } }
+
+/* ---------- P3: custo manual por item, margem alvo, simulação ---------- */
+/* controle compacto de margem alvo no cabeçalho da tabela */
+.margem-alvo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+}
+.margem-alvo-input {
+  width: 34px;
+  text-align: right;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  background: var(--painel);
+  border: 1px solid var(--linha);
+  border-radius: 5px;
+  padding: 2px 5px;
+  color: var(--tinta);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.margem-alvo-input:focus {
+  outline: none;
+  border-color: var(--tinta);
+  background: #FFFFFF;
+  box-shadow: 0 0 0 3px rgba(23, 28, 26, 0.12);
+}
+
+/* célula de custo: input + tag manual + limpar */
+.custo-cel { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; flex-wrap: wrap; }
+.custo-input.vazio { border-color: var(--led-off); }
+.custo-input::placeholder { color: var(--silk); opacity: 0.7; font-size: 11px; }
+.custo-tags { display: inline-flex; align-items: center; gap: 3px; }
+.custo-tag-manual {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8A5F03;
+  background: rgba(201, 138, 4, 0.14);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.custo-limpar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--silk);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.custo-limpar:hover { background: rgba(204, 69, 55, 0.12); color: #A03328; }
+
+/* DetailPanel: linha de simulação rotulada */
+.painel-custo-edit { display: inline-flex; align-items: center; gap: 6px; }
+.painel-custo-linha.simulacao { color: var(--silk); }
+.painel-custo-linha.simulacao .mono { font-size: 12px; }

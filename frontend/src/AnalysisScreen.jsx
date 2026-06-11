@@ -18,7 +18,8 @@ export const STATUS_TXT = {
 };
 
 export default function AnalysisScreen({
-  pregao, estado, setCusto, confirmarCusto, setMatch, setHabil, voltar, scrollRef,
+  pregao, estado, setCusto, confirmarCusto, limparCusto, definirMargemAlvo,
+  setMatch, setHabil, voltar, scrollRef,
   meterVariant, config, setRegime, catalogo, catalogoPorCod,
   sincronizar, sincronizando, erroDetalhe, recarregarDetalhe,
   mudarPipeline, salvarPregao,
@@ -227,6 +228,7 @@ export default function AnalysisScreen({
           <motion.div variants={entrada} key={aba} className="aba-painel">
             {aba === "itens" && (
               <ItensTab a={a} pregao={pregao} abrir={abrirItem} setCusto={setCusto} confirmarCusto={confirmarCusto}
+                limparCusto={limparCusto} definirMargemAlvo={definirMargemAlvo} config={config}
                 setMatch={setMatch} catalogo={catalogo} estatico={estatico} reduzido={reduzido} itemAberto={itemAberto} />
             )}
             {aba === "habilitacao" && (
@@ -253,13 +255,13 @@ export default function AnalysisScreen({
       >
         {conteudo}
       </motion.div>
-      <DetailPanel item={aberto} pregao={pregao} fechar={fecharItem} setCusto={setCusto} confirmarCusto={confirmarCusto} setMatch={setMatch} config={config} />
+      <DetailPanel item={aberto} pregao={pregao} fechar={fecharItem} setCusto={setCusto} confirmarCusto={confirmarCusto} limparCusto={limparCusto} setMatch={setMatch} config={config} />
     </React.Fragment>
   );
 }
 
 /* ============ ABA ITENS ============ */
-function ItensTab({ a, pregao, abrir, setCusto, confirmarCusto, setMatch, catalogo, estatico, reduzido, itemAberto }) {
+function ItensTab({ a, pregao, abrir, setCusto, confirmarCusto, limparCusto, definirMargemAlvo, config, setMatch, catalogo, estatico, reduzido, itemAberto }) {
   const linha = reduzido
     ? { hidden: { opacity: 0 }, show: { opacity: 1, transition: { duration: 0.15 } } }
     : { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 340, damping: 30 } } };
@@ -272,13 +274,13 @@ function ItensTab({ a, pregao, abrir, setCusto, confirmarCusto, setMatch, catalo
           <span className="match-aviso-led" aria-hidden="true"></span>
           <span>
             <strong>{a.sugeridos} {a.sugeridos === 1 ? "item sugerido" : "itens sugeridos"}</strong> aguardando sua confirmação.
-            Só itens confirmados entram no cálculo de margem e veredito.
+            Confirme ou digite o custo para entrar no cálculo de margem e veredito.
           </span>
         </div>
       )}
       <div className="tbl-titulo">
         <span className="silk">Itens do edital — estimado × seu custo</span>
-        <span className="silk desktop-only">Clique no item para o detalhe</span>
+        <MargemAlvoControle config={config} definirMargemAlvo={definirMargemAlvo} />
       </div>
       <div className="mod tbl" role="table" aria-label="Itens do pregão">
         <div className="tbl-head" role="row">
@@ -294,7 +296,7 @@ function ItensTab({ a, pregao, abrir, setCusto, confirmarCusto, setMatch, catalo
         <motion.div variants={tbl} initial={estatico ? false : "hidden"} animate="show" role="rowgroup">
           {a.itens.map((it) => (
             <LinhaItem key={it.n} item={it} variants={linha} ativa={itemAberto === it.n} abrir={abrir}
-              setCusto={setCusto} confirmarCusto={confirmarCusto} setMatch={setMatch} catalogo={catalogo} />
+              setCusto={setCusto} confirmarCusto={confirmarCusto} limparCusto={limparCusto} setMatch={setMatch} catalogo={catalogo} />
           ))}
           {a.itens.length === 0 && (
             <div className="tbl-row fora" role="row">
@@ -323,12 +325,43 @@ function ItensTab({ a, pregao, abrir, setCusto, confirmarCusto, setMatch, catalo
   );
 }
 
+/* ---------- controle compacto de margem alvo (cabeçalho da tabela) ---------- */
+function MargemAlvoControle({ config, definirMargemAlvo }) {
+  const atual = config && config.margem_alvo != null ? Number(config.margem_alvo) : 0.2;
+  const pct = Math.round((Number.isFinite(atual) ? atual : 0.2) * 100);
+  const [rascunho, setRascunho] = React.useState(String(pct));
+  React.useEffect(() => { setRascunho(String(pct)); }, [pct]);
+  if (!definirMargemAlvo) return <span className="silk desktop-only">Clique no item para o detalhe</span>;
+  const aplicar = () => {
+    const v = parseInt(rascunho, 10);
+    if (!Number.isNaN(v)) definirMargemAlvo(Math.max(0, Math.min(95, v)) / 100);
+    else setRascunho(String(pct));
+  };
+  return (
+    <label className="margem-alvo silk" title="Guia da simulação dos itens sem custo — não entra no veredito">
+      margem alvo
+      <input type="text" inputMode="numeric" className="margem-alvo-input mono" value={rascunho}
+        aria-label="Margem alvo da simulação (%)"
+        onChange={(e) => setRascunho(e.target.value.replace(/[^\d]/g, ""))}
+        onBlur={aplicar}
+        onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") { setRascunho(String(pct)); e.target.blur(); } e.stopPropagation(); }}
+        onClick={(e) => e.stopPropagation()} />
+      %
+    </label>
+  );
+}
+
 /* ---------- linha (com sub-barra de match quando sugerido/sem match) ---------- */
-function LinhaItem({ item, variants, ativa, abrir, setCusto, confirmarCusto, setMatch, catalogo }) {
+function LinhaItem({ item, variants, ativa, abrir, setCusto, confirmarCusto, limparCusto, setMatch, catalogo }) {
   const ref = React.useRef(null);
   const sigiloso = item.status === "sigiloso";
   const podeAbrir = () => abrir(item.n, ref.current);
   const cls = item.status;
+  // tag "manual" + limpar (×) quando custo manual coexiste com produto confirmado
+  const manualSobreCatalogo = item.custoManual != null && !!item.produto && item.status !== "sigiloso";
+  // placeholder de simulação para item sem custo: "máx R$ X"
+  const ph = item.custo == null && item.simulacaoCustoMax != null
+    ? "máx " + fmtBRL(item.simulacaoCustoMax) : "";
 
   return (
     <motion.div className="tbl-item" variants={variants}>
@@ -353,16 +386,31 @@ function LinhaItem({ item, variants, ativa, abrir, setCusto, confirmarCusto, set
         </div>
         <div className="c-custo" role="cell">
           <span className="m-label mobile-only">Seu custo unit.</span>
-          {item.produto && !sigiloso
-            ? <CostInput valor={item.custo} aoEditar={(v) => setCusto(item.n, v)} aoConfirmar={(v) => confirmarCusto(item, v)}
+          {sigiloso ? (
+            <span style={{ paddingRight: "8px", color: "var(--silk)" }}>—</span>
+          ) : (
+            <div className="custo-cel">
+              <CostInput valor={item.custo} placeholder={ph}
+                aoEditar={(v) => setCusto(item.n, v)}
+                aoConfirmar={(v) => confirmarCusto(item, v)}
                 rotulo={"Seu custo unitário do item " + item.n + " — editável"} />
-            : <span style={{ paddingRight: "8px", color: "var(--silk)" }}>—</span>}
+              {manualSobreCatalogo && (
+                <span className="custo-tags">
+                  <em className="custo-tag-manual">manual</em>
+                  <button type="button" className="custo-limpar" title="Limpar custo manual (volta ao catálogo)"
+                    aria-label={"Limpar custo manual do item " + item.n}
+                    onClick={(e) => { e.stopPropagation(); limparCusto && limparCusto(item); }}>{Ico.fechar}</button>
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="c-margem" role="cell">
           <span className="m-label mobile-only">Margem</span>
-          {item.margemPct == null || sigiloso
-            ? <span style={{ color: "var(--silk)" }}>—</span>
-            : <span className={"margem-pill " + (item.coberto ? item.status : "previa")}><NumPct value={item.margemPct} />{!item.coberto && <em className="previa-tag"> prévia</em>}</span>}
+          {/* só item COBERTO (com custo efetivo) mostra margem — sugerido sem prévia */}
+          {item.coberto && item.margemPct != null
+            ? <span className={"margem-pill " + item.status}><NumPct value={item.margemPct} /></span>
+            : <span style={{ color: "var(--silk)" }}>—</span>}
         </div>
         <div className="c-lucro" role="cell">
           <span className="m-label mobile-only">Lucro do item</span>

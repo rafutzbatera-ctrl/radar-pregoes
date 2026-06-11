@@ -32,10 +32,13 @@ export const linkPncp = (p) =>
 // o backend grava "nao_vale"; a UI/CSS usa "nao"
 export const normalizarVeredito = (v) => (v === "nao_vale" ? "nao" : v || null);
 
-// veredito (regra do CLAUDE.md §6.2):
+// veredito (regra do CLAUDE.md §6.2 — atualizado P3):
 // vale: margem ≥20% E cobertura ≥60% E lucro ≥ R$ 1.000
 // não vale: margem <8% OU lucro < R$ 300 · senão: talvez
-// Só item com match CONFIRMADO entra na conta (human-in-the-loop).
+// Custo efetivo do item = estado.custos[n] (edição ao vivo) ▸ custoManual
+// (override do pregão) ▸ (match confirmado ? produto.custo : null). Entra na
+// conta todo item com custo efetivo e valor oficial (inclusive sem match).
+// Sugeridos NÃO têm prévia de margem (sem custo efetivo → sem conta).
 // catalogoPorCod vem da API (App) — o mock morreu.
 export function analisar(pregao, estado, catalogoPorCod, previa) {
   const custos = (estado && estado.custos) || {};
@@ -43,23 +46,28 @@ export function analisar(pregao, estado, catalogoPorCod, previa) {
   const cat = catalogoPorCod || {};
   const itens = (pregao.itens || []).map((it) => {
     const m = matches[it.n] !== undefined ? matches[it.n] : it.match;
+    const produto = m && cat[m.cod] ? cat[m.cod] : null;
+    const confirmado = !!(m && (m.confirmado || !!previa));
+    // custo efetivo: edição ao vivo ▸ custo manual ▸ produto confirmado
+    let custo = null;
+    if (custos[it.n] !== undefined) custo = custos[it.n];
+    else if (it.custoManual != null) custo = it.custoManual;
+    else if (confirmado && produto) custo = produto.custo;
+
     if (it.sigiloso) {
-      return { ...it, matchAtual: m, produto: m ? cat[m.cod] || null : null, custo: null, coberto: false, margemPct: null, lucro: null, status: "sigiloso" };
+      return { ...it, matchAtual: m, produto, custo: null, coberto: false, margemPct: null, lucro: null, status: "sigiloso" };
     }
-    if (!m || !cat[m.cod]) {
-      return { ...it, matchAtual: m || null, produto: null, custo: null, coberto: false, margemPct: null, lucro: null, status: "fora" };
-    }
-    const produto = cat[m.cod];
-    const custo = custos[it.n] !== undefined ? custos[it.n] : produto.custo;
     const semValor = it.unit == null || !it.unit;
+    // sem custo efetivo: item ainda fora da conta. Pode estar sugerido (match
+    // não confirmado) ou sem match — sem prévia de margem em nenhum caso.
+    if (custo == null) {
+      const status = m && !confirmado ? "sugerido" : "fora";
+      return { ...it, matchAtual: m || null, produto, custo: null, coberto: false, margemPct: null, lucro: null, status };
+    }
     const margemPct = semValor ? null : ((it.unit - custo) / it.unit) * 100;
     const lucro = semValor ? null : (it.unit - custo) * it.qtd;
-    const confirmado = m.confirmado || !!previa;
-    if (!confirmado) {
-      return { ...it, matchAtual: m, produto, custo, coberto: false, margemPct, lucro, status: "sugerido" };
-    }
     if (semValor) {
-      // confirmado mas sem valor oficial — fora da conta, visível
+      // tem custo mas sem valor oficial — fora da conta, visível
       return { ...it, matchAtual: m, produto, custo, coberto: false, margemPct: null, lucro: null, status: "fora" };
     }
     return { ...it, matchAtual: m, produto, custo, coberto: true, margemPct, lucro, status: statusItem(margemPct) };
@@ -267,27 +275,36 @@ export function Resumo({ k, v, sub, pequeno }) {
 
 /* ---------- célula de custo editável (tabela de itens + catálogo) ----------
    aoEditar(v): chamado a cada digitação válida (recálculo ao vivo)
-   aoConfirmar(v): chamado no blur/Enter (persistência via API) */
-export function CostInput({ valor, aoEditar, aoConfirmar, rotulo }) {
+   aoConfirmar(v): chamado no blur/Enter (persistência via API)
+   valor null → célula vazia com placeholder (P3: simulação "máx R$ X (alvo)") */
+export function CostInput({ valor, aoEditar, aoConfirmar, rotulo, placeholder }) {
   const [editando, setEditando] = React.useState(false);
   const [rascunho, setRascunho] = React.useState("");
   const fmt = (v) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const exibido = editando ? rascunho : fmt(valor);
+  const vazio = valor == null;
+  const exibido = editando ? rascunho : vazio ? "" : fmt(valor);
   const confirmar = () => {
     if (!editando) return;
-    const v = parseBRL(rascunho);
-    if (v != null && v >= 0) {
-      const arred = Math.round(v * 100) / 100;
-      if (aoEditar) aoEditar(arred);
-      if (aoConfirmar) aoConfirmar(arred);
+    const txt = rascunho.trim();
+    if (txt === "") {
+      // limpou o campo: persiste null só se havia valor antes (volta ao catálogo)
+      if (!vazio && aoConfirmar) aoConfirmar(null);
+    } else {
+      const v = parseBRL(txt);
+      if (v != null && v >= 0) {
+        const arred = Math.round(v * 100) / 100;
+        if (aoEditar) aoEditar(arred);
+        if (aoConfirmar) aoConfirmar(arred);
+      }
     }
     setEditando(false);
   };
   return (
     <input
-      className="custo-input" type="text" inputMode="decimal" value={exibido}
+      className={"custo-input" + (vazio ? " vazio" : "")} type="text" inputMode="decimal"
+      value={exibido} placeholder={placeholder || ""}
       aria-label={rotulo}
-      onFocus={(e) => { setRascunho(fmt(valor)); setEditando(true); requestAnimationFrame(() => e.target.select()); }}
+      onFocus={(e) => { setRascunho(vazio ? "" : fmt(valor)); setEditando(true); requestAnimationFrame(() => e.target.select()); }}
       onChange={(e) => { setRascunho(e.target.value); const v = parseBRL(e.target.value); if (v != null && v >= 0 && aoEditar) aoEditar(Math.round(v * 100) / 100); }}
       onBlur={confirmar}
       onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") { setEditando(false); e.target.blur(); } e.stopPropagation(); }}

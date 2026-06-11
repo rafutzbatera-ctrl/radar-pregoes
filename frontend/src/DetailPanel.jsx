@@ -15,11 +15,16 @@ export function useIsMobile() {
   return mob;
 }
 
-function PainelConteudo({ item, pregao, fechar, setCusto, confirmarCusto, setMatch, config, fecharRef }) {
+function PainelConteudo({ item, pregao, fechar, setCusto, confirmarCusto, limparCusto, setMatch, config, fecharRef }) {
   const sigiloso = item.status === "sigiloso";
   const temMatch = !!item.produto;
   const m = item.matchAtual;
   const f = temMatch || item.ncmPncp ? fiscalDoItem(item, pregao, config) : null;
+  const margemAlvoPct = config && config.margem_alvo != null
+    ? Math.round(Number(config.margem_alvo) * 100) : 20;
+  const manualSobreCatalogo = item.custoManual != null && temMatch && !sigiloso;
+  const phCusto = item.custo == null && item.simulacaoCustoMax != null
+    ? "máx " + fmtBRL(item.simulacaoCustoMax) : "";
   return (
     <React.Fragment>
       <div className="painel-grip" aria-hidden="true"></div>
@@ -63,7 +68,59 @@ function PainelConteudo({ item, pregao, fechar, setCusto, confirmarCusto, setMat
           </div>
         </section>
 
-        {/* match / custo */}
+        {/* CUSTO primeiro (P3): dado do usuário entra na conta com ou sem match */}
+        {!sigiloso && (
+          <section className="painel-bloco">
+            <h3>
+              Custo & margem
+              {manualSobreCatalogo && <span className="custo-tag-manual" style={{ marginLeft: "8px" }}>manual</span>}
+            </h3>
+            <div className="painel-custo">
+              <div className="painel-custo-linha">
+                <span className="painel-fonte">
+                  Seu custo unitário (editável)
+                  {item.fonteCusto === "catalogo" && <em className="chip-fonte"> do catálogo</em>}
+                </span>
+                <span className="painel-custo-edit">
+                  <CostInput valor={item.custo} placeholder={phCusto}
+                    aoEditar={(v) => setCusto(item.n, v)} aoConfirmar={(v) => confirmarCusto(item, v)}
+                    rotulo={"Seu custo unitário do item " + item.n + " — editável"} />
+                  {manualSobreCatalogo && limparCusto && (
+                    <button type="button" className="custo-limpar" title="Limpar custo manual (volta ao catálogo)"
+                      aria-label="Limpar custo manual" onClick={() => limparCusto(item)}>{Ico.fechar}</button>
+                  )}
+                </span>
+              </div>
+              {item.coberto && item.margemPct != null ? (
+                <React.Fragment>
+                  <div className="painel-custo-linha">
+                    <span className="painel-fonte">Margem resultante</span>
+                    <span className={"margem-pill " + item.status}><NumPct value={item.margemPct} /></span>
+                  </div>
+                  <div className="painel-custo-linha">
+                    <span className="painel-fonte">Lucro do item (×{item.qtd})</span>
+                    <span className="mono" style={{ fontWeight: 600 }}><NumBRL value={item.lucro} /></span>
+                  </div>
+                </React.Fragment>
+              ) : item.simulacaoCustoMax != null ? (
+                <div className="painel-custo-linha simulacao">
+                  <span className="painel-fonte">
+                    Simulação <em className="chip-fonte">margem alvo {margemAlvoPct}%</em>
+                  </span>
+                  <span className="mono">
+                    custo máx {fmtBRL(item.simulacaoCustoMax)} · lucro <NumBRL value={item.simulacaoLucro || 0} />
+                  </span>
+                </div>
+              ) : (
+                <p className="painel-spec" style={{ color: "var(--silk)", margin: 0 }}>
+                  Digite seu custo para calcular a margem deste item.
+                </p>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* match com o catálogo — seção secundária (atalho opcional) */}
         <section className="painel-bloco">
           <h3>Match com o catálogo</h3>
           {temMatch ? (
@@ -73,41 +130,20 @@ function PainelConteudo({ item, pregao, fechar, setCusto, confirmarCusto, setMat
                   <div className="painel-match-nome">{item.produto.nome}</div>
                   <div className="painel-fonte">{item.produto.cod}{item.produto.cat ? " · " + item.produto.cat : ""}</div>
                 </div>
-                <span className={"match-badge " + (item.coberto ? "ok" : "pend")}>
-                  {item.coberto ? "Confirmado" : "Sugerido"}{m && m.score != null ? " · " + (m.score * 100).toFixed(0) + "%" : ""}
+                <span className={"match-badge " + (m && m.confirmado ? "ok" : "pend")}>
+                  {m && m.confirmado ? "Confirmado" : "Sugerido"}{m && m.score != null ? " · " + (m.score * 100).toFixed(0) + "%" : ""}
                 </span>
               </div>
-              {!item.coberto && setMatch && (
+              {!(m && m.confirmado) && setMatch && (
                 <div className="painel-match-acoes">
                   <button type="button" className="match-btn ok" onClick={() => setMatch(item, { ...m, confirmado: true })}>{Ico.check} Confirmar match</button>
                   <button type="button" className="match-btn nao" onClick={() => setMatch(item, null)}>{Ico.fechar} Recusar</button>
                 </div>
               )}
-              {!sigiloso && (
-                <div className="painel-custo">
-                  <div className="painel-custo-linha">
-                    <span className="painel-fonte">Custo unitário (editável)</span>
-                    <CostInput valor={item.custo} aoEditar={(v) => setCusto(item.n, v)} aoConfirmar={(v) => confirmarCusto(item, v)}
-                      rotulo={"Seu custo unitário do item " + item.n + " — editável"} />
-                  </div>
-                  {item.margemPct != null && (
-                    <div className="painel-custo-linha">
-                      <span className="painel-fonte">Margem resultante {item.coberto ? "" : "(prévia)"}</span>
-                      <span className={"margem-pill " + (item.coberto ? item.status : "previa")}><NumPct value={item.margemPct} /></span>
-                    </div>
-                  )}
-                  {item.lucro != null && (
-                    <div className="painel-custo-linha">
-                      <span className="painel-fonte">Lucro do item (×{item.qtd})</span>
-                      <span className="mono" style={{ fontWeight: 600, color: item.coberto ? undefined : "var(--silk)" }}><NumBRL value={item.lucro} /></span>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           ) : (
             <p className="painel-spec" style={{ color: "var(--silk)" }}>
-              Nenhum produto do catálogo casou com este item. Confirme um match na aba Itens para entrar no cálculo de margem.
+              Nenhum produto do catálogo casou com este item. O custo acima já entra no cálculo; casar um produto é opcional (atalho do catálogo).
             </p>
           )}
         </section>
@@ -134,7 +170,7 @@ function PainelConteudo({ item, pregao, fechar, setCusto, confirmarCusto, setMat
   );
 }
 
-export default function DetailPanel({ item, pregao, fechar, setCusto, confirmarCusto, setMatch, config }) {
+export default function DetailPanel({ item, pregao, fechar, setCusto, confirmarCusto, limparCusto, setMatch, config }) {
   const { estatico } = React.useContext(MotionCtx);
   const mobile = useIsMobile();
   const fecharRef = React.useRef(null);
@@ -155,7 +191,7 @@ export default function DetailPanel({ item, pregao, fechar, setCusto, confirmarC
           aria-modal="true"
           aria-label={"Detalhe do item " + item.n + " — " + item.nome}
         >
-          <PainelConteudo item={item} pregao={pregao} fechar={fechar} setCusto={setCusto} confirmarCusto={confirmarCusto} setMatch={setMatch} config={config} fecharRef={fecharRef} />
+          <PainelConteudo item={item} pregao={pregao} fechar={fechar} setCusto={setCusto} confirmarCusto={confirmarCusto} limparCusto={limparCusto} setMatch={setMatch} config={config} fecharRef={fecharRef} />
         </aside>
       </React.Fragment>
     );
@@ -203,7 +239,7 @@ export default function DetailPanel({ item, pregao, fechar, setCusto, confirmarC
             dragTransition={{ bounceStiffness: 420, bounceDamping: 32 }}
             onDragEnd={aoSoltar}
           >
-            <PainelConteudo item={item} pregao={pregao} fechar={fechar} setCusto={setCusto} confirmarCusto={confirmarCusto} setMatch={setMatch} config={config} fecharRef={fecharRef} />
+            <PainelConteudo item={item} pregao={pregao} fechar={fechar} setCusto={setCusto} confirmarCusto={confirmarCusto} limparCusto={limparCusto} setMatch={setMatch} config={config} fecharRef={fecharRef} />
           </motion.aside>
         </React.Fragment>
       )}

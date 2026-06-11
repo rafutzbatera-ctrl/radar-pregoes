@@ -176,19 +176,52 @@ export default function App() {
 
   /* ---------- mutações (otimista → API → reverte em erro) ---------- */
 
-  // custo unitário: ao vivo via setCusto; no blur/Enter persiste no catálogo
-  const confirmarCusto = (item, valor) => {
-    if (!item.produto) return;
-    const produto = item.produto;
-    const anterior = produto.custo;
-    const pregaoId = idAtivo;
-    setCatalogo((cs) => (cs || []).map((c) => (c.id === produto.id ? { ...c, custo: valor } : c)));
-    api.atualizarProduto(produto.id, { custo_unit: valor }).catch(() => {
-      setCatalogo((cs) => (cs || []).map((c) => (c.id === produto.id ? { ...c, custo: anterior } : c)));
-      if (pregaoId != null) mutarEstado(pregaoId, "custos", item.n, undefined);
-      avisar("Não foi possível salvar o custo — valor revertido.");
+  // aplica a resposta {item, pregao(agregados)} do match/custo no detalhe
+  // (item adaptado + agregados) e na lista de pregões (agregados no cartão)
+  const aplicarAgregados = (pregaoId, ag, adaptado) => {
+    const fundir = (alvo) => ({
+      ...alvo,
+      agregados: {
+        ...alvo.agregados,
+        veredito: ag.veredito,
+        lucroPotencial: ag.lucro_potencial,
+        margemMedia: ag.margem_media,
+        cobertura: ag.cobertura,
+        itensTotal: ag.itens_total,
+        itensConfirmados: ag.itens_confirmados,
+        itensComCusto: ag.itens_com_custo,
+      },
     });
+    setDetalhe((d) => {
+      if (!d || d.id !== pregaoId) return d;
+      const itens = adaptado && d.itens
+        ? d.itens.map((i) => (i.id === adaptado.id ? adaptado : i)) : d.itens;
+      return { ...d, itens, pregao: d.pregao ? fundir(d.pregao) : d.pregao };
+    });
+    setPregoes((ps) => (ps ? ps.map((p) => (p.id === pregaoId ? fundir(p) : p)) : ps));
   };
+
+  // custo unitário POR ITEM (P3): ao vivo via setCusto; no blur/Enter grava
+  // custo_manual (override local do pregão — NÃO toca o catálogo). A resposta
+  // traz {item, pregao(agregados)}; valor null limpa e volta ao catálogo.
+  const confirmarCustoItem = (item, valor) => {
+    const pregaoId = idAtivo;
+    if (pregaoId == null) return;
+    api.definirCustoItem(item.id, valor)
+      .then(({ item: cru, pregao: ag }) => {
+        const adaptado = adaptarItem(cru, mapaProdutos());
+        aplicarAgregados(pregaoId, ag, adaptado);
+        // dado do servidor agora carrega o custo — limpa o override ao vivo
+        mutarEstado(pregaoId, "custos", item.n, undefined);
+      })
+      .catch(() => {
+        mutarEstado(pregaoId, "custos", item.n, undefined);
+        avisar("Não foi possível salvar o custo — valor revertido.");
+      });
+  };
+
+  // limpar custo manual (×): volta ao custo do catálogo se houver match
+  const limparCustoItem = (item) => confirmarCustoItem(item, null);
 
   // catálogo (tela Meu catálogo): edição inline do custo
   const salvarCustoProduto = (produto, valor) => {
@@ -211,42 +244,7 @@ export default function App() {
     api.definirMatch(item.id, produto ? produto.id : null, !!(match && match.confirmado))
       .then(({ item: cru, pregao: ag }) => {
         const adaptado = adaptarItem(cru, mapaProdutos());
-        setDetalhe((d) => {
-          if (!d || d.id !== pregaoId) return d;
-          const itens = d.itens ? d.itens.map((i) => (i.id === adaptado.id ? adaptado : i)) : d.itens;
-          const pregao = d.pregao
-            ? {
-                ...d.pregao,
-                agregados: {
-                  ...d.pregao.agregados,
-                  veredito: ag.veredito,
-                  lucroPotencial: ag.lucro_potencial,
-                  margemMedia: ag.margem_media,
-                  cobertura: ag.cobertura,
-                  itensTotal: ag.itens_total,
-                  itensConfirmados: ag.itens_confirmados,
-                },
-              }
-            : d.pregao;
-          return { ...d, itens, pregao };
-        });
-        // lista de pregões: agregados novos no cartão
-        setPregoes((ps) => ps
-          ? ps.map((p) => (p.id === pregaoId
-            ? {
-                ...p,
-                agregados: {
-                  ...p.agregados,
-                  veredito: ag.veredito,
-                  lucroPotencial: ag.lucro_potencial,
-                  margemMedia: ag.margem_media,
-                  cobertura: ag.cobertura,
-                  itensTotal: ag.itens_total,
-                  itensConfirmados: ag.itens_confirmados,
-                },
-              }
-            : p))
-          : ps);
+        aplicarAgregados(pregaoId, ag, adaptado);
         // o item do servidor agora carrega o match — limpa o override local
         mutarEstado(pregaoId, "matches", item.n, undefined);
       })
@@ -267,6 +265,29 @@ export default function App() {
       mutarEstado(pregaoId, "habilitacao", h.id, anterior);
       avisar("Não foi possível salvar o status do requisito — revertido.");
     });
+  };
+
+  // margem alvo (P3): guia da simulação dos itens sem custo. Persiste na
+  // config e recarrega os itens do pregão ativo (simulação recalculada no
+  // backend). Otimista no config; reverte em erro.
+  const definirMargemAlvo = (valor) => {
+    const anterior = config;
+    const v = Math.max(0, Math.min(0.95, valor));
+    setConfig((c) => ({ ...(c || CONFIG_PADRAO), margem_alvo: String(v) }));
+    api.atualizarConfig({ margem_alvo: String(v) })
+      .then((cfg) => {
+        setConfig(cfg);
+        const id = idAtivo;
+        if (id != null) {
+          api.carregarItens(id, mapaProdutos())
+            .then((itens) => setDetalhe((d) => (d && d.id === id ? { ...d, itens } : d)))
+            .catch(() => {});
+        }
+      })
+      .catch(() => {
+        setConfig(anterior);
+        avisar("Não foi possível salvar a margem alvo — revertido.");
+      });
   };
 
   // regime tributário (alterna CSOSN↔CST em toda a aba Fiscal)
@@ -448,7 +469,9 @@ export default function App() {
           pregao={pregaoAtivo}
           estado={estadoAtivo}
           setCusto={setCusto}
-          confirmarCusto={confirmarCusto}
+          confirmarCusto={confirmarCustoItem}
+          limparCusto={limparCustoItem}
+          definirMargemAlvo={definirMargemAlvo}
           setMatch={definirMatch}
           setHabil={setHabil}
           config={config || CONFIG_PADRAO}
