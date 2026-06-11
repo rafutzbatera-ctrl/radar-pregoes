@@ -1,6 +1,69 @@
 // RADAR DE PREGÕES — abas Habilitação (citação verificada) e Fiscal / NF-e
 import React from "react";
+import { api } from "./api.js";
 import { Ico, CATEGORIA_TXT, linkPncp } from "./helpers.jsx";
+
+const ORDEM_CAT_BASE = ["juridica", "fiscal", "tecnica", "economico_financeira", "proposta", "outros"];
+
+// Bloco de REFERÊNCIA — "o que editais geralmente pedem" (NÃO extração deste
+// edital; princípio 1 do CLAUDE.md). Sem botões tenho/pendente.
+export function ChecklistBase() {
+  const [dados, setDados] = React.useState(null); // null = carregando
+  const [erro, setErro] = React.useState(false);
+  React.useEffect(() => {
+    let vivo = true;
+    api.checklistBase()
+      .then((d) => { if (vivo) setDados(d); })
+      .catch(() => { if (vivo) setErro(true); });
+    return () => { vivo = false; };
+  }, []);
+
+  if (erro) return null;          // referência opcional: não atrapalha o fluxo
+  if (dados == null) {
+    return (
+      <div className="base-wrap" aria-busy="true">
+        <div className="card-pregao mod skel">
+          <span className="skel-bar w50"></span>
+          <span className="skel-bar w90"></span>
+          <span className="skel-bar w70"></span>
+        </div>
+      </div>
+    );
+  }
+
+  const itens = dados.itens || [];
+  const grupos = ORDEM_CAT_BASE
+    .map((cat) => ({ cat, itens: itens.filter((h) => h.categoria === cat) }))
+    .filter((g) => g.itens.length);
+
+  return (
+    <div className="base-wrap">
+      <div className="tbl-titulo">
+        <span className="silk">O que editais geralmente pedem</span>
+      </div>
+      <div className="gate-aviso mod ambar">
+        <span className="gate-ico" aria-hidden="true">{Ico.alerta}</span>
+        <div>{dados.aviso}</div>
+      </div>
+      {grupos.map((g) => (
+        <section key={g.cat} className="base-grupo">
+          <h3 className="habil-cat">{CATEGORIA_TXT[g.cat]} <span className="habil-cat-n">{g.itens.length}</span></h3>
+          <div className="base-itens">
+            {g.itens.map((h, i) => (
+              <div className="base-card mod" key={g.cat + i}>
+                <div className="base-top">
+                  <span className="base-req">{h.requisito}</span>
+                  <span className={"base-freq f-" + h.frequencia.replace(/\s+/g, "-")}>{h.frequencia}</span>
+                </div>
+                <span className="base-fonte silk">{h.fonte}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
 
 export const HABIL_STATUS = {
   ok: { rotulo: "Tenho", cls: "sinal" },
@@ -39,25 +102,29 @@ export function HabilitacaoTab({ pregao, habilStatus, setHabil, sincronizar, sin
   }
 
   // [] sem sincronizar = edital ainda não baixado/extraído → oferecer sincronização
+  // + bloco de referência geral (o que editais costumam pedir; não é extração).
   if (habil.length === 0 && !pregao.sincronizado) {
     return (
-      <div className="estado-vazio mod">
-        <div className="estado-ico" aria-hidden="true">{Ico.doc}</div>
-        <h3>Habilitação ainda não extraída</h3>
-        <p>Este pregão ainda não foi sincronizado. Ao sincronizar, baixamos o edital do PNCP e extraímos o checklist de habilitação — cada requisito com a citação literal do trecho que o exige.</p>
-        {(pregao.arquivos || []).length > 0 && (
-          <div className="estado-arquivos">
-            {pregao.arquivos.map((arq) => (
-              <ArquivoChip key={arq.titulo} arq={arq} />
-            ))}
-          </div>
-        )}
-        <button type="button" className={"btn-rodar" + (sincronizando ? " rodando" : "")} disabled={sincronizando} onClick={sincronizar}>
-          {sincronizando
-            ? <React.Fragment><span className="spin" aria-hidden="true"></span> Sincronizando… (pode levar alguns minutos)</React.Fragment>
-            : <React.Fragment>{Ico.raio} Sincronizar agora</React.Fragment>}
-        </button>
-      </div>
+      <React.Fragment>
+        <div className="estado-vazio mod">
+          <div className="estado-ico" aria-hidden="true">{Ico.doc}</div>
+          <h3>Habilitação ainda não extraída</h3>
+          <p>Este pregão ainda não foi sincronizado. Ao sincronizar, baixamos o edital do PNCP e extraímos o checklist de habilitação — cada requisito com a citação literal do trecho que o exige.</p>
+          {(pregao.arquivos || []).length > 0 && (
+            <div className="estado-arquivos">
+              {pregao.arquivos.map((arq) => (
+                <ArquivoChip key={arq.titulo} arq={arq} />
+              ))}
+            </div>
+          )}
+          <button type="button" className={"btn-rodar" + (sincronizando ? " rodando" : "")} disabled={sincronizando} onClick={sincronizar}>
+            {sincronizando
+              ? <React.Fragment><span className="spin" aria-hidden="true"></span> Sincronizando… (pode levar alguns minutos)</React.Fragment>
+              : <React.Fragment>{Ico.raio} Sincronizar agora</React.Fragment>}
+          </button>
+        </div>
+        <ChecklistBase />
+      </React.Fragment>
     );
   }
 

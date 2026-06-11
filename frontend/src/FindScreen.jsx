@@ -2,19 +2,25 @@
 // Dados reais via props (App carrega da API); estados de carregando/erro reais.
 import React from "react";
 import { motion } from "framer-motion";
+import { api } from "./api.js";
 import {
   MotionCtx, Ico, fmtBRL, Etiqueta, VEREDITO_TXT, normalizarVeredito, CostInput,
 } from "./helpers.jsx";
 
 const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const _fmtInt = new Intl.NumberFormat("pt-BR");
+const fmtInt = (n) => _fmtInt.format(n || 0);
 
-export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar }) {
+export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, aoImportar }) {
   const { reduzido, estatico } = React.useContext(MotionCtx);
   const [busca, setBusca] = React.useState("");
   const [uf, setUf] = React.useState("todas");
   const [modalidade, setModalidade] = React.useState("todas");
   const [recebendo, setRecebendo] = React.useState(false);
   const [soNovos, setSoNovos] = React.useState(false);
+  // fonte: "radar" (pregões já descobertos) | "vivo" (busca ao vivo no PNCP)
+  const [fonte, setFonte] = React.useState("radar");
+  const aoVivo = !apenasSalvos && fonte === "vivo";
 
   const carregando = pregoes == null && !erro;
   const base = (pregoes || []).filter((p) => !apenasSalvos || p.salvo);
@@ -40,6 +46,44 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar })
     : { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 320, damping: 28 } } };
   const pai = { hidden: {}, show: { transition: { staggerChildren: reduzido ? 0 : 0.055, delayChildren: reduzido ? 0 : 0.05 } } };
 
+  /* ---------- modo "PNCP ao vivo" (busca na API sem persistir) ---------- */
+  const [vivo, setVivo] = React.useState({ itens: [], total: 0, pagina: 1, carregando: false, erro: null });
+  const [importando, setImportando] = React.useState(null); // numero_controle em importação
+
+  const buscarVivo = React.useCallback((q, ufSel, pagina, concatenar) => {
+    setVivo((v) => ({ ...v, carregando: true, erro: null }));
+    api.descobrir({ q, uf: ufSel, pagina })
+      .then((r) => setVivo((v) => ({
+        itens: concatenar ? [...v.itens, ...r.itens] : r.itens,
+        total: r.total, pagina, carregando: false, erro: null,
+      })))
+      .catch((e) => setVivo((v) => ({ ...v, carregando: false, erro: e.message || "erro" })));
+  }, []);
+
+  // debounce 500ms ao digitar / trocar UF (somente no modo ao vivo)
+  React.useEffect(() => {
+    if (!aoVivo) return;
+    const t = setTimeout(() => buscarVivo(busca.trim(), uf, 1, false), 500);
+    return () => clearTimeout(t);
+  }, [aoVivo, busca, uf, buscarVivo]);
+
+  const importar = (item) => {
+    if (importando) return;
+    setImportando(item.numeroControle);
+    aoImportar(item.numeroControle, item.hit)
+      .then((pregao) => {
+        // marca o item da lista ao vivo como "no radar" (link p/ análise local)
+        setVivo((v) => ({
+          ...v,
+          itens: v.itens.map((i) => (i.numeroControle === item.numeroControle
+            ? { ...i, jaNoRadar: true, pregaoId: pregao.id } : i)),
+        }));
+        aoAbrir(pregao.id);
+      })
+      .catch(() => {})
+      .finally(() => setImportando(null));
+  };
+
   return (
     <motion.div className="screen-inner" variants={pai} initial={estatico ? false : "hidden"} animate="show">
       <motion.div variants={entrada}>
@@ -52,31 +96,57 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar })
         </p>
       </motion.div>
 
+      {!apenasSalvos && (
+        <motion.div className="seg fonte-seg" role="group" aria-label="Fonte dos pregões" variants={entrada}>
+          <button type="button" className={"seg-btn" + (fonte === "radar" ? " on" : "")}
+            aria-pressed={fonte === "radar"} onClick={() => setFonte("radar")}>
+            No meu radar
+          </button>
+          <button type="button" className={"seg-btn" + (fonte === "vivo" ? " on" : "")}
+            aria-pressed={fonte === "vivo"} onClick={() => setFonte("vivo")}>
+            PNCP ao vivo
+          </button>
+        </motion.div>
+      )}
+
       <motion.div className="filtros" variants={entrada}>
         {!apenasSalvos && (
           <label className="busca">
             {Ico.busca}
             <input type="text" value={busca} onChange={(e) => setBusca(e.target.value)}
-              placeholder="Palavra-chave — ex.: áudio, vídeo, projetor" aria-label="Buscar pregões por palavra-chave" />
+              placeholder={aoVivo ? "Palavra-chave — vazio mostra o Brasil inteiro" : "Palavra-chave — ex.: áudio, vídeo, projetor"}
+              aria-label="Buscar pregões por palavra-chave" />
           </label>
         )}
         <select className="filtro-sel" value={uf} onChange={(e) => setUf(e.target.value)} aria-label="Filtrar por UF">
           <option value="todas">UF · todas</option>
           {ufs.map((u) => <option key={u} value={u}>{u}</option>)}
         </select>
-        <select className="filtro-sel" value={modalidade} onChange={(e) => setModalidade(e.target.value)} aria-label="Filtrar por modalidade">
-          <option value="todas">Modalidade · todas</option>
-          {modalidades.map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
-        <button type="button" className={"filtro-status" + (recebendo ? " on" : "")} aria-pressed={recebendo} onClick={() => setRecebendo(!recebendo)}>
-          <span className="led" aria-hidden="true"></span>Recebendo propostas
-        </button>
-        <button type="button" className={"filtro-status" + (soNovos ? " on" : "")} aria-pressed={soNovos} onClick={() => setSoNovos(!soNovos)}>
-          <span className="led" aria-hidden="true"></span>Só novos {qtdNovos > 0 && <em className="filtro-badge">{qtdNovos}</em>}
-        </button>
+        {!aoVivo && (
+          <select className="filtro-sel" value={modalidade} onChange={(e) => setModalidade(e.target.value)} aria-label="Filtrar por modalidade">
+            <option value="todas">Modalidade · todas</option>
+            {modalidades.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        )}
+        {!aoVivo && (
+          <button type="button" className={"filtro-status" + (recebendo ? " on" : "")} aria-pressed={recebendo} onClick={() => setRecebendo(!recebendo)}>
+            <span className="led" aria-hidden="true"></span>Recebendo propostas
+          </button>
+        )}
+        {!aoVivo && (
+          <button type="button" className={"filtro-status" + (soNovos ? " on" : "")} aria-pressed={soNovos} onClick={() => setSoNovos(!soNovos)}>
+            <span className="led" aria-hidden="true"></span>Só novos {qtdNovos > 0 && <em className="filtro-badge">{qtdNovos}</em>}
+          </button>
+        )}
       </motion.div>
 
-      {carregando ? (
+      {aoVivo ? (
+        <ListaVivo
+          vivo={vivo} entrada={entrada} importar={importar} importando={importando}
+          aoAbrir={aoAbrir} recarregar={() => buscarVivo(busca.trim(), uf, 1, false)}
+          carregarMais={() => buscarVivo(busca.trim(), uf, vivo.pagina + 1, true)}
+        />
+      ) : carregando ? (
         <EstadoCarregando entrada={entrada} />
       ) : erro ? (
         <EstadoErro entrada={entrada} mensagem={erro} recarregar={recarregar} />
@@ -98,6 +168,88 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar })
           )}
         </div>
       )}
+    </motion.div>
+  );
+}
+
+/* ---------- lista do modo "PNCP ao vivo" ---------- */
+function ListaVivo({ vivo, entrada, importar, importando, aoAbrir, recarregar, carregarMais }) {
+  const { itens, total, carregando, erro } = vivo;
+  // primeira carga (sem itens ainda) mostra skeleton; cargas seguintes mantêm a lista
+  if (carregando && itens.length === 0) return <EstadoCarregando entrada={entrada} />;
+  if (erro && itens.length === 0) return <EstadoErro entrada={entrada} mensagem={erro} recarregar={recarregar} />;
+
+  return (
+    <div className="cards">
+      <motion.div variants={entrada} className="silk" style={{ marginBottom: "2px" }}>
+        {fmtInt(total)} {total === 1 ? "oportunidade no PNCP" : "oportunidades no PNCP"}
+      </motion.div>
+      {erro && (
+        <motion.div variants={entrada} className="vivo-erro-inline">
+          {Ico.alerta} Não foi possível atualizar — {" "}
+          <button type="button" className="vivo-retry" onClick={recarregar}>tentar de novo</button>
+        </motion.div>
+      )}
+      {itens.map((p) => (
+        <CartaoPregaoVivo key={p.numeroControle} pregao={p}
+          variants={entrada} importar={importar} importando={importando} aoAbrir={aoAbrir} />
+      ))}
+      {itens.length === 0 && !carregando && (
+        <motion.div variants={entrada} className="estado-vazio mod">
+          <div className="estado-ico" aria-hidden="true">{Ico.radar}</div>
+          <h3>Nenhum edital com esses filtros</h3>
+          <p>Limpe a palavra-chave para ver o total nacional, ou tente outra UF. Os dados vêm direto da busca oficial do PNCP.</p>
+        </motion.div>
+      )}
+      {itens.length > 0 && itens.length < total && (
+        <button type="button" className={"btn-rodar vivo-mais" + (carregando ? " rodando" : "")}
+          disabled={carregando} onClick={carregarMais}>
+          {carregando
+            ? <React.Fragment><span className="spin" aria-hidden="true"></span> Carregando…</React.Fragment>
+            : <React.Fragment>{Ico.raio} Carregar mais ({fmtInt(total - itens.length)} restantes)</React.Fragment>}
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function CartaoPregaoVivo({ pregao, variants, importar, importando, aoAbrir }) {
+  const linhaSilk = [
+    pregao.modalidade,
+    pregao.municipio ? pregao.municipio + "/" + pregao.uf : pregao.uf,
+    pregao.status,
+  ].filter(Boolean).join(" · ");
+  const noRadar = pregao.jaNoRadar;
+  const importandoEste = importando === pregao.numeroControle;
+  const abrir = () => { if (noRadar && pregao.pregaoId != null) aoAbrir(pregao.pregaoId); };
+  return (
+    <motion.div className="card-pregao mod card-vivo" variants={variants}>
+      <span className="card-edital silk">
+        {noRadar && <em className="card-noradar">no radar</em>}
+        {linhaSilk}
+      </span>
+      <span className="card-titulo">{pregao.titulo}</span>
+      <span className="card-orgao">{pregao.orgao}</span>
+      {pregao.descricao && <span className="card-desc">{pregao.descricao}</span>}
+      <span className="card-meta mono">
+        <span><span className="k">Valor estimado</span>{pregao.valorTotal != null ? fmtBRL(pregao.valorTotal) : "—"}</span>
+        <span><span className="k">Propostas até</span>{pregao.prazo || "—"}</span>
+        <span className="desktop-only"><span className="k">Veredito</span>—</span>
+      </span>
+      <span className="card-vered">
+        {noRadar ? (
+          <button type="button" className="btn-rodar btn-vivo-abrir" onClick={abrir}>
+            {Ico.radar} Abrir análise
+          </button>
+        ) : (
+          <button type="button" className={"btn-rodar btn-vivo-add" + (importandoEste ? " rodando" : "")}
+            disabled={importandoEste} onClick={() => importar(pregao)}>
+            {importandoEste
+              ? <React.Fragment><span className="spin" aria-hidden="true"></span> Adicionando…</React.Fragment>
+              : <React.Fragment>{Ico.raio} Adicionar ao radar</React.Fragment>}
+          </button>
+        )}
+      </span>
     </motion.div>
   );
 }

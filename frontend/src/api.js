@@ -138,6 +138,35 @@ export function adaptarPregao(p) {
   };
 }
 
+// item da busca AO VIVO do PNCP (GET /descobrir) → shape de cartão.
+// Sem agregados (não está no radar): veredito/itens ficam vazios na UI.
+// Carrega o hit cru (para reenviar no importar), jaNoRadar e pregaoId.
+export function adaptarDescoberto(d) {
+  return {
+    id: d.numero_controle,        // chave estável da lista ao vivo
+    numeroControle: d.numero_controle,
+    cnpj: d.cnpj,
+    ano: d.ano,
+    seq: d.seq,
+    titulo: d.titulo || `${d.modalidade || "Edital"} ${d.seq}/${d.ano}`,
+    orgao: d.orgao,
+    municipio: d.municipio,
+    uf: d.uf,
+    modalidade: d.modalidade,
+    situacao: d.situacao,
+    status: d.situacao,
+    descricao: d.descricao,
+    valorTotal: d.valor_global,
+    prazo: dataBr(d.data_fim_vigencia),
+    aoVivo: true,
+    jaNoRadar: !!d.ja_no_radar,
+    pregaoId: d.pregao_id,
+    hit: d.hit,
+    agregados: {},
+    novo: false,
+  };
+}
+
 export function adaptarBusca(b) {
   return {
     id: b.id,
@@ -152,6 +181,8 @@ export function adaptarBusca(b) {
 }
 
 // ---------- chamadas ----------
+let _checklistBaseCache = null;
+
 export const api = {
   // descoberta
   listarBuscas: () => req("/buscas").then((bs) => bs.map(adaptarBusca)),
@@ -203,6 +234,35 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ status_usuario: status }),
     }),
+
+  // PNCP ao vivo (explorar a busca nacional sem persistir)
+  descobrir: ({ q, uf, pagina } = {}) => {
+    const p = new URLSearchParams();
+    if (q) p.set("q", q);
+    if (uf && uf !== "todas") p.set("ufs", uf);
+    if (pagina != null) p.set("pagina", pagina);
+    const s = p.toString();
+    return req("/descobrir" + (s ? `?${s}` : "")).then((r) => ({
+      total: r.total,
+      pagina: r.pagina,
+      tamanho: r.tamanho,
+      itens: (r.itens || []).map(adaptarDescoberto),
+    }));
+  },
+  importarPregao: (numeroControle, hit) =>
+    req("/descobrir/importar", {
+      method: "POST",
+      body: JSON.stringify({ numero_controle: numeroControle, hit }),
+    }).then(adaptarPregao),
+
+  // checklist base de habilitação (referência geral — cacheada no módulo)
+  checklistBase: () => {
+    if (_checklistBaseCache) return Promise.resolve(_checklistBaseCache);
+    return req("/habilitacao/base").then((r) => {
+      _checklistBaseCache = r;
+      return r;
+    });
+  },
 
   // config
   lerConfig: () => req("/config"),

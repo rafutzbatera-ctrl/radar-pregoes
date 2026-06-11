@@ -307,6 +307,27 @@ export default function App() {
     });
   };
 
+  // importar pregão da busca AO VIVO do PNCP para o radar (estado global)
+  const importarPregao = (numeroControle, hit) =>
+    api.importarPregao(numeroControle, hit)
+      .then((pregao) => {
+        setPregoes((ps) => {
+          const lista = ps || [];
+          // idempotente: se já está na lista, não duplica (atualiza no lugar)
+          if (lista.some((p) => p.id === pregao.id)) {
+            return lista.map((p) => (p.id === pregao.id ? pregao : p));
+          }
+          return [pregao, ...lista];
+        });
+        return pregao;
+      })
+      .catch((e) => {
+        avisar(e.status === 503
+          ? "PNCP indisponível no momento — tente de novo em instantes."
+          : "Não foi possível adicionar ao radar: " + (e.message || "erro"));
+        throw e;
+      });
+
   // catálogo
   const criarProduto = (corpo) =>
     api.criarProduto(corpo)
@@ -351,7 +372,8 @@ export default function App() {
     >
       {tela.nome === "find" && (
         <FindScreen aoAbrir={abrirPregao} apenasSalvos={false}
-          pregoes={pregoes} erro={erros.pregoes} recarregar={carregarTudo} />
+          pregoes={pregoes} erro={erros.pregoes} recarregar={carregarTudo}
+          aoImportar={importarPregao} />
       )}
       {tela.nome === "meus" && (
         <FindScreen aoAbrir={abrirPregao} apenasSalvos={true}

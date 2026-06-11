@@ -147,6 +147,23 @@ def test_arquivos_sem_sincronizar_consulta_pncp(client, con, cliente_fake, monke
     assert cliente_fake.chamadas["baixar"] == 0
 
 
+def test_habilitacao_base_referencia(client):
+    """Checklist base — referência geral, NÃO extração do edital (princípio 1)."""
+    r = client.get("/habilitacao/base")
+    assert r.status_code == 200
+    corpo = r.json()
+    assert "aviso" in corpo and "NÃO foi extraída" in corpo["aviso"]
+    itens = corpo["itens"]
+    assert len(itens) >= 14
+    cats_validas = {"juridica", "fiscal", "tecnica", "economico_financeira",
+                    "proposta", "outros"}
+    freq_validas = {"quase sempre", "comum", "depende do objeto"}
+    for it in itens:
+        assert it["fonte"]
+        assert it["categoria"] in cats_validas
+        assert it["frequencia"] in freq_validas
+
+
 def test_404s(client):
     assert client.get("/pregoes/999").status_code == 404
     assert client.get("/pregoes/999/arquivos").status_code == 404

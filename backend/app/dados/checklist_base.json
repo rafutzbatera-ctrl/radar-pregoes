@@ -1,0 +1,98 @@
+[
+  {
+    "requisito": "Ato constitutivo / contrato social em vigor",
+    "categoria": "juridica",
+    "frequencia": "quase sempre",
+    "fonte": "Lei 14.133 art. 66; visto em Imbaú/PR PE 27/2026"
+  },
+  {
+    "requisito": "Comprovante de inscrição no CNPJ",
+    "categoria": "juridica",
+    "frequencia": "quase sempre",
+    "fonte": "Visto em Imbaú/PR PE 27/2026"
+  },
+  {
+    "requisito": "Declaração de que não emprega menor (art. 7º XXXIII CF)",
+    "categoria": "juridica",
+    "frequencia": "quase sempre",
+    "fonte": "Lei 14.133 art. 68 VI"
+  },
+  {
+    "requisito": "Declaração de enquadramento ME/EPP (LC 123/2006)",
+    "categoria": "juridica",
+    "frequencia": "comum",
+    "fonte": "Visto em Imbaú/PR PE 27/2026; obrigatória quando o certame tem benefício ME/EPP"
+  },
+  {
+    "requisito": "Procuração / credenciamento do representante",
+    "categoria": "juridica",
+    "frequencia": "comum",
+    "fonte": "Visto em Imbaú/PR PE 27/2026"
+  },
+  {
+    "requisito": "Certidão negativa de débitos federais (RFB/PGFN)",
+    "categoria": "fiscal",
+    "frequencia": "quase sempre",
+    "fonte": "Lei 14.133 art. 68 III; visto em Imbaú/PR PE 27/2026"
+  },
+  {
+    "requisito": "Certificado de regularidade do FGTS (CRF)",
+    "categoria": "fiscal",
+    "frequencia": "quase sempre",
+    "fonte": "Lei 14.133 art. 68 IV; visto em Imbaú/PR PE 27/2026"
+  },
+  {
+    "requisito": "Certidão negativa de débitos trabalhistas (CNDT)",
+    "categoria": "fiscal",
+    "frequencia": "quase sempre",
+    "fonte": "Lei 14.133 art. 68 V; visto em Imbaú/PR PE 27/2026"
+  },
+  {
+    "requisito": "Regularidade com a Fazenda Estadual",
+    "categoria": "fiscal",
+    "frequencia": "comum",
+    "fonte": "Visto em Imbaú/PR PE 27/2026"
+  },
+  {
+    "requisito": "Regularidade com a Fazenda Municipal (ISS)",
+    "categoria": "fiscal",
+    "frequencia": "comum",
+    "fonte": "Visto em Imbaú/PR PE 27/2026"
+  },
+  {
+    "requisito": "Regularidade com a Seguridade Social (INSS)",
+    "categoria": "fiscal",
+    "frequencia": "comum",
+    "fonte": "Lei 14.133 art. 68 II; visto em Imbaú/PR PE 27/2026"
+  },
+  {
+    "requisito": "Atestado de capacidade técnica",
+    "categoria": "tecnica",
+    "frequencia": "depende do objeto",
+    "fonte": "Lei 14.133 art. 67"
+  },
+  {
+    "requisito": "Balanço patrimonial do último exercício",
+    "categoria": "economico_financeira",
+    "frequencia": "depende do objeto",
+    "fonte": "Lei 14.133 art. 69"
+  },
+  {
+    "requisito": "Certidão negativa de falência/recuperação",
+    "categoria": "economico_financeira",
+    "frequencia": "comum",
+    "fonte": "Visto em Imbaú/PR PE 27/2026"
+  },
+  {
+    "requisito": "Proposta com prazo de validade mínimo (60-90 dias)",
+    "categoria": "proposta",
+    "frequencia": "quase sempre",
+    "fonte": "Visto em Imbaú/PR PE 27/2026: 90 dias"
+  },
+  {
+    "requisito": "Garantia de proposta/contratual",
+    "categoria": "outros",
+    "frequencia": "depende do objeto",
+    "fonte": "Lei 14.133 arts. 96-98"
+  }
+]

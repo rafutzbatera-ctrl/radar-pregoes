@@ -88,16 +88,21 @@ class ClientePNCP:
 
     # ---------- endpoints (CLAUDE.md §4) ----------
 
-    def buscar(self, q: str, ufs: str = "", status: str = "recebendo_proposta",
+    def buscar(self, q: str = "", ufs: str = "", status: str = "recebendo_proposta",
                pagina: int = 1, tamanho: int = 50, usar_cache: bool = True) -> dict:
-        """4.1 — busca textual de editais. Retorna {"items": [...], "total": N}."""
+        """4.1 — busca textual de editais. Retorna {"items": [...], "total": N}.
+
+        `q` é opcional: a API do PNCP aceita busca sem termo (é assim que se vê o
+        total nacional de ~37k). Quando vazio, o param `q` NÃO é enviado.
+        """
         params = {
-            "q": q,
             "tipos_documento": "edital",
             "ordenacao": "-data",
             "pagina": pagina,
             "tamanhoPagina": tamanho,
         }
+        if q:
+            params["q"] = q
         if ufs:
             params["ufs"] = ufs
         if status:

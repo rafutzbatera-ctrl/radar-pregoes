@@ -37,7 +37,7 @@ def rodar_busca(con: sqlite3.Connection, busca_id: int,
             hits = resp.get("items", [])
             for hit in hits:
                 vistos += 1
-                novos += _persistir_hit(con, hit, busca_id)
+                novos += persistir_hit(con, hit, busca_id)
             # uma página de 50 por termo é suficiente para monitoramento 2x/dia;
             # ordenação -data garante que os mais novos vêm primeiro
             break
@@ -57,8 +57,12 @@ def rodar_todas_ativas(con: sqlite3.Connection,
     return [rodar_busca(con, b["id"], cliente) for b in buscas]
 
 
-def _persistir_hit(con: sqlite3.Connection, hit: dict, busca_id: int) -> int:
-    """Insere o pregão se for novo (dedup por numero_controle_pncp). Retorna 1 se inseriu."""
+def persistir_hit(con: sqlite3.Connection, hit: dict, busca_id: int | None) -> int:
+    """Insere o pregão se for novo (dedup por numero_controle_pncp). Retorna 1 se inseriu.
+
+    `busca_id` pode ser None (importação manual via /descobrir — pregão sem busca
+    salva de origem; a coluna pregoes.busca_id permite NULL).
+    """
     numero_controle = hit.get("numero_controle_pncp")
     if not numero_controle:
         return 0

@@ -1453,6 +1453,66 @@ button.busca-card-status:focus-visible { outline: 2px solid var(--tinta); outlin
   .toast { right: 8px; left: 8px; bottom: 56px; max-width: none; }
 }
 
+/* ---- Feature: PNCP ao vivo (seletor de fonte + cartões importáveis) ---- */
+/* segmentado "No meu radar / PNCP ao vivo": reusa .seg/.seg-btn, só espaça */
+.fonte-seg { width: fit-content; margin-bottom: 14px; }
+
+/* cartão ao vivo: mesmo módulo do CartaoPregao, mas é uma div (não-clicável
+   inteira) — a ação fica no botão à direita; sem hover-lift do cartão-botão */
+.card-vivo { cursor: default; }
+.card-vivo:hover { transform: none; box-shadow: none; }
+
+/* selo "no radar": espelha .card-novo mas em âmbar (já está acompanhado) */
+.card-noradar {
+  font-family: var(--font-mono); font-style: normal; font-size: 8.5px;
+  font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: #fff; background: var(--pico); padding: 2px 6px; border-radius: 4px;
+  margin-right: 9px; vertical-align: 1px;
+}
+
+/* botões de ação do cartão ao vivo (alinhados à direita, na coluna do veredito) */
+.card-vered .btn-vivo-add, .card-vered .btn-vivo-abrir { font-size: 11px; padding: 8px 12px; }
+.btn-vivo-abrir { background: var(--sinal); }
+.btn-vivo-abrir:hover { background: #0F7A47; }
+
+/* "carregar mais" e erro inline da paginação ao vivo */
+.vivo-mais { margin: 6px auto 0; }
+.vivo-erro-inline {
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--clip);
+  display: flex; align-items: center; gap: 4px;
+}
+.vivo-retry {
+  border: none; background: none; padding: 0; cursor: pointer;
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--tinta);
+  text-decoration: underline;
+}
+
+/* ---- Feature: checklist base de habilitação (referência geral) ---- */
+.base-wrap { margin-top: 22px; }
+/* variante âmbar do gate-aviso: este aviso é "atenção, é referência", não gate */
+.gate-aviso.ambar {
+  background: linear-gradient(180deg, #FBF3E0, var(--painel));
+  border-color: #E7C778;
+}
+.gate-aviso.ambar .gate-ico { color: var(--pico); }
+
+.base-grupo { margin-bottom: 20px; }
+.base-itens { display: flex; flex-direction: column; gap: 8px; }
+.base-card { padding: 11px 14px; display: flex; flex-direction: column; gap: 4px; }
+.base-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.base-req { font-size: 13.5px; color: var(--tinta); font-weight: 500; }
+.base-fonte { font-size: 11px; }
+
+/* chip de frequência: quase sempre (verde) · comum (âmbar) · depende (cinza) */
+.base-freq {
+  font-family: var(--font-mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap;
+  padding: 2px 7px; border-radius: 4px; flex: none;
+}
+.base-freq.f-quase-sempre { color: #0F7A47; background: rgba(20, 147, 87, 0.12); }
+.base-freq.f-comum { color: #9A6A04; background: rgba(201, 138, 4, 0.12); }
+.base-freq.f-depende-do-objeto { color: var(--silk); background: rgba(105, 113, 108, 0.12); }
+
 /* veredito pendente (sem item confirmado): palavra apagada, sem cor de chute */
 .hero-veredito-palavra.pendente { color: rgba(255,255,255,0.28); text-shadow: none; font-size: clamp(30px, 3.2vw, 44px); }
 
