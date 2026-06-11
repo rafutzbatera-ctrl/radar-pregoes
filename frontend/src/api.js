@@ -236,14 +236,28 @@ export const api = {
     }),
 
   // PNCP ao vivo (explorar a busca nacional sem persistir)
-  descobrir: ({ q, uf, pagina } = {}) => {
+  // termos[]/excluir[] viram params repetidos; ufs/modalidades/esferas viram csv.
+  descobrir: ({
+    termos = [], excluir = [], ufs = [], uf, status, tipo, ordenacao,
+    modalidades = [], esferas = [], pagina,
+  } = {}) => {
     const p = new URLSearchParams();
-    if (q) p.set("q", q);
-    if (uf && uf !== "todas") p.set("ufs", uf);
+    (termos || []).filter(Boolean).forEach((t) => p.append("q", t));
+    (excluir || []).filter(Boolean).forEach((t) => p.append("excluir", t));
+    // UF aceita lista (multi) ou um único valor legado; "todas" = sem filtro
+    const listaUf = (ufs && ufs.length ? ufs : uf ? [uf] : [])
+      .filter((u) => u && u !== "todas");
+    if (listaUf.length) p.set("ufs", listaUf.join(","));
+    if (status) p.set("status", status);
+    if (tipo) p.set("tipos_documento", tipo);
+    if (ordenacao) p.set("ordenacao", ordenacao);
+    if (modalidades && modalidades.length) p.set("modalidades", modalidades.join(","));
+    if (esferas && esferas.length) p.set("esferas", esferas.join(","));
     if (pagina != null) p.set("pagina", pagina);
     const s = p.toString();
     return req("/descobrir" + (s ? `?${s}` : "")).then((r) => ({
       total: r.total,
+      totalExato: r.total_exato,
       pagina: r.pagina,
       tamanho: r.tamanho,
       itens: (r.itens || []).map(adaptarDescoberto),

@@ -5,6 +5,8 @@ aceita consulta sem termo) e importar para o radar local sob demanda. Tudo
 passa pelo cliente PNCP compartilhado (1 req/s + cache 6h, princípio 6).
 """
 import sqlite3
+import unicodedata
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -16,7 +18,40 @@ from .pregoes import _resumo_pregao
 
 router = APIRouter(prefix="/descobrir", tags=["descobrir"])
 
+# a busca do PNCP devolve no máx. 10 itens/página independente de tamanhoPagina
 TAMANHO = 50
+MAX_TERMOS = 5
+MODALIDADES_VALIDAS = {str(i) for i in range(1, 14)}  # ids 1..13 (CLAUDE.md §4.1)
+ESFERAS_VALIDAS = {"F", "E", "M", "D"}
+
+
+def _normalizar(texto: str) -> str:
+    """Caixa baixa + acentos removidos (para casar exclusão sem depender de acento)."""
+    semacento = "".join(
+        c for c in unicodedata.normalize("NFD", texto or "")
+        if unicodedata.category(c) != "Mn"
+    )
+    return semacento.lower()
+
+
+def _validar_modalidades(modalidades: str) -> str:
+    if not modalidades:
+        return ""
+    ids = [m.strip() for m in modalidades.split(",") if m.strip()]
+    for m in ids:
+        if m not in MODALIDADES_VALIDAS:
+            raise HTTPException(422, f"modalidade inválida: {m!r} (use ids 1-13)")
+    return ",".join(ids)
+
+
+def _validar_esferas(esferas: str) -> str:
+    if not esferas:
+        return ""
+    letras = [e.strip().upper() for e in esferas.split(",") if e.strip()]
+    for e in letras:
+        if e not in ESFERAS_VALIDAS:
+            raise HTTPException(422, f"esfera inválida: {e!r} (use F, E, M ou D)")
+    return ",".join(letras)
 
 
 def _adaptar(hit: dict, ja_no_radar: bool, pregao_id: int | None) -> dict:
@@ -45,25 +80,77 @@ def _adaptar(hit: dict, ja_no_radar: bool, pregao_id: int | None) -> dict:
 
 @router.get("")
 def descobrir(
-    q: str = "",
+    q: list[str] = Query(default=[]),
+    excluir: list[str] = Query(default=[]),
     ufs: str = "",
-    status: str = "recebendo_proposta",
+    status: Literal["recebendo_proposta", "encerradas", "todos"] = "recebendo_proposta",
+    tipos_documento: Literal["edital", "ata", "contrato"] = "edital",
+    ordenacao: Literal["-data", "data", "relevancia"] = "-data",
+    modalidades: str = "",
+    esferas: str = "",
     pagina: int = Query(1, ge=1),
     con: sqlite3.Connection = Depends(get_db),
 ):
     """Consulta AO VIVO a busca do PNCP, sem persistir nada.
 
-    `q` vazio = total nacional (não envia o param). `status` vazio = todos.
+    - `q` é REPETÍVEL (`?q=microfone&q=caixa de som`): cada termo vira UMA
+      consulta (mesma `pagina`); o resultado é mesclado com dedup por
+      `numero_controle` intercalando round-robin (não enviesa para o 1º termo).
+      Sem `q` → uma consulta única (total nacional). Máx. 5 termos (422 acima).
+    - `excluir` (repetível, máx. 5): descarta hits cujo `title+description+orgao`
+      contenha qualquer termo (normalizado: caixa baixa + acentos removidos).
+    - `status`: só recebendo_proposta|encerradas filtram; todos = sem filtro.
+    - `total_exato`: true ⇔ ≤1 termo E sem exclusão (caso contrário a soma dos
+      totais por termo pode ter sobreposição; a UI deve sinalizar "até N").
     """
-    try:
-        resp = pncp.cliente().buscar(
-            q=q, ufs=ufs, status=status, pagina=pagina, tamanho=TAMANHO,
-        )
-    except RuntimeError as exc:  # PNCP fora do ar após os retries
-        raise HTTPException(503, str(exc))
+    if len(q) > MAX_TERMOS:
+        raise HTTPException(422, f"máx. {MAX_TERMOS} termos de busca")
+    if len(excluir) > MAX_TERMOS:
+        raise HTTPException(422, f"máx. {MAX_TERMOS} termos de exclusão")
+    modalidades = _validar_modalidades(modalidades)
+    esferas = _validar_esferas(esferas)
+
+    termos = [t for t in (s.strip() for s in q) if t] or [""]
+    excl = [_normalizar(t) for t in excluir if t.strip()]
+
+    def _consultar(termo: str) -> dict:
+        try:
+            return pncp.cliente().buscar(
+                q=termo, ufs=ufs, status=status, pagina=pagina, tamanho=TAMANHO,
+                tipos_documento=tipos_documento, ordenacao=ordenacao,
+                modalidades=modalidades, esferas=esferas,
+            )
+        except RuntimeError as exc:  # PNCP fora do ar após os retries
+            raise HTTPException(503, str(exc))
+
+    # uma consulta por termo; guarda os hits e o total de cada uma
+    respostas = [_consultar(termo) for termo in termos]
+    total = sum(r.get("total", 0) for r in respostas)
+
+    # merge round-robin com dedup por numero_controle (intercala os termos)
+    listas = [list(r.get("items", [])) for r in respostas]
+    hits_ordem: list[dict] = []
+    vistos: set = set()
+    for col in range(max((len(l) for l in listas), default=0)):
+        for lst in listas:
+            if col >= len(lst):
+                continue
+            hit = lst[col]
+            nc = hit.get("numero_controle_pncp")
+            chave = nc if nc is not None else id(hit)
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            hits_ordem.append(hit)
 
     itens = []
-    for hit in resp.get("items", []):
+    for hit in hits_ordem:
+        if excl:
+            palheiro = _normalizar(" ".join(filter(None, (
+                hit.get("title"), hit.get("description"), hit.get("orgao_nome"),
+            ))))
+            if any(termo in palheiro for termo in excl):
+                continue
         nc = hit.get("numero_controle_pncp")
         local = con.execute(
             "SELECT id FROM pregoes WHERE numero_controle=?", (nc,)
@@ -71,7 +158,8 @@ def descobrir(
         itens.append(_adaptar(hit, local is not None, local["id"] if local else None))
 
     return {
-        "total": resp.get("total", 0),
+        "total": total,
+        "total_exato": len(termos) <= 1 and not excl,
         "pagina": pagina,
         "tamanho": TAMANHO,
         "itens": itens,

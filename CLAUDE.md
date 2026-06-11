@@ -74,6 +74,12 @@ data_fim_vigencia, valor_global, item_url`.
 hit. (O endpoint de detalhe da compra não responde publicamente; não dependa
 dele.) Identidade do pregão = `(orgao_cnpj, ano, numero_sequencial)`.
 
+Params adicionais VERIFICADOS empiricamente (11/06/2026):
+modalidades=<ids csv> (1 Leilão-Eletr · 2 Diálogo Comp. · 3 Concurso · 4 Concorrência-Eletr · 5 Concorrência-Pres · 6 Pregão-Eletr · 7 Pregão-Pres · 8 Dispensa · 9 Inexigibilidade · 10 Manif. Interesse · 11 Pré-qualificação · 12 Credenciamento · 13 Leilão-Pres)
+esferas=<F|E|M|D csv> · ordenacao=-data|data|relevancia
+status: só recebendo_proposta|encerradas filtram; todos = sem filtro; OMITIR dá 400
+tamanhoPagina: máx. efetivo 10 na busca. municipios/orgaos: formato desconhecido, não usar.
+
 ### 4.2 Itens do pregão
 ```
 GET https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens

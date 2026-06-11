@@ -90,3 +90,122 @@ def test_descobrir_pncp_fora_retorna_503(client, monkeypatch):
     _patch_pncp(monkeypatch, ClienteQuebrado())
     r = client.get("/descobrir?q=áudio")
     assert r.status_code == 503
+
+
+# --------- filtros avançados + chips de palavras-chave ---------
+
+class ClienteCapturador:
+    """Devolve hits controlados por termo e registra os kwargs de cada buscar."""
+
+    def __init__(self, por_termo=None, total_por_termo=39):
+        self.por_termo = por_termo or {}
+        self.total_por_termo = total_por_termo
+        self.buscas = []
+
+    def buscar(self, q="", ufs="", status="", pagina=1, tamanho=50, usar_cache=True,
+               tipos_documento="edital", ordenacao="-data", modalidades="", esferas=""):
+        self.buscas.append({
+            "q": q, "ufs": ufs, "status": status, "pagina": pagina,
+            "tipos_documento": tipos_documento, "ordenacao": ordenacao,
+            "modalidades": modalidades, "esferas": esferas,
+        })
+        items = self.por_termo.get(q, [])
+        return {"items": items, "total": self.total_por_termo}
+
+
+def _hit(nc, title="t", description="d", orgao="o"):
+    return {
+        "numero_controle_pncp": nc, "title": title, "description": description,
+        "orgao_nome": orgao, "orgao_cnpj": "00000000000000", "ano": "2026",
+        "numero_sequencial": "1",
+    }
+
+
+def test_descobrir_repassa_kwargs_e_status_todos(client, cliente_fake, monkeypatch):
+    _patch_pncp(monkeypatch, cliente_fake)
+    r = client.get("/descobrir?q=áudio&status=todos&tipos_documento=ata"
+                   "&ordenacao=relevancia&modalidades=6,8&esferas=M,F")
+    assert r.status_code == 200
+    chamada = cliente_fake.buscas[-1]
+    assert chamada["status"] == "todos"      # "todos" repassado (e nunca omitido)
+    assert chamada["tipos_documento"] == "ata"
+    assert chamada["ordenacao"] == "relevancia"
+    assert chamada["modalidades"] == "6,8"
+    assert chamada["esferas"] == "M,F"
+
+
+def test_descobrir_multi_termo_n_chamadas_e_dedup(client, monkeypatch):
+    # termo1 e termo2 compartilham o hit "B" → deve aparecer uma vez só
+    cli = ClienteCapturador(por_termo={
+        "microfone": [_hit("A"), _hit("B")],
+        "caixa de som": [_hit("B"), _hit("C")],
+    })
+    _patch_pncp(monkeypatch, cli)
+    r = client.get("/descobrir?q=microfone&q=caixa de som")
+    assert r.status_code == 200
+    corpo = r.json()
+    # duas consultas (uma por termo)
+    assert [b["q"] for b in cli.buscas] == ["microfone", "caixa de som"]
+    # dedup por numero_controle: A, B, C (não A, B, B, C)
+    ncs = [i["numero_controle"] for i in corpo["itens"]]
+    assert ncs == ["A", "B", "C"]
+    # total = soma dos totais por termo; total_exato false (>1 termo)
+    assert corpo["total"] == 78
+    assert corpo["total_exato"] is False
+
+
+def test_descobrir_multi_termo_round_robin(client, monkeypatch):
+    # intercala: 1º de cada termo, depois 2º de cada — não enviesa para o 1º
+    cli = ClienteCapturador(por_termo={
+        "x": [_hit("X1"), _hit("X2")],
+        "y": [_hit("Y1"), _hit("Y2")],
+    })
+    _patch_pncp(monkeypatch, cli)
+    r = client.get("/descobrir?q=x&q=y")
+    ncs = [i["numero_controle"] for i in r.json()["itens"]]
+    assert ncs == ["X1", "Y1", "X2", "Y2"]
+
+
+def test_descobrir_exclusao_normaliza_acento(client, monkeypatch):
+    # excluir "usado" deve derrubar hit com "ÚSADO" (via normalização sem acento)
+    cli = ClienteCapturador(por_termo={
+        "projetor": [
+            _hit("OK", title="Projetor novo"),
+            _hit("FORA", title="Projetor ÚSADO em leilão"),
+        ],
+    }, total_por_termo=2)
+    _patch_pncp(monkeypatch, cli)
+    r = client.get("/descobrir?q=projetor&excluir=usado")
+    corpo = r.json()
+    ncs = [i["numero_controle"] for i in corpo["itens"]]
+    assert ncs == ["OK"]                    # FORA derrubado pela exclusão
+    assert corpo["total_exato"] is False    # exclusão presente → não exato
+
+
+def test_descobrir_total_exato_termo_unico(client, cliente_fake, monkeypatch):
+    _patch_pncp(monkeypatch, cliente_fake)
+    # 1 termo, sem exclusão → exato
+    assert client.get("/descobrir?q=áudio").json()["total_exato"] is True
+    # sem termo nenhum → ainda exato
+    assert client.get("/descobrir").json()["total_exato"] is True
+
+
+def test_descobrir_excesso_de_termos_422(client, cliente_fake, monkeypatch):
+    _patch_pncp(monkeypatch, cliente_fake)
+    qs = "&".join(f"q=t{i}" for i in range(6))   # 6 termos > 5
+    assert client.get("/descobrir?" + qs).status_code == 422
+
+
+def test_descobrir_status_invalido_422(client, cliente_fake, monkeypatch):
+    _patch_pncp(monkeypatch, cliente_fake)
+    assert client.get("/descobrir?status=banana").status_code == 422
+
+
+def test_descobrir_modalidade_invalida_422(client, cliente_fake, monkeypatch):
+    _patch_pncp(monkeypatch, cliente_fake)
+    assert client.get("/descobrir?modalidades=99").status_code == 422
+
+
+def test_descobrir_esfera_invalida_422(client, cliente_fake, monkeypatch):
+    _patch_pncp(monkeypatch, cliente_fake)
+    assert client.get("/descobrir?esferas=X").status_code == 422

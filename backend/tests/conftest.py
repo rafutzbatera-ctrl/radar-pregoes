@@ -28,9 +28,18 @@ class ClientePNCPFake:
 
     def __init__(self):
         self.chamadas = {"buscar": 0, "itens": 0, "arquivos": 0, "baixar": 0}
+        # captura dos kwargs de cada chamada a buscar (para testes de repasse)
+        self.buscas = []
 
-    def buscar(self, q, ufs="", status="", pagina=1, tamanho=50, usar_cache=True):
+    def buscar(self, q="", ufs="", status="", pagina=1, tamanho=50, usar_cache=True,
+               tipos_documento="edital", ordenacao="-data", modalidades="",
+               esferas=""):
         self.chamadas["buscar"] += 1
+        self.buscas.append({
+            "q": q, "ufs": ufs, "status": status, "pagina": pagina,
+            "tamanho": tamanho, "tipos_documento": tipos_documento,
+            "ordenacao": ordenacao, "modalidades": modalidades, "esferas": esferas,
+        })
         return carregar_fixture("search_audio_sp.json")
 
     def itens(self, cnpj, ano, seq, usar_cache=True):

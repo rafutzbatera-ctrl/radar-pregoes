@@ -1520,3 +1520,63 @@ button.busca-card-status:focus-visible { outline: 2px solid var(--tinta); outlin
 a.arq-link { text-decoration: none; cursor: pointer; }
 a.arq-link:hover { border-color: var(--tinta); box-shadow: 0 4px 12px -6px rgba(18,24,20,.3); }
 .arquivos-inline { margin-bottom: 12px; }
+
+/* ===== Feature: filtros avançados + chips de palavra-chave (PNCP ao vivo) ===== */
+
+/* entrada de chips: a .busca vira contêiner flex que abriga chips + input */
+.chips-busca { align-items: flex-start; min-height: 40px; padding-top: 6px; padding-bottom: 6px; flex-wrap: nowrap; }
+.chips-busca svg { margin-top: 4px; }
+.chips-campo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; }
+.chips-campo input {
+  border: none; background: none; outline: none;
+  font-family: var(--font-mono); font-size: 13px; flex: 1 0 90px; min-width: 90px;
+  color: var(--tinta);
+}
+.kw-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: 11.5px; line-height: 1;
+  background: #EEF1EB; border: 1px solid var(--linha); color: var(--tinta-2);
+  border-radius: 6px; padding: 4px 6px 4px 8px; white-space: nowrap;
+}
+.kw-chip.excl {
+  background: rgba(204, 69, 55, 0.10); border-color: rgba(204, 69, 55, 0.45); color: var(--clip);
+}
+.kw-x {
+  border: none; background: none; cursor: pointer; padding: 0; line-height: 1;
+  font-size: 14px; color: var(--silk); display: inline-flex; align-items: center;
+}
+.kw-chip.excl .kw-x { color: var(--clip); }
+.kw-x:hover { color: var(--tinta); }
+.kw-chip.excl .kw-x:hover { color: #8f2c22; }
+
+/* dropdown multisseleção — mesmo visual dos .filtro-sel */
+.multi-sel { position: relative; }
+.multi-trigger {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  padding: 0 12px; white-space: nowrap;
+}
+.multi-trigger.on { border-color: var(--tinta); color: var(--tinta); }
+.multi-caret { font-size: 9px; color: var(--silk); }
+.multi-menu {
+  position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 170px;
+  background: var(--painel); border: 1px solid var(--linha); border-radius: 8px;
+  box-shadow: 0 10px 28px -10px rgba(18,24,20,.30);
+  padding: 6px; display: flex; flex-direction: column; gap: 1px;
+  max-height: 320px; overflow-y: auto;
+}
+.multi-opt {
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  font-family: var(--font-mono); font-size: 12px; color: var(--tinta-2);
+  padding: 6px 8px; border-radius: 6px;
+}
+.multi-opt:hover { background: #EEF1EB; }
+.multi-opt input { accent-color: var(--sinal); cursor: pointer; }
+.multi-limpar {
+  border: none; background: none; cursor: pointer; text-align: left;
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--silk);
+  padding: 6px 8px; text-decoration: underline; margin-top: 2px;
+}
+.multi-limpar:hover { color: var(--tinta); }
+
+/* aviso sutil: várias consultas (1 req/s) quando há >1 termo */
+.vivo-multi-aviso { font-size: 11px; margin: -8px 0 14px; }

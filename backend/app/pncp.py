@@ -89,24 +89,42 @@ class ClientePNCP:
     # ---------- endpoints (CLAUDE.md §4) ----------
 
     def buscar(self, q: str = "", ufs: str = "", status: str = "recebendo_proposta",
-               pagina: int = 1, tamanho: int = 50, usar_cache: bool = True) -> dict:
+               pagina: int = 1, tamanho: int = 50, usar_cache: bool = True,
+               tipos_documento: str = "edital", ordenacao: str = "-data",
+               modalidades: str = "", esferas: str = "") -> dict:
         """4.1 — busca textual de editais. Retorna {"items": [...], "total": N}.
 
         `q` é opcional: a API do PNCP aceita busca sem termo (é assim que se vê o
         total nacional de ~37k). Quando vazio, o param `q` NÃO é enviado.
+
+        Params adicionais verificados empiricamente (CLAUDE.md §4.1):
+        - `tipos_documento`: edital | ata | contrato.
+        - `ordenacao`: -data (recentes) | data (antigos) | relevancia.
+        - `modalidades`: csv de ids 1-13 (6 Pregão-Eletrônico, 8 Dispensa, …).
+        - `esferas`: csv de letras (F Federal, E Estadual, M Municipal, D Distrital).
+        Só entram nos params quando truthy.
+
+        ATENÇÃO `status`: na busca do PNCP, OMITIR o param dá HTTP 400. Por isso,
+        quando o chamador passar vazio/None, enviamos `status=todos` (que a API
+        trata como "sem filtro de situação"). Só `recebendo_proposta` e
+        `encerradas` filtram de fato.
         """
         params = {
-            "tipos_documento": "edital",
-            "ordenacao": "-data",
+            "tipos_documento": tipos_documento or "edital",
+            "ordenacao": ordenacao or "-data",
             "pagina": pagina,
             "tamanhoPagina": tamanho,
+            # nunca omitir status (omitir → 400); vazio/None vira "todos"
+            "status": status or "todos",
         }
         if q:
             params["q"] = q
         if ufs:
             params["ufs"] = ufs
-        if status:
-            params["status"] = status
+        if modalidades:
+            params["modalidades"] = modalidades
+        if esferas:
+            params["esferas"] = esferas
         return self._get_json(BASE_SEARCH, params, usar_cache)
 
     def itens(self, cnpj: str, ano: int, seq: int, usar_cache: bool = True) -> list:
