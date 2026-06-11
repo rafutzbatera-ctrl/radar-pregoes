@@ -131,16 +131,27 @@ config(chave, valor)  -- regime_tributario: simples|presumido, uf_origem
   `numero_controle_pncp` e insere novos pregões com flag "novo".
 - Endpoint manual `POST /buscas/{id}/rodar` para rodar na hora.
 
-### 6.2 Itens, matching e veredito
+### 6.2 Itens, matching e veredito  (atualizado 11/06/2026 — decisão do dono)
 - Ao abrir um pregão pela primeira vez: buscar itens (4.2) e persistir.
-- Matching: embedar `descricao` do item e `nome` dos produtos do catálogo
-  (prefixos "query:"/"passage:" do e5); sugerir o melhor match se score ≥0.83;
-  o usuário confirma/recusa/troca na UI. Só match confirmado entra na conta.
-- Cálculo por item confirmado:
-  `margem_% = (valor_unit_estimado - custo_unit) / valor_unit_estimado`
-  `lucro_item = (valor_unit_estimado - custo_unit) * qtd`
+- Matching CONSERVADOR: embedar `descricao` do item e `nome` dos produtos do
+  catálogo (prefixos "query:"/"passage:" do e5); sugerir o melhor match se
+  score ≥ **0.90**; o usuário confirma/recusa/troca na UI. A **recusa é
+  memorizada por item** (`produtos_recusados` JSON em `itens_pregao`): produto
+  recusado não volta como sugestão. Sugeridos NÃO têm prévia de margem.
+- **Custo efetivo do item** = `custo_manual` (override local do pregão,
+  digitado na tabela) ▸ custo do produto com match **confirmado** ▸ sem custo.
+  O catálogo é atalho opcional; o custo digitado vale igual ao do catálogo
+  (princípio 4 — custo é dado do usuário). Editar custo na tabela do pregão
+  grava `custo_manual`; o custo do catálogo só muda na tela Meu catálogo.
+- Cálculo por item com custo efetivo e valor unitário oficial (não sigiloso):
+  `margem_% = (valor_unit_estimado - custo_efetivo) / valor_unit_estimado`
+  `lucro_item = (valor_unit_estimado - custo_efetivo) * qtd`
+- **Simulação por margem alvo** (config `margem_alvo`, padrão 20%): nos itens
+  SEM custo efetivo, mostrar custo máx. admissível (`valor_unit * (1 - alvo)`)
+  e lucro no alvo, SEMPRE rotulado "simulação" — NUNCA entra no veredito.
 - Agregados do pregão: lucro_potencial = Σ lucro_item; margem_media ponderada
-  pelo valor; cobertura = itens confirmados / total.
+  pelo valor; **cobertura = itens com custo efetivo / total** (não mais por
+  match). `itens_confirmados` (matches confirmados) segue só para a UI.
 - **Veredito (regra simples, configurável em `config`):**
   - "Vale": margem_media ≥ 20% E cobertura ≥ 60% E lucro_potencial ≥ R$ 1.000
   - "Não vale": margem_media < 8% OU lucro_potencial < R$ 300
