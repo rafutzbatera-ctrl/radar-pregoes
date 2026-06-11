@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from .. import pncp
 from ..deps import get_db
-from ..services import descoberta
+from ..services import avaliacao, descoberta
 from .pregoes import _resumo_pregao
 
 router = APIRouter(prefix="/descobrir", tags=["descobrir"])
@@ -21,6 +21,7 @@ router = APIRouter(prefix="/descobrir", tags=["descobrir"])
 # a busca do PNCP devolve no máx. 10 itens/página independente de tamanhoPagina
 TAMANHO = 50
 MAX_TERMOS = 5
+MAX_ALVOS = avaliacao.MAX_ALVOS  # avaliação sob demanda: máx. alvos por chamada (P6)
 MODALIDADES_VALIDAS = {str(i) for i in range(1, 14)}  # ids 1..13 (CLAUDE.md §4.1)
 ESFERAS_VALIDAS = {"F", "E", "M", "D"}
 
@@ -164,6 +165,38 @@ def descobrir(
         "tamanho": TAMANHO,
         "itens": itens,
     }
+
+
+class AlvoAvaliacao(BaseModel):
+    cnpj: str
+    ano: int
+    seq: int
+    numero_controle: str
+
+
+class AvaliarIn(BaseModel):
+    alvos: list[AlvoAvaliacao]
+
+
+@router.post("/avaliar")
+def avaliar(corpo: AvaliarIn, con: sqlite3.Connection = Depends(get_db)):
+    """Avalia editais da busca ao vivo SEM persistir (valor real + potencial aderente).
+
+    Para cada alvo busca os itens no PNCP (cache 6h → re-avaliações grátis,
+    1 req/s) e devolve em memória: Σ valorTotal, total de itens, itens do ramo
+    do usuário (match ≥ threshold contra o catálogo) e a receita aderente
+    (Σ preço esperado × qtd). Nada toca o banco. Máx. 40 alvos por chamada;
+    falha de um alvo entra em `erros` sem derrubar o lote.
+
+    Custo: 40 alvos × N páginas de itens a 1 req/s pode levar minutos (decisão
+    do dono); o front avisa o usuário antes de disparar.
+    """
+    if not corpo.alvos:
+        raise HTTPException(422, "envie ao menos um alvo para avaliar")
+    if len(corpo.alvos) > MAX_ALVOS:
+        raise HTTPException(422, f"máx. {MAX_ALVOS} alvos por avaliação")
+    alvos = [a.model_dump() for a in corpo.alvos]
+    return avaliacao.avaliar_alvos(con, alvos)
 
 
 class ImportarIn(BaseModel):
