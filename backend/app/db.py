@@ -109,6 +109,13 @@ MIGRACOES = [
         ('regime_tributario', 'simples'),
         ('uf_origem', 'SP');
     """,
+    # v2 — pipeline de disputa (P2): status do funil, data da disputa e
+    # valor final proposto/arrematado. NULL em status_pipeline = fora do funil.
+    """
+    ALTER TABLE pregoes ADD COLUMN status_pipeline TEXT;
+    ALTER TABLE pregoes ADD COLUMN data_disputa TEXT;
+    ALTER TABLE pregoes ADD COLUMN valor_final REAL;
+    """,
 ]
 
 
