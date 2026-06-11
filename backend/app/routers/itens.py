@@ -16,9 +16,13 @@ class MatchIn(BaseModel):
     confirmado: bool = False
 
 
-class CustoManualIn(BaseModel):
-    # null limpa o override (volta ao catálogo se houver match); ge=0 → 422 negativo
+class ItemPatchIn(BaseModel):
+    # custo_manual (P3): null limpa o override (volta ao catálogo se houver
+    # match). lance_previsto (P4): preço esperado de disputa por item; null
+    # limpa. Ambos ge=0 → 422 se negativo. exclude_unset no handler distingue
+    # "não enviado" de "enviado como null" — só toca os campos presentes.
     custo_manual: float | None = Field(default=None, ge=0)
+    lance_previsto: float | None = Field(default=None, ge=0)
 
 
 def _retorno(con: sqlite3.Connection, item_id: int, pregao_id: int) -> dict:
@@ -63,16 +67,21 @@ def definir_match(item_id: int, corpo: MatchIn,
 
 
 @router.patch("/{item_id}")
-def definir_custo(item_id: int, corpo: CustoManualIn,
-                  con: sqlite3.Connection = Depends(get_db)):
-    """Custo manual por item (override local do pregão, P3). null limpa o
-    override → volta a valer o custo do catálogo se houver match confirmado.
-    Recalcula a análise e retorna {item, pregao} como o endpoint de match."""
+def definir_item(item_id: int, corpo: ItemPatchIn,
+                 con: sqlite3.Connection = Depends(get_db)):
+    """Edita custo manual (P3) e/ou lance previsto (P4) do item — overrides
+    locais do pregão. null em qualquer campo limpa o override (custo volta ao
+    catálogo se houver match; lance volta ao deságio/teto). Só os campos
+    presentes no corpo são tocados. Recalcula a análise e retorna {item,
+    pregao} como o endpoint de match."""
     item = con.execute("SELECT pregao_id FROM itens_pregao WHERE id=?",
                        (item_id,)).fetchone()
     if item is None:
         raise HTTPException(404, "Item não encontrado")
-    con.execute("UPDATE itens_pregao SET custo_manual=? WHERE id=?",
-                (corpo.custo_manual, item_id))
-    con.commit()
+    campos = corpo.model_dump(exclude_unset=True)
+    if campos:
+        sets = ", ".join(f"{c}=?" for c in campos)
+        con.execute(f"UPDATE itens_pregao SET {sets} WHERE id=?",
+                    (*campos.values(), item_id))
+        con.commit()
     return _retorno(con, item_id, item["pregao_id"])

@@ -1,15 +1,49 @@
-"""Cálculo de margem, lucro e veredito (CLAUDE.md §6.2 — atualizado P3).
+"""Cálculo de margem, lucro e veredito (CLAUDE.md §6.2 — atualizado P3/P4).
 
 Custo efetivo do item = `custo_manual` (override local do pregão) ▸ custo do
-produto com match CONFIRMADO ▸ sem custo. Todo item com custo efetivo e valor
-unitário oficial (não sigiloso) entra na conta — inclusive item com custo
-manual e SEM match. A cobertura e o veredito usam os itens COM CUSTO; o
-`itens_confirmados` (matches confirmados) segue para a UI de matching. O
-veredito nunca esconde a conta — os números crus acompanham sempre.
+produto com match CONFIRMADO ▸ sem custo. Todo item com custo efetivo e PREÇO
+ESPERADO entra na conta — inclusive item com custo manual e SEM match. A
+cobertura e o veredito usam os itens COM CUSTO; o `itens_confirmados` (matches
+confirmados) segue para a UI de matching.
+
+P4 — preço esperado de disputa: o valor do edital é TETO (leilão reverso, menor
+preço vence); a conta no teto é o cenário mais otimista. O preço esperado do
+item = `lance_previsto` (digitado) ▸ `teto × (1 − desagio_esperado)` ▸ teto.
+Item sigiloso (teto nulo) só entra na conta se houver lance_previsto. Margem e
+lucro passam a usar o preço esperado; o teto oficial do PNCP nunca some da tela
+(princípio 1). O veredito nunca esconde a conta — os números crus acompanham.
 """
 import sqlite3
 
 from .. import settings
+
+
+def desagio_da_config(con: sqlite3.Connection) -> float:
+    """Deságio esperado global (% abaixo do teto). Default 0.00 = teto."""
+    ln = con.execute(
+        "SELECT valor FROM config WHERE chave='desagio_esperado'").fetchone()
+    if ln is None:
+        return 0.0
+    try:
+        return float(ln["valor"])
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def preco_esperado_row(it, desagio: float) -> tuple[float | None, str | None]:
+    """Preço esperado e sua fonte: lance_previsto ▸ teto×(1−deságio) ▸ teto.
+    Item sigiloso (sem teto) só tem preço se houver lance_previsto."""
+    lance = it["lance_previsto"] if "lance_previsto" in it.keys() else None
+    if lance is not None:
+        return lance, "lance"
+    if it["sigiloso"]:
+        return None, None
+    teto = it["valor_unit_estimado"]
+    if teto is None or teto <= 0:
+        return None, None
+    if desagio and desagio > 0:
+        return teto * (1 - desagio), "desagio"
+    return teto, "teto"
 
 
 def _regras(con: sqlite3.Connection) -> dict:
@@ -45,11 +79,14 @@ def analisar_pregao(con: sqlite3.Connection, pregao_id: int) -> dict:
         (pregao_id,),
     ).fetchall()
 
+    # deságio esperado lido UMA vez por análise (P4)
+    desagio = desagio_da_config(con)
+
     total_itens = len(itens)
     confirmados = 0          # matches confirmados (para a UI de matching)
-    com_custo = 0            # itens com custo efetivo e valor oficial (na conta)
+    com_custo = 0            # itens com custo efetivo e preço esperado (na conta)
     lucro_potencial = 0.0
-    soma_pesos = 0.0          # margem média ponderada pelo valor do item
+    soma_pesos = 0.0          # margem média ponderada pela RECEITA esperada
     soma_margem_peso = 0.0
 
     for it in itens:
@@ -58,14 +95,16 @@ def analisar_pregao(con: sqlite3.Connection, pregao_id: int) -> dict:
         custo, _fonte = custo_efetivo_row(it)
         if custo is None:
             continue
-        unit = it["valor_unit_estimado"]
+        # P4: a conta usa o PREÇO ESPERADO (lance ▸ teto×(1−deságio) ▸ teto),
+        # não o teto cru. Sem preço esperado (sigiloso sem lance) → fora.
+        preco, _fp = preco_esperado_row(it, desagio)
+        if preco is None or preco <= 0:
+            continue
         qtd = it["qtd"] or 0
-        if it["sigiloso"] or unit is None or unit <= 0:
-            continue  # sem valor oficial não há conta a fazer
         com_custo += 1
-        margem = (unit - custo) / unit
-        lucro_potencial += (unit - custo) * qtd
-        peso = unit * qtd
+        margem = (preco - custo) / preco
+        lucro_potencial += (preco - custo) * qtd
+        peso = preco * qtd       # receita esperada — coerente com o lucro
         soma_pesos += peso
         soma_margem_peso += margem * peso
 

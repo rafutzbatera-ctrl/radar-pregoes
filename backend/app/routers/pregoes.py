@@ -136,13 +136,15 @@ def sincronizar_itens(pregao_id: int, con: sqlite3.Connection = Depends(get_db))
 def itens(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
     if con.execute("SELECT 1 FROM pregoes WHERE id=?", (pregao_id,)).fetchone() is None:
         raise HTTPException(404, "Pregão não encontrado")
-    # margem alvo da config (P3) — só guia a SIMULAÇÃO, nunca o veredito
+    # margem alvo da config (P3) — só guia a SIMULAÇÃO/pisos, nunca o veredito
     cfg = con.execute(
         "SELECT valor FROM config WHERE chave='margem_alvo'").fetchone()
     try:
         margem_alvo = float(cfg["valor"]) if cfg else 0.20
     except (ValueError, TypeError):
         margem_alvo = 0.20
+    # deságio esperado da config (P4) — base do preço esperado; default 0 = teto
+    desagio = analise.desagio_da_config(con)
     linhas = con.execute(
         """SELECT i.*, p.nome produto_nome, p.codigo produto_codigo,
                   p.custo_unit, p.ncm produto_ncm, p.unidade produto_unidade
@@ -157,24 +159,36 @@ def itens(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
         custo_ef, fonte = analise.custo_efetivo_row(ln)
         d["custo_efetivo"] = custo_ef
         d["fonte_custo"] = fonte
-        # conta por item com o custo EFETIVO (manual ▸ catálogo)
-        conta = analise.margem_lucro_item(
-            None if ln["sigiloso"] else ln["valor_unit_estimado"],
-            custo_ef, ln["qtd"],
-        )
+        # P4: preço esperado de disputa (lance ▸ teto×(1−deságio) ▸ teto). O
+        # teto oficial (valor_unit_estimado) continua exposto cru — nunca some.
+        preco, fonte_preco = analise.preco_esperado_row(ln, desagio)
+        d["preco_esperado"] = preco
+        d["fonte_preco"] = fonte_preco
+        # conta por item com o custo EFETIVO (manual ▸ catálogo) sobre o PREÇO
+        # ESPERADO (não o teto). Sigiloso sem lance fica sem preço → sem conta.
+        conta = analise.margem_lucro_item(preco, custo_ef, ln["qtd"])
         d["margem"] = conta["margem"]
         d["lucro"] = conta["lucro"]
-        # simulação por margem alvo: só quando NÃO há custo efetivo, valor
-        # unitário oficial existe e o item não é sigiloso. Sempre rotulada
+        # simulação por margem alvo: só quando NÃO há custo efetivo e existe
+        # preço esperado. Base = preço esperado (P4). Sempre rotulada
         # "simulação" na UI; jamais entra na conta/veredito.
-        unit = ln["valor_unit_estimado"]
-        if custo_ef is None and not ln["sigiloso"] and unit is not None and unit > 0:
-            custo_max = unit * (1 - margem_alvo)
+        if custo_ef is None and preco is not None and preco > 0:
+            custo_max = preco * (1 - margem_alvo)
             d["simulacao_custo_max"] = custo_max
-            d["simulacao_lucro"] = (unit - custo_max) * (ln["qtd"] or 0)
+            d["simulacao_lucro"] = (preco - custo_max) * (ln["qtd"] or 0)
         else:
             d["simulacao_custo_max"] = None
             d["simulacao_lucro"] = None
+        # pisos de lance (P4) — derivações do custo do usuário, guia de disputa.
+        # Só com custo efetivo; NÃO entram em veredito/agregados. lance mínimo
+        # mantendo a margem alvo = custo ÷ (1 − margem_alvo); empate = custo.
+        if custo_ef is not None:
+            d["lance_minimo_alvo"] = (custo_ef / (1 - margem_alvo)
+                                      if margem_alvo < 1 else None)
+            d["empate"] = custo_ef
+        else:
+            d["lance_minimo_alvo"] = None
+            d["empate"] = None
         saida.append(d)
     return saida
 
