@@ -340,20 +340,30 @@ export default function App() {
   /* ---------- funil de disputa (P2) — otimista → API → reverte ---------- */
   const mudarPipeline = (id, campos) => {
     const anterior = (pregoes || []).find((p) => p.id === id);
-    setPregoes((ps) => (ps || []).map((p) => (p.id === id ? {
+    const anteriorDetalhe = detalhe && detalhe.id === id ? detalhe.pregao : null;
+    const otimista = (p) => ({
       ...p,
       statusPipeline: campos.status_pipeline !== undefined ? campos.status_pipeline : p.statusPipeline,
       dataDisputa: campos.data_disputa !== undefined ? campos.data_disputa : p.dataDisputa,
       valorFinal: campos.valor_final !== undefined ? campos.valor_final : p.valorFinal,
       salvo: campos.salvo !== undefined ? campos.salvo : p.salvo,
-    } : p)));
-    api.atualizarPregao(id, campos).then((atualizado) => {
+    });
+    setPregoes((ps) => (ps || []).map((p) => (p.id === id ? otimista(p) : p)));
+    // o detalhe também é otimista — os controles da Análise são controlados
+    // por ele e "piscariam" esperando a API (achado do review)
+    setDetalhe((d) => (d && d.id === id && d.pregao
+      ? { ...d, pregao: otimista(d.pregao) } : d));
+    return api.atualizarPregao(id, campos).then((atualizado) => {
       setPregoes((ps) => (ps || []).map((p) => (p.id === id ? atualizado : p)));
       setDetalhe((d) => (d && d.id === id && d.pregao
         ? { ...d, pregao: { ...d.pregao, ...atualizado } } : d));
-    }).catch(() => {
+      return atualizado;
+    }).catch((e) => {
       setPregoes((ps) => (ps || []).map((p) => (p.id === id ? anterior : p)));
+      setDetalhe((d) => (d && d.id === id && anteriorDetalhe
+        ? { ...d, pregao: anteriorDetalhe } : d));
       avisar("Não foi possível atualizar o funil — revertido.");
+      throw e;
     });
   };
 

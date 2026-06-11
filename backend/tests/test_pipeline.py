@@ -21,6 +21,30 @@ def test_migracao_v2_preserva_dados_v1(tmp_path):
     c2.close()
 
 
+def test_migracao_v2_backfill_salvos_legados(tmp_path):
+    """Pregão salvo ANTES da v2 (status NULL) entra no funil como cotacao —
+    senão ficaria visível em Meus pregões mas invisível no resumo (achado
+    do review). Não-salvos continuam fora do funil (status NULL)."""
+    caminho = tmp_path / "radar.db"
+    con = sqlite3.connect(caminho)
+    con.executescript(db.MIGRACOES[0])
+    con.execute("PRAGMA user_version = 1")
+    con.execute("INSERT INTO pregoes (cnpj, ano, seq, numero_controle, salvo) "
+                "VALUES ('1',2026,1,'NC-SALVO',1)")
+    con.execute("INSERT INTO pregoes (cnpj, ano, seq, numero_controle, salvo) "
+                "VALUES ('1',2026,2,'NC-NAO',0)")
+    con.commit(); con.close()
+
+    c2 = db.abrir(caminho)
+    salvo = c2.execute("SELECT status_pipeline s FROM pregoes "
+                       "WHERE numero_controle='NC-SALVO'").fetchone()["s"]
+    nao_salvo = c2.execute("SELECT status_pipeline s FROM pregoes "
+                           "WHERE numero_controle='NC-NAO'").fetchone()["s"]
+    assert salvo == "cotacao"
+    assert nao_salvo is None
+    c2.close()
+
+
 def _novo_pregao(con, nc="NC-1"):
     con.execute("INSERT INTO pregoes (cnpj, ano, seq, numero_controle) "
                 "VALUES ('1',2026,1,?)", (nc,))

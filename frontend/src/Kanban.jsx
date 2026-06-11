@@ -76,6 +76,7 @@ function CartaoFunil({ pregao, aoAbrir, mudarPipeline }) {
         <label className="silk kanban-campo">
           valor final (R$)
           <input type="number" step="0.01" min="0" className="form-input mono"
+                 key={"vf-" + (pregao.valorFinal ?? "")}
                  defaultValue={pregao.valorFinal ?? ""}
                  onBlur={(e) => mudarPipeline(pregao.id, {
                    valor_final: e.target.value === "" ? null : Number(e.target.value),

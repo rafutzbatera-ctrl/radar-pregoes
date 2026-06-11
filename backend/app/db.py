@@ -111,10 +111,14 @@ MIGRACOES = [
     """,
     # v2 — pipeline de disputa (P2): status do funil, data da disputa e
     # valor final proposto/arrematado. NULL em status_pipeline = fora do funil.
+    # Backfill: pregões já salvos antes da v2 entram como 'cotacao', mantendo
+    # a invariante "todo salvo está no funil" (mesma regra do gatilho do PATCH).
     """
     ALTER TABLE pregoes ADD COLUMN status_pipeline TEXT;
     ALTER TABLE pregoes ADD COLUMN data_disputa TEXT;
     ALTER TABLE pregoes ADD COLUMN valor_final REAL;
+    UPDATE pregoes SET status_pipeline='cotacao'
+     WHERE salvo=1 AND status_pipeline IS NULL;
     """,
 ]
 

@@ -153,10 +153,11 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
     api.pipelineResumo().then(setResumo).catch(() => {});
   }, [apenasSalvos]);
   React.useEffect(() => { carregarResumo(); }, [carregarResumo]);
-  // o resumo é calculado no backend; após mudar o funil, recarrega depois do PATCH
+  // o resumo é calculado no backend; recarrega encadeado ao PATCH (sem timer
+  // fixo — achado do review: PATCH lento > timer recarregava dado velho)
   const mudarPipelineEResumo = React.useCallback((id, campos) => {
-    if (mudarPipeline) mudarPipeline(id, campos);
-    setTimeout(carregarResumo, 400);
+    if (!mudarPipeline) return;
+    mudarPipeline(id, campos).then(carregarResumo).catch(() => {});
   }, [mudarPipeline, carregarResumo]);
 
   // ----- filtros do modo "PNCP ao vivo" -----
