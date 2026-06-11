@@ -61,14 +61,18 @@ def rodar_busca(con: sqlite3.Connection, busca_id: int,
     enriquecidos = 0
     if enriquecer:
         alvos = list(ids_novos)
-        sem_itens = con.execute(
+        # pendentes: sem itens OU sem análise de aderência (enriquecidos antes
+        # da v5: receita_aderente NULL) — estes só re-analisam; os itens já
+        # baixados vêm do cache de 6h, custo marginal ~zero
+        pendentes = con.execute(
             """SELECT p.id FROM pregoes p
                WHERE p.busca_id=?
-                 AND NOT EXISTS (SELECT 1 FROM itens_pregao i
-                                 WHERE i.pregao_id=p.id)""",
+                 AND (NOT EXISTS (SELECT 1 FROM itens_pregao i
+                                  WHERE i.pregao_id=p.id)
+                      OR p.receita_aderente IS NULL)""",
             (busca_id,),
         ).fetchall()
-        for ln in sem_itens:
+        for ln in pendentes:
             if ln["id"] not in alvos:
                 alvos.append(ln["id"])
         for pid in alvos:
