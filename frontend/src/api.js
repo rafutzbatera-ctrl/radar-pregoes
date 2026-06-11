@@ -162,8 +162,11 @@ export function adaptarPregao(p) {
 // item da busca AO VIVO do PNCP (GET /descobrir) → shape de cartão.
 // Sem agregados (não está no radar): veredito/itens ficam vazios na UI.
 // Carrega o hit cru (para reenviar no importar), jaNoRadar e pregaoId.
-export function adaptarDescoberto(d) {
-  return {
+// `extra` (P6): campos da avaliação sob demanda mesclados sobre o item (o
+// front chama /descobrir/avaliar e mescla o resultado nos cartões pela
+// numeroControle, sem refazer a busca).
+export function adaptarDescoberto(d, extra = null) {
+  const base = {
     id: d.numero_controle,        // chave estável da lista ao vivo
     numeroControle: d.numero_controle,
     cnpj: d.cnpj,
@@ -185,7 +188,14 @@ export function adaptarDescoberto(d) {
     hit: d.hit,
     agregados: {},
     novo: false,
+    // P6: avaliação sob demanda (preenchida ao mesclar; default não avaliado)
+    avaliado: false,
+    valorItens: null,
+    itensTotal: null,
+    itensAderentes: null,
+    receitaAderente: null,
   };
+  return extra ? { ...base, ...extra } : base;
 }
 
 export function adaptarBusca(b) {
@@ -311,6 +321,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ numero_controle: numeroControle, hit }),
     }).then(adaptarPregao),
+
+  // P6: avaliação sob demanda no modo ao vivo (valor real + potencial aderente)
+  // sem importar nada. `alvos`: [{cnpj, ano, seq, numero_controle}] (máx. 40).
+  // Devolve {avaliados: {nc: {valor_itens, itens_total, itens_aderentes,
+  // receita_aderente}}, erros: {nc: msg}} cru (o FindScreen mescla nos cartões).
+  avaliarDescobertos: (alvos) =>
+    req("/descobrir/avaliar", {
+      method: "POST",
+      body: JSON.stringify({ alvos }),
+    }),
 
   // checklist base de habilitação (referência geral — cacheada no módulo)
   checklistBase: () => {

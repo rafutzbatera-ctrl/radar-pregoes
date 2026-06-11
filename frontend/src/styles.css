@@ -1732,3 +1732,49 @@ a.arq-link:hover { border-color: var(--tinta); box-shadow: 0 4px 12px -6px rgba(
 
 /* linha de cenario do hero: largura total, nunca cobre os numeros */
 .hero .hero-cenario { display: block; width: 100%; text-align: right; color: rgba(255,255,255,0.55); margin: 2px 0 10px; line-height: 1.6; white-space: normal; }
+
+/* ==== P6 — avaliação sob demanda no modo PNCP ao vivo ==== */
+/* topo da lista ao vivo: contador à esquerda, botão "Avaliar resultados" à direita */
+.vivo-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* botão de avaliar: variante clara do btn-rodar (ação secundária, não destaca tanto) */
+.btn-avaliar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--linha);
+  background: var(--painel);
+  color: var(--tinta);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-avaliar:hover { background: #F1F3EE; border-color: var(--tinta-2); }
+.btn-avaliar:disabled { opacity: 0.6; cursor: default; }
+.btn-avaliar.rodando { color: var(--silk); }
+.btn-avaliar svg { flex: none; }
+
+/* aviso de escopo dos filtros client-side (aplicam só aos carregados) */
+.vivo-filtro-aviso { margin: 2px 0 4px; font-style: italic; }
+
+/* chip "não avaliável" (erro por alvo): espelha .card-noradar mas em vermelho suave */
+.card-naoaval {
+  font-family: var(--font-mono); font-style: normal; font-size: 8.5px;
+  font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--clip); background: rgba(204, 69, 55, 0.12);
+  padding: 2px 6px; border-radius: 4px;
+  margin-right: 9px; vertical-align: 1px;
+}
+
+@media (max-width: 920px) {
+  .btn-avaliar { width: 100%; justify-content: center; }
+}

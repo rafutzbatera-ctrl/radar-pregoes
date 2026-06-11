@@ -180,6 +180,10 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
   const [statusVivo, setStatusVivo] = React.useState("recebendo_proposta");
   const [tipoVivo, setTipoVivo] = React.useState("edital");
   const [ordemVivo, setOrdemVivo] = React.useState("-data");
+  // P6: faixa de valor + ordenação CLIENT-SIDE sobre os itens já carregados/avaliados
+  const [valorMinVivo, setValorMinVivo] = React.useState("");
+  const [valorMaxVivo, setValorMaxVivo] = React.useState("");
+  const [ordemVivoLocal, setOrdemVivoLocal] = React.useState("recente");
 
   // parse pt-BR ("1.234,50" ou "1234.50") → número | null
   const parseValor = (s) => {
@@ -258,6 +262,81 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
   }, [aoVivo, buscarVivo]);
 
   const nTermos = termos.length;
+
+  // ----- P6: avaliação sob demanda no modo ao vivo -----
+  const [avaliando, setAvaliando] = React.useState(false);
+  // quantos itens ainda não foram avaliados (nem deram erro) — alvos do próximo clique
+  const naoAvaliados = vivo.itens.filter((i) => !i.avaliado && !i.naoAvaliavel);
+  const aValiar = Math.min(naoAvaliados.length, 40);     // cap 40 por clique
+  // X ≈ N×1.5s, arredondado em passos de 5s (mínimo 5s)
+  const segEstimados = Math.max(5, Math.round((aValiar * 1.5) / 5) * 5);
+
+  const avaliar = () => {
+    if (avaliando || aValiar === 0) return;
+    const lote = naoAvaliados.slice(0, 40);
+    const alvos = lote.map((i) => ({
+      cnpj: i.cnpj, ano: i.ano, seq: i.seq, numero_controle: i.numeroControle,
+    }));
+    setAvaliando(true);
+    api.avaliarDescobertos(alvos)
+      .then((r) => {
+        const av = r.avaliados || {};
+        const er = r.erros || {};
+        setVivo((v) => ({
+          ...v,
+          itens: v.itens.map((i) => {
+            const dados = av[i.numeroControle];
+            if (dados) {
+              return {
+                ...i, avaliado: true, naoAvaliavel: false,
+                valorItens: dados.valor_itens,
+                itensTotal: dados.itens_total,
+                itensAderentes: dados.itens_aderentes,
+                receitaAderente: dados.receita_aderente,
+              };
+            }
+            if (er[i.numeroControle]) return { ...i, naoAvaliavel: true };
+            return i;
+          }),
+        }));
+      })
+      .catch(() => {})       // erro de rede: silencioso (re-clique tenta de novo)
+      .finally(() => setAvaliando(false));
+  };
+
+  // P6: faixa de valor + ordenação aplicadas CLIENT-SIDE aos itens carregados.
+  // valor efetivo do item = valorItens (avaliado) ▸ valorTotal do hit.
+  const valorEfetivoVivo = (i) => (i.valorItens != null ? i.valorItens : i.valorTotal);
+  const filtroVivoAtivo =
+    valorMinVivo.trim() !== "" || valorMaxVivo.trim() !== "" || ordemVivoLocal !== "recente";
+  const vivoExibido = React.useMemo(() => {
+    if (!filtroVivoAtivo) return vivo;
+    const min = parseValor(valorMinVivo);
+    const max = parseValor(valorMaxVivo);
+    let itens = vivo.itens.filter((i) => {
+      const v = valorEfetivoVivo(i);
+      if (min != null && (v == null || v < min)) return false;
+      if (max != null && (v == null || v > max)) return false;
+      return true;
+    });
+    if (ordemVivoLocal !== "recente") {
+      // sort estável (índice como desempate) → não avaliados/nulos vão para o fim
+      const chave = ordemVivoLocal === "potencial"
+        ? (i) => i.receitaAderente
+        : valorEfetivoVivo;     // "valor"
+      itens = itens
+        .map((i, idx) => [i, idx])
+        .sort((a, b) => {
+          const va = chave(a[0]); const vb = chave(b[0]);
+          if (va == null && vb == null) return a[1] - b[1];
+          if (va == null) return 1;       // nulo para o fim
+          if (vb == null) return -1;
+          return vb - va || a[1] - b[1];  // desc, estável
+        })
+        .map(([i]) => i);
+    }
+    return { ...vivo, itens };
+  }, [vivo, filtroVivoAtivo, valorMinVivo, valorMaxVivo, ordemVivoLocal]);
 
   const importar = (item) => {
     if (importando) return;
@@ -375,6 +454,21 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
               <option value="data">Mais antigos</option>
               <option value="relevancia">Mais relevantes</option>
             </select>
+            {/* P6: faixa de valor + ordenação CLIENT-SIDE (aplicam aos carregados) */}
+            <div className="filtro-valor mono" role="group" aria-label="Faixa de valor (aplicada aos carregados)">
+              <input type="text" inputMode="decimal" className="filtro-valor-input"
+                value={valorMinVivo} onChange={(e) => setValorMinVivo(e.target.value)}
+                placeholder="valor mín" aria-label="Valor mínimo (carregados)" />
+              <span className="filtro-valor-sep" aria-hidden="true">–</span>
+              <input type="text" inputMode="decimal" className="filtro-valor-input"
+                value={valorMaxVivo} onChange={(e) => setValorMaxVivo(e.target.value)}
+                placeholder="valor máx" aria-label="Valor máximo (carregados)" />
+            </div>
+            <select className="filtro-sel" value={ordemVivoLocal} onChange={(e) => setOrdemVivoLocal(e.target.value)} aria-label="Ordenar carregados">
+              <option value="recente">Mais recentes</option>
+              <option value="potencial">Potencial p/ você</option>
+              <option value="valor">Maior valor</option>
+            </select>
           </React.Fragment>
         )}
 
@@ -433,9 +527,12 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
         )
       ) : aoVivo ? (
         <ListaVivo
-          vivo={vivo} entrada={entrada} importar={importar} importando={importando}
+          vivo={vivoExibido} entrada={entrada} importar={importar} importando={importando}
           nTermos={nTermos} aoAbrir={aoAbrir} recarregar={() => buscarVivo(1, false)}
           carregarMais={() => buscarVivo(vivo.pagina + 1, true)}
+          margemAlvo={margemAlvo} avaliar={avaliar} avaliando={avaliando}
+          aValiar={aValiar} segEstimados={segEstimados} filtroLocalAtivo={filtroVivoAtivo}
+          nCarregados={vivo.itens.length}
         />
       ) : carregando ? (
         <EstadoCarregando entrada={entrada} />
@@ -464,7 +561,9 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
 }
 
 /* ---------- lista do modo "PNCP ao vivo" ---------- */
-function ListaVivo({ vivo, entrada, importar, importando, nTermos, aoAbrir, recarregar, carregarMais }) {
+function ListaVivo({ vivo, entrada, importar, importando, nTermos, aoAbrir, recarregar,
+  carregarMais, margemAlvo, avaliar, avaliando, aValiar, segEstimados,
+  filtroLocalAtivo, nCarregados }) {
   const { itens, total, totalExato, carregando, erro } = vivo;
   // primeira carga (sem itens ainda) mostra skeleton; cargas seguintes mantêm a lista
   if (carregando && itens.length === 0) return <EstadoCarregando entrada={entrada} />;
@@ -477,9 +576,24 @@ function ListaVivo({ vivo, entrada, importar, importando, nTermos, aoAbrir, reca
 
   return (
     <div className="cards">
-      <motion.div variants={entrada} className="silk" style={{ marginBottom: "2px" }}>
-        {contador}
+      <motion.div variants={entrada} className="vivo-topo" style={{ marginBottom: "2px" }}>
+        <span className="silk">{contador}</span>
+        {/* P6: avaliar sob demanda — N = carregados ainda não avaliados (cap 40) */}
+        <button type="button" className={"btn-avaliar" + (avaliando ? " rodando" : "")}
+          disabled={avaliando || aValiar === 0} onClick={avaliar}
+          aria-label={aValiar > 0 ? `Avaliar ${aValiar} pregões carregados` : "Tudo avaliado"}>
+          {avaliando
+            ? <React.Fragment><span className="spin" aria-hidden="true"></span> avaliando {aValiar} pregões — itens vêm da API do PNCP a 1 req/s…</React.Fragment>
+            : aValiar > 0
+              ? <React.Fragment>{Ico.raio} Avaliar resultados ({aValiar} · ~{segEstimados}s)</React.Fragment>
+              : <React.Fragment>{Ico.check} tudo avaliado</React.Fragment>}
+        </button>
       </motion.div>
+      {filtroLocalAtivo && (
+        <motion.div variants={entrada} className="silk vivo-filtro-aviso">
+          filtros e ordem aplicam aos {fmtInt(nCarregados)} carregados/avaliados
+        </motion.div>
+      )}
       {erro && (
         <motion.div variants={entrada} className="vivo-erro-inline">
           {Ico.alerta} Não foi possível atualizar — {" "}
@@ -487,7 +601,7 @@ function ListaVivo({ vivo, entrada, importar, importando, nTermos, aoAbrir, reca
         </motion.div>
       )}
       {itens.map((p) => (
-        <CartaoPregaoVivo key={p.numeroControle} pregao={p}
+        <CartaoPregaoVivo key={p.numeroControle} pregao={p} margemAlvo={margemAlvo}
           variants={entrada} importar={importar} importando={importando} aoAbrir={aoAbrir} />
       ))}
       {itens.length === 0 && !carregando && (
@@ -509,7 +623,7 @@ function ListaVivo({ vivo, entrada, importar, importando, nTermos, aoAbrir, reca
   );
 }
 
-export function CartaoPregaoVivo({ pregao, variants, importar, importando, aoAbrir }) {
+export function CartaoPregaoVivo({ pregao, variants, importar, importando, aoAbrir, margemAlvo = 0.2 }) {
   const linhaSilk = [
     pregao.modalidade,
     pregao.municipio ? pregao.municipio + "/" + pregao.uf : pregao.uf,
@@ -518,20 +632,37 @@ export function CartaoPregaoVivo({ pregao, variants, importar, importando, aoAbr
   const noRadar = pregao.jaNoRadar;
   const importandoEste = importando === pregao.numeroControle;
   const abrir = () => { if (noRadar && pregao.pregaoId != null) aoAbrir(pregao.pregaoId); };
+  // P6: avaliação sob demanda — valor real (Σ itens) e potencial aderente.
+  // valor exibido: valorItens (avaliado) ▸ valorTotal do hit (estimado oficial).
+  const temSomaItens = pregao.valorItens != null;
+  const nAderentes = pregao.itensAderentes || 0;
+  const potencial = nAderentes > 0 && pregao.receitaAderente != null
+    ? pregao.receitaAderente * margemAlvo : null;
   return (
     <motion.div className="card-pregao mod card-vivo" variants={variants}>
       <span className="card-edital silk">
         {noRadar && <em className="card-noradar">no radar</em>}
+        {pregao.naoAvaliavel && <em className="card-naoaval">não avaliável</em>}
         {linhaSilk}
       </span>
       <span className="card-titulo">{pregao.titulo}</span>
       <span className="card-orgao">{pregao.orgao}</span>
       {pregao.descricao && <span className="card-desc">{pregao.descricao}</span>}
       <span className="card-meta mono">
-        <span><span className="k">Valor estimado</span>{pregao.valorTotal != null ? fmtBRL(pregao.valorTotal) : "—"}</span>
+        <span><span className="k">{temSomaItens ? "Σ itens" : "Valor estimado"}</span>
+          {temSomaItens ? fmtBRL(pregao.valorItens)
+           : pregao.valorTotal != null ? fmtBRL(pregao.valorTotal) : "—"}</span>
         <span><span className="k">Propostas até</span>{pregao.prazo || "—"}</span>
-        <span className="desktop-only"><span className="k">Veredito</span>—</span>
+        <span className="desktop-only"><span className="k">Itens</span>{pregao.itensTotal != null ? pregao.itensTotal : "—"}</span>
       </span>
+      {potencial != null ? (
+        <span className="card-potencial">
+          {nAderentes} {nAderentes === 1 ? "item seu" : "itens seus"} · potencial{" "}
+          {fmtBRL(potencial)} <em className="margem-pill sim">sim.</em>
+        </span>
+      ) : pregao.avaliado ? (
+        <span className="card-potencial vazio silk">nenhum item do seu ramo</span>
+      ) : null}
       <span className="card-vered">
         {noRadar ? (
           <button type="button" className="btn-rodar btn-vivo-abrir" onClick={abrir}>
