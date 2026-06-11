@@ -148,11 +148,22 @@ config(chave, valor)  -- regime_tributario: simples|presumido, uf_origem
   `margem_% = (valor_unit_estimado - custo_efetivo) / valor_unit_estimado`
   `lucro_item = (valor_unit_estimado - custo_efetivo) * qtd`
 - **Simulação por margem alvo** (config `margem_alvo`, padrão 20%): nos itens
-  SEM custo efetivo, mostrar custo máx. admissível (`valor_unit * (1 - alvo)`)
+  SEM custo efetivo, mostrar custo máx. admissível (`preço_esperado * (1 - alvo)`)
   e lucro no alvo, SEMPRE rotulado "simulação" — NUNCA entra no veredito.
+- **Preço esperado de disputa** (atualizado 11/06/2026 — decisão do dono): o
+  valor do edital é TETO (leilão reverso, menor preço vence); a conta no teto
+  superestima lucro/veredito. Preço esperado do item = `lance_previsto`
+  (digitado) ▸ `valor_unit_estimado * (1 - desagio_esperado)` (config global,
+  default 0.00) ▸ teto. Item sigiloso (teto nulo) só entra na conta se houver
+  `lance_previsto`. Margem/lucro/veredito/medidor passam a usar o preço
+  esperado; o **teto oficial do PNCP nunca some da tela** (princípio 1) — o
+  preço esperado aparece ao lado, identificado pela fonte (lance/−N%). Pisos
+  por item com custo (guia de disputa, fora do veredito): `lance_minimo_alvo =
+  custo / (1 - margem_alvo)`, `empate = custo`.
 - Agregados do pregão: lucro_potencial = Σ lucro_item; margem_media ponderada
-  pelo valor; **cobertura = itens com custo efetivo / total** (não mais por
-  match). `itens_confirmados` (matches confirmados) segue só para a UI.
+  pela **receita esperada** (`preço_esperado * qtd`); **cobertura = itens com
+  custo efetivo / total** (não mais por match). `itens_confirmados` (matches
+  confirmados) segue só para a UI.
 - **Veredito (regra simples, configurável em `config`):**
   - "Vale": margem_media ≥ 20% E cobertura ≥ 60% E lucro_potencial ≥ R$ 1.000
   - "Não vale": margem_media < 8% OU lucro_potencial < R$ 300
