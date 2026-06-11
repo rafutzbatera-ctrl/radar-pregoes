@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import {
   MotionCtx, Ico, fmtBRL, analisar, statusItem, fiscalDoItem, linkPncp,
   VEREDITO_TXT, Medidor, NumBRL, NumPct, CostInput, Resumo,
+  cenarioTexto, fontePrecoTexto,
 } from "./helpers.jsx";
 import { STATUS_PIPELINE } from "./Kanban.jsx";
 import { HabilitacaoTab, FiscalTab } from "./Tabs.jsx";
@@ -19,6 +20,7 @@ export const STATUS_TXT = {
 
 export default function AnalysisScreen({
   pregao, estado, setCusto, confirmarCusto, limparCusto, definirMargemAlvo,
+  setLance, confirmarLance, limparLance, definirDesagio,
   setMatch, setHabil, voltar, scrollRef,
   meterVariant, config, setRegime, catalogo, catalogoPorCod,
   sincronizar, sincronizando, erroDetalhe, recarregarDetalhe,
@@ -26,7 +28,10 @@ export default function AnalysisScreen({
 }) {
   const { reduzido, estatico } = React.useContext(MotionCtx);
   const carregandoItens = pregao.itens == null;
-  const a = analisar(pregao, estado, catalogoPorCod);
+  // P4: deságio esperado da config (string do backend → número)
+  const desagio = config && config.desagio_esperado != null
+    ? parseFloat(config.desagio_esperado) || 0 : 0;
+  const a = analisar(pregao, estado, catalogoPorCod, false, desagio);
   const [aba, setAba] = React.useState("itens");
   const [itemAberto, setItemAberto] = React.useState(null);
   const linhaOrigem = React.useRef(null);
@@ -133,6 +138,10 @@ export default function AnalysisScreen({
                   <div className={"hero-veredito-palavra " + (a.veredito || "pendente")} aria-live="polite">
                     {a.veredito ? VEREDITO_TXT[a.veredito] : "A casar"}
                   </div>
+                  {/* P4: cenário de preço sob o veredito (teto | deságio | lances) */}
+                  <div className="hero-cenario silk" title="Base do preço usado na conta — o teto oficial do PNCP segue na tabela">
+                    cenário: {cenarioTexto(a.cenario)}
+                  </div>
                 </div>
               </div>
               {/* sem análise o VU repousa no mínimo, como aparelho desligado */}
@@ -229,7 +238,8 @@ export default function AnalysisScreen({
           <motion.div variants={entrada} key={aba} className="aba-painel">
             {aba === "itens" && (
               <ItensTab a={a} pregao={pregao} abrir={abrirItem} setCusto={setCusto} confirmarCusto={confirmarCusto}
-                limparCusto={limparCusto} definirMargemAlvo={definirMargemAlvo} config={config}
+                limparCusto={limparCusto} definirMargemAlvo={definirMargemAlvo} config={config} desagio={desagio}
+                setLance={setLance} confirmarLance={confirmarLance} limparLance={limparLance} definirDesagio={definirDesagio}
                 setMatch={setMatch} catalogo={catalogo} estatico={estatico} reduzido={reduzido} itemAberto={itemAberto} />
             )}
             {aba === "habilitacao" && (
@@ -256,13 +266,15 @@ export default function AnalysisScreen({
       >
         {conteudo}
       </motion.div>
-      <DetailPanel item={aberto} pregao={pregao} fechar={fecharItem} setCusto={setCusto} confirmarCusto={confirmarCusto} limparCusto={limparCusto} setMatch={setMatch} config={config} />
+      <DetailPanel item={aberto} pregao={pregao} fechar={fecharItem} setCusto={setCusto} confirmarCusto={confirmarCusto} limparCusto={limparCusto}
+        setLance={setLance} confirmarLance={confirmarLance} limparLance={limparLance} desagio={desagio} setMatch={setMatch} config={config} />
     </React.Fragment>
   );
 }
 
 /* ============ ABA ITENS ============ */
-function ItensTab({ a, pregao, abrir, setCusto, confirmarCusto, limparCusto, definirMargemAlvo, config, setMatch, catalogo, estatico, reduzido, itemAberto }) {
+function ItensTab({ a, pregao, abrir, setCusto, confirmarCusto, limparCusto, definirMargemAlvo, config, desagio,
+  setLance, confirmarLance, limparLance, definirDesagio, setMatch, catalogo, estatico, reduzido, itemAberto }) {
   const linha = reduzido
     ? { hidden: { opacity: 0 }, show: { opacity: 1, transition: { duration: 0.15 } } }
     : { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 340, damping: 30 } } };
@@ -280,15 +292,19 @@ function ItensTab({ a, pregao, abrir, setCusto, confirmarCusto, limparCusto, def
         </div>
       )}
       <div className="tbl-titulo">
-        <span className="silk">Itens do edital — estimado × seu custo</span>
-        <MargemAlvoControle config={config} definirMargemAlvo={definirMargemAlvo} />
+        <span className="silk">Itens do edital — teto × preço esperado × seu custo</span>
+        <div className="tbl-controles">
+          <DesagioControle config={config} definirDesagio={definirDesagio} />
+          <MargemAlvoControle config={config} definirMargemAlvo={definirMargemAlvo} />
+        </div>
       </div>
       <div className="mod tbl" role="table" aria-label="Itens do pregão">
         <div className="tbl-head" role="row">
           <div className="silk" role="columnheader">Nº</div>
           <div className="silk" role="columnheader">Descrição & match</div>
           <div className="silk" role="columnheader">Qtd</div>
-          <div className="silk" role="columnheader">Valor unit. estimado</div>
+          <div className="silk" role="columnheader">Teto × preço esperado</div>
+          <div className="silk" role="columnheader">Seu lance previsto</div>
           <div className="silk" role="columnheader">Seu custo unit.</div>
           <div className="silk" role="columnheader">Margem %</div>
           <div className="silk" role="columnheader">Lucro do item</div>
@@ -297,7 +313,9 @@ function ItensTab({ a, pregao, abrir, setCusto, confirmarCusto, limparCusto, def
         <motion.div variants={tbl} initial={estatico ? false : "hidden"} animate="show" role="rowgroup">
           {a.itens.map((it) => (
             <LinhaItem key={it.n} item={it} variants={linha} ativa={itemAberto === it.n} abrir={abrir}
-              setCusto={setCusto} confirmarCusto={confirmarCusto} limparCusto={limparCusto} setMatch={setMatch} catalogo={catalogo} />
+              setCusto={setCusto} confirmarCusto={confirmarCusto} limparCusto={limparCusto}
+              setLance={setLance} confirmarLance={confirmarLance} limparLance={limparLance} desagio={desagio}
+              setMatch={setMatch} catalogo={catalogo} />
           ))}
           {a.itens.length === 0 && (
             <div className="tbl-row fora" role="row">
@@ -308,6 +326,7 @@ function ItensTab({ a, pregao, abrir, setCusto, confirmarCusto, limparCusto, def
           )}
           <motion.div className="tbl-total" variants={linha} role="row">
             <div className="t-label" role="cell">Total · {a.cobertos} de {a.total} itens com custo</div>
+            <div className="t-resto" role="cell"></div>
             <div className="t-resto" role="cell"></div>
             <div className="t-resto" role="cell"></div>
             <div className="t-margem" role="cell">
@@ -332,7 +351,7 @@ function MargemAlvoControle({ config, definirMargemAlvo }) {
   const pct = Math.round((Number.isFinite(atual) ? atual : 0.2) * 100);
   const [rascunho, setRascunho] = React.useState(String(pct));
   React.useEffect(() => { setRascunho(String(pct)); }, [pct]);
-  if (!definirMargemAlvo) return <span className="silk desktop-only">Clique no item para o detalhe</span>;
+  if (!definirMargemAlvo) return null;
   const aplicar = () => {
     const v = parseInt(rascunho, 10);
     if (!Number.isNaN(v)) definirMargemAlvo(Math.max(0, Math.min(95, v)) / 100);
@@ -352,8 +371,36 @@ function MargemAlvoControle({ config, definirMargemAlvo }) {
   );
 }
 
+/* ---------- controle compacto de deságio esperado (P4 — espelho da margem alvo)
+   muda a BASE do preço esperado de todos os itens (e os agregados) ---------- */
+function DesagioControle({ config, definirDesagio }) {
+  const atual = config && config.desagio_esperado != null ? parseFloat(config.desagio_esperado) : 0;
+  const pct = Math.round((Number.isFinite(atual) ? atual : 0) * 100);
+  const [rascunho, setRascunho] = React.useState(String(pct));
+  React.useEffect(() => { setRascunho(String(pct)); }, [pct]);
+  if (!definirDesagio) return null;
+  const aplicar = () => {
+    const v = parseInt(rascunho, 10);
+    if (!Number.isNaN(v)) definirDesagio(Math.max(0, Math.min(90, v)) / 100);
+    else setRascunho(String(pct));
+  };
+  return (
+    <label className="margem-alvo silk" title="Preço esperado = teto menos este deságio (entra no veredito). O lance digitado por item vence o deságio.">
+      deságio esperado
+      <input type="text" inputMode="numeric" className="margem-alvo-input mono" value={rascunho}
+        aria-label="Deságio esperado global (%)"
+        onChange={(e) => setRascunho(e.target.value.replace(/[^\d]/g, ""))}
+        onBlur={aplicar}
+        onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") { setRascunho(String(pct)); e.target.blur(); } e.stopPropagation(); }}
+        onClick={(e) => e.stopPropagation()} />
+      %
+    </label>
+  );
+}
+
 /* ---------- linha (com sub-barra de match quando sugerido/sem match) ---------- */
-function LinhaItem({ item, variants, ativa, abrir, setCusto, confirmarCusto, limparCusto, setMatch, catalogo }) {
+function LinhaItem({ item, variants, ativa, abrir, setCusto, confirmarCusto, limparCusto,
+  setLance, confirmarLance, limparLance, desagio, setMatch, catalogo }) {
   const ref = React.useRef(null);
   const sigiloso = item.status === "sigiloso";
   const podeAbrir = () => abrir(item.n, ref.current);
@@ -363,6 +410,9 @@ function LinhaItem({ item, variants, ativa, abrir, setCusto, confirmarCusto, lim
   // placeholder de simulação para item sem custo: "máx R$ X"
   const ph = item.custo == null && item.simulacaoCustoMax != null
     ? "máx " + fmtBRL(item.simulacaoCustoMax) : "";
+  // P4: preço esperado ≠ teto quando há lance ou deságio aplicado
+  const temPreco = item.preco != null;
+  const precoDifereTeto = temPreco && (item.unit == null || Math.abs(item.preco - item.unit) > 0.005);
 
   return (
     <motion.div className="tbl-item" variants={variants}>
@@ -381,9 +431,49 @@ function LinhaItem({ item, variants, ativa, abrir, setCusto, confirmarCusto, lim
           <div className="d-spec">{item.spec}</div>
         </div>
         <div className="c-qtd" role="cell"><span className="m-label mobile-only">Qtd</span>×{item.qtd}</div>
+        {/* P4: teto oficial do PNCP SEMPRE visível; preço esperado em destaque
+            quando difere (com a fonte: lance / −N%), o teto vira referência */}
         <div className="c-unit" role="cell">
-          <span className="m-label mobile-only">Valor unit. estimado</span>
-          {sigiloso ? <span className="sigilo-tag">sigiloso</span> : item.unit != null ? fmtBRL(item.unit) : "—"}
+          <span className="m-label mobile-only">Teto × preço esperado</span>
+          {sigiloso ? (
+            temPreco
+              ? <span className="preco-esperado">{fmtBRL(item.preco)}<em className="preco-fonte">lance</em></span>
+              : <span className="sigilo-tag">sigiloso</span>
+          ) : precoDifereTeto ? (
+            <React.Fragment>
+              <span className="preco-esperado">{fmtBRL(item.preco)}
+                <em className="preco-fonte">{fontePrecoTexto(item.fontePreco, desagio)}</em></span>
+              <span className="teto-ref">teto {item.unit != null ? fmtBRL(item.unit) : "—"}</span>
+            </React.Fragment>
+          ) : (
+            item.unit != null ? fmtBRL(item.unit) : "—"
+          )}
+        </div>
+        {/* P4: seu lance previsto (editável) — vence o deságio global */}
+        <div className="c-lance" role="cell">
+          <span className="m-label mobile-only">Seu lance previsto</span>
+          {sigiloso && item.preco == null ? (
+            <div className="custo-cel">
+              <CostInput valor={item.lancePrevisto} placeholder="lance"
+                aoEditar={(v) => setLance(item.n, v)}
+                aoConfirmar={(v) => confirmarLance(item, v)}
+                rotulo={"Seu lance previsto do item " + item.n + " — editável"} />
+            </div>
+          ) : (
+            <div className="custo-cel">
+              <CostInput valor={item.lancePrevisto} placeholder={item.unit != null ? "teto" : ""}
+                aoEditar={(v) => setLance(item.n, v)}
+                aoConfirmar={(v) => confirmarLance(item, v)}
+                rotulo={"Seu lance previsto do item " + item.n + " — editável"} />
+              {item.lancePrevisto != null && (
+                <span className="custo-tags">
+                  <button type="button" className="custo-limpar" title="Limpar lance (volta ao deságio/teto)"
+                    aria-label={"Limpar lance previsto do item " + item.n}
+                    onClick={(e) => { e.stopPropagation(); limparLance && limparLance(item); }}>{Ico.fechar}</button>
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="c-custo" role="cell">
           <span className="m-label mobile-only">Seu custo unit.</span>

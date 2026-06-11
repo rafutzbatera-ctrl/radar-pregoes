@@ -509,13 +509,18 @@ body {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 8px;
+  flex-wrap: wrap;
 }
+/* P4: deságio esperado + margem alvo lado a lado no cabeçalho da tabela */
+.tbl-controles { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
 .tbl { overflow: hidden; }
 .tbl-head, .tbl-row, .tbl-total {
   display: grid;
-  grid-template-columns: 34px minmax(220px, 1fr) 46px 118px 116px 84px 118px 116px;
-  gap: 12px;
+  /* Nº · descrição · qtd · teto/esperado · lance previsto · custo · margem · lucro · status */
+  grid-template-columns: 34px minmax(190px, 1fr) 44px 124px 112px 112px 78px 110px 104px;
+  gap: 10px;
   align-items: center;
   padding: var(--row-pad) 16px;
 }
@@ -562,7 +567,12 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.c-qtd, .c-unit, .c-custo, .c-margem, .c-lucro { font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+.c-qtd, .c-unit, .c-lance, .c-custo, .c-margem, .c-lucro { font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+/* P4: célula de valor — teto oficial sempre visível; preço esperado em
+   destaque quando difere, com o teto pequeno (.silk) e rótulo da fonte */
+.c-unit .preco-esperado { display: block; font-weight: 600; }
+.c-unit .preco-fonte { font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--tinta-2); margin-left: 4px; }
+.c-unit .teto-ref { display: block; font-size: 11px; color: var(--silk); margin-top: 1px; }
 .val-btn {
   background: none;
   border: none;
@@ -768,8 +778,8 @@ body {
       "num status"
       "desc desc"
       "unit qtd"
-      "custo margem"
-      "lucro lucro";
+      "lance custo"
+      "margem lucro";
     gap: 10px 14px;
     background: var(--painel);
     border: 1px solid var(--linha);
@@ -783,8 +793,9 @@ body {
   .c-desc { grid-area: desc; }
   .c-qtd { grid-area: qtd; text-align: right; }
   .c-unit { grid-area: unit; text-align: left; }
+  .c-lance { grid-area: lance; text-align: left; }
   .c-custo { grid-area: custo; text-align: left; }
-  .c-margem { grid-area: margem; text-align: right; }
+  .c-margem { grid-area: margem; text-align: left; border-top: 1px dashed var(--linha); padding-top: 8px; }
   .c-lucro { grid-area: lucro; border-top: 1px dashed var(--linha); padding-top: 8px; display: flex; justify-content: space-between; align-items: baseline; }
   .c-status { grid-area: status; justify-content: flex-end; }
   .d-spec { white-space: normal; }

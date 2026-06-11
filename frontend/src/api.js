@@ -63,7 +63,7 @@ export function adaptarItem(i, produtosPorId) {
       : i.descricao || "",
     qtd: i.qtd,
     unidade: i.unidade,
-    unit: i.sigiloso ? null : i.valor_unit_estimado,
+    unit: i.sigiloso ? null : i.valor_unit_estimado,   // TETO oficial do PNCP
     sigiloso: !!i.sigiloso,
     ncmPncp: i.ncm_pncp,
     beneficio: i.beneficio,
@@ -74,6 +74,12 @@ export function adaptarItem(i, produtosPorId) {
     fonteCusto: i.fonte_custo ?? null,             // "manual" | "catalogo" | null
     simulacaoCustoMax: i.simulacao_custo_max ?? null,
     simulacaoLucro: i.simulacao_lucro ?? null,
+    // P4: preço esperado de disputa (lance ▸ teto×(1−deságio) ▸ teto) e pisos
+    lancePrevisto: i.lance_previsto ?? null,
+    precoEsperado: i.preco_esperado ?? null,
+    fontePreco: i.fonte_preco ?? null,             // "lance" | "desagio" | "teto" | null
+    lanceMinimoAlvo: i.lance_minimo_alvo ?? null,
+    empate: i.empate ?? null,
     match: produto
       ? { cod: produto.cod, score: i.match_score, confirmado: !!i.match_confirmado }
       : null,
@@ -239,6 +245,14 @@ export const api = {
     req(`/itens/${itemId}`, {
       method: "PATCH",
       body: JSON.stringify({ custo_manual: valor }),
+    }),
+
+  // lance previsto por item (preço esperado de disputa, P4) — null limpa
+  // (volta ao deságio/teto). Mesmo endpoint do custo; só o campo enviado muda.
+  definirLanceItem: (itemId, valor) =>
+    req(`/itens/${itemId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ lance_previsto: valor }),
     }),
 
   // catálogo

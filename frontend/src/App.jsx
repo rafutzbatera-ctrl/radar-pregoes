@@ -173,6 +173,7 @@ export default function App() {
   const estadoAtivo = (idAtivo != null && estadoPregoes[idAtivo]) || {};
 
   const setCusto = (n, valor) => { if (idAtivo != null) mutarEstado(idAtivo, "custos", n, valor); };
+  const setLance = (n, valor) => { if (idAtivo != null) mutarEstado(idAtivo, "lances", n, valor); };
 
   /* ---------- mutações (otimista → API → reverte em erro) ---------- */
 
@@ -222,6 +223,29 @@ export default function App() {
 
   // limpar custo manual (×): volta ao custo do catálogo se houver match
   const limparCustoItem = (item) => confirmarCustoItem(item, null);
+
+  // lance previsto POR ITEM (P4): ao vivo via setLance; no blur/Enter grava
+  // lance_previsto (override local do pregão). A resposta traz {item,
+  // pregao(agregados)}; valor null limpa e volta ao deságio/teto. Espelho do
+  // custo manual.
+  const confirmarLanceItem = (item, valor) => {
+    const pregaoId = idAtivo;
+    if (pregaoId == null) return;
+    api.definirLanceItem(item.id, valor)
+      .then(({ item: cru, pregao: ag }) => {
+        const adaptado = adaptarItem(cru, mapaProdutos());
+        aplicarAgregados(pregaoId, ag, adaptado);
+        // dado do servidor agora carrega o lance — limpa o override ao vivo
+        mutarEstado(pregaoId, "lances", item.n, undefined);
+      })
+      .catch(() => {
+        mutarEstado(pregaoId, "lances", item.n, undefined);
+        avisar("Não foi possível salvar o lance — valor revertido.");
+      });
+  };
+
+  // limpar lance (×): volta ao preço por deságio/teto
+  const limparLanceItem = (item) => confirmarLanceItem(item, null);
 
   // catálogo (tela Meu catálogo): edição inline do custo
   const salvarCustoProduto = (produto, valor) => {
@@ -287,6 +311,43 @@ export default function App() {
       .catch(() => {
         setConfig(anterior);
         avisar("Não foi possível salvar a margem alvo — revertido.");
+      });
+  };
+
+  // deságio esperado (P4): base do preço esperado de TODOS os itens. Persiste
+  // na config e o backend re-analisa todos os pregões com itens (agregados de
+  // cartões/funil). Por isso, além de recarregar os itens do pregão ativo,
+  // refaz o fetch da LISTA de pregões e do DETALHE aberto. Otimista; reverte.
+  const definirDesagio = (valor) => {
+    const anterior = config;
+    const v = Math.max(0, Math.min(0.90, valor));
+    setConfig((c) => ({ ...(c || CONFIG_PADRAO), desagio_esperado: String(v) }));
+    api.atualizarConfig({ desagio_esperado: String(v) })
+      .then((cfg) => {
+        setConfig(cfg);
+        // agregados de todos mudaram no backend → atualiza a lista inteira
+        api.listarPregoes().then(setPregoes).catch(() => {});
+        const id = idAtivo;
+        if (id != null) {
+          // itens (preço esperado por item) + pregão (agregados persistidos)
+          Promise.allSettled([
+            api.carregarItens(id, mapaProdutos()),
+            api.pregao(id),
+          ]).then(([ri, rp]) => {
+            setDetalhe((d) => {
+              if (!d || d.id !== id) return d;
+              return {
+                ...d,
+                itens: ri.status === "fulfilled" ? ri.value : d.itens,
+                pregao: rp.status === "fulfilled" ? rp.value : d.pregao,
+              };
+            });
+          });
+        }
+      })
+      .catch(() => {
+        setConfig(anterior);
+        avisar("Não foi possível salvar o deságio esperado — revertido.");
       });
   };
 
@@ -472,6 +533,10 @@ export default function App() {
           confirmarCusto={confirmarCustoItem}
           limparCusto={limparCustoItem}
           definirMargemAlvo={definirMargemAlvo}
+          setLance={setLance}
+          confirmarLance={confirmarLanceItem}
+          limparLance={limparLanceItem}
+          definirDesagio={definirDesagio}
           setMatch={definirMatch}
           setHabil={setHabil}
           config={config || CONFIG_PADRAO}

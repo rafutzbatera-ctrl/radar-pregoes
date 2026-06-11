@@ -2,7 +2,7 @@
 // Sob modo estático/reduzido: condicional simples, SEM AnimatePresence.
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MotionCtx, Ico, fmtBRL, fiscalDoItem, NumBRL, NumPct, CostInput } from "./helpers.jsx";
+import { MotionCtx, Ico, fmtBRL, fiscalDoItem, NumBRL, NumPct, CostInput, fontePrecoTexto } from "./helpers.jsx";
 
 export function useIsMobile() {
   const [mob, setMob] = React.useState(() => window.matchMedia("(max-width: 920px)").matches);
@@ -15,7 +15,8 @@ export function useIsMobile() {
   return mob;
 }
 
-function PainelConteudo({ item, pregao, fechar, setCusto, confirmarCusto, limparCusto, setMatch, config, fecharRef }) {
+function PainelConteudo({ item, pregao, fechar, setCusto, confirmarCusto, limparCusto,
+  setLance, confirmarLance, limparLance, desagio, setMatch, config, fecharRef }) {
   const sigiloso = item.status === "sigiloso";
   const temMatch = !!item.produto;
   const m = item.matchAtual;
@@ -25,6 +26,10 @@ function PainelConteudo({ item, pregao, fechar, setCusto, confirmarCusto, limpar
   const manualSobreCatalogo = item.custoManual != null && temMatch && !sigiloso;
   const phCusto = item.custo == null && item.simulacaoCustoMax != null
     ? "máx " + fmtBRL(item.simulacaoCustoMax) : "";
+  // P4: pisos de disputa (só com custo efetivo) — lance mínimo no alvo e empate
+  const temPreco = item.preco != null;
+  const lanceMinimoAlvo = item.custo != null && margemAlvoPct < 100
+    ? item.custo / (1 - margemAlvoPct / 100) : null;
   return (
     <React.Fragment>
       <div className="painel-grip" aria-hidden="true"></div>
@@ -62,7 +67,7 @@ function PainelConteudo({ item, pregao, fechar, setCusto, confirmarCusto, limpar
               <div className="v">×{item.qtd} · {item.unidade || "—"}</div>
             </div>
             <div className="painel-kv">
-              <div className="silk">Valor unit. estimado</div>
+              <div className="silk">Valor unit. estimado <em className="chip-fonte">teto oficial</em></div>
               <div className="v">{sigiloso ? "sigiloso" : item.unit != null ? fmtBRL(item.unit) : "—"}</div>
             </div>
           </div>
@@ -120,6 +125,53 @@ function PainelConteudo({ item, pregao, fechar, setCusto, confirmarCusto, limpar
           </section>
         )}
 
+        {/* P4: disputa do item — lance previsto (editável), preço esperado e
+            pisos (guia de disputa, fora do veredito). O teto oficial segue
+            visível acima. Sigiloso só vira conta com lance digitado. */}
+        <section className="painel-bloco">
+          <h3>Disputa do item</h3>
+          <div className="painel-custo">
+            <div className="painel-custo-linha">
+              <span className="painel-fonte">Seu lance previsto (editável)</span>
+              <span className="painel-custo-edit">
+                <CostInput valor={item.lancePrevisto}
+                  placeholder={sigiloso ? "lance" : item.unit != null ? "teto" : ""}
+                  aoEditar={(v) => setLance && setLance(item.n, v)}
+                  aoConfirmar={(v) => confirmarLance && confirmarLance(item, v)}
+                  rotulo={"Seu lance previsto do item " + item.n + " — editável"} />
+                {item.lancePrevisto != null && limparLance && (
+                  <button type="button" className="custo-limpar" title="Limpar lance (volta ao deságio/teto)"
+                    aria-label="Limpar lance previsto" onClick={() => limparLance(item)}>{Ico.fechar}</button>
+                )}
+              </span>
+            </div>
+            <div className="painel-custo-linha">
+              <span className="painel-fonte">
+                Preço esperado de disputa
+                {temPreco && item.fontePreco
+                  ? <em className="chip-fonte"> {fontePrecoTexto(item.fontePreco, desagio)}</em> : null}
+              </span>
+              <span className="mono" style={{ fontWeight: 600 }}>
+                {temPreco ? fmtBRL(item.preco) : sigiloso ? "digite um lance" : "—"}
+              </span>
+            </div>
+            {item.custo != null ? (
+              <div className="painel-custo-linha simulacao">
+                <span className="painel-fonte">
+                  Guia de disputa <em className="chip-fonte">não entra no veredito</em>
+                </span>
+                <span className="mono">
+                  desce até {lanceMinimoAlvo != null ? fmtBRL(lanceMinimoAlvo) : "—"} no alvo · empate {fmtBRL(item.custo)}
+                </span>
+              </div>
+            ) : (
+              <p className="painel-spec" style={{ color: "var(--silk)", margin: 0 }}>
+                Digite seu custo para ver até onde pode descer mantendo a margem alvo.
+              </p>
+            )}
+          </div>
+        </section>
+
         {/* match com o catálogo — seção secundária (atalho opcional) */}
         <section className="painel-bloco">
           <h3>Match com o catálogo</h3>
@@ -170,7 +222,8 @@ function PainelConteudo({ item, pregao, fechar, setCusto, confirmarCusto, limpar
   );
 }
 
-export default function DetailPanel({ item, pregao, fechar, setCusto, confirmarCusto, limparCusto, setMatch, config }) {
+export default function DetailPanel({ item, pregao, fechar, setCusto, confirmarCusto, limparCusto,
+  setLance, confirmarLance, limparLance, desagio, setMatch, config }) {
   const { estatico } = React.useContext(MotionCtx);
   const mobile = useIsMobile();
   const fecharRef = React.useRef(null);
@@ -191,7 +244,8 @@ export default function DetailPanel({ item, pregao, fechar, setCusto, confirmarC
           aria-modal="true"
           aria-label={"Detalhe do item " + item.n + " — " + item.nome}
         >
-          <PainelConteudo item={item} pregao={pregao} fechar={fechar} setCusto={setCusto} confirmarCusto={confirmarCusto} limparCusto={limparCusto} setMatch={setMatch} config={config} fecharRef={fecharRef} />
+          <PainelConteudo item={item} pregao={pregao} fechar={fechar} setCusto={setCusto} confirmarCusto={confirmarCusto} limparCusto={limparCusto}
+            setLance={setLance} confirmarLance={confirmarLance} limparLance={limparLance} desagio={desagio} setMatch={setMatch} config={config} fecharRef={fecharRef} />
         </aside>
       </React.Fragment>
     );
@@ -239,7 +293,8 @@ export default function DetailPanel({ item, pregao, fechar, setCusto, confirmarC
             dragTransition={{ bounceStiffness: 420, bounceDamping: 32 }}
             onDragEnd={aoSoltar}
           >
-            <PainelConteudo item={item} pregao={pregao} fechar={fechar} setCusto={setCusto} confirmarCusto={confirmarCusto} limparCusto={limparCusto} setMatch={setMatch} config={config} fecharRef={fecharRef} />
+            <PainelConteudo item={item} pregao={pregao} fechar={fechar} setCusto={setCusto} confirmarCusto={confirmarCusto} limparCusto={limparCusto}
+              setLance={setLance} confirmarLance={confirmarLance} limparLance={limparLance} desagio={desagio} setMatch={setMatch} config={config} fecharRef={fecharRef} />
           </motion.aside>
         </React.Fragment>
       )}

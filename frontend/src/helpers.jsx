@@ -32,18 +32,24 @@ export const linkPncp = (p) =>
 // o backend grava "nao_vale"; a UI/CSS usa "nao"
 export const normalizarVeredito = (v) => (v === "nao_vale" ? "nao" : v || null);
 
-// veredito (regra do CLAUDE.md §6.2 — atualizado P3):
+// veredito (regra do CLAUDE.md §6.2 — atualizado P3/P4):
 // vale: margem ≥20% E cobertura ≥60% E lucro ≥ R$ 1.000
 // não vale: margem <8% OU lucro < R$ 300 · senão: talvez
 // Custo efetivo do item = estado.custos[n] (edição ao vivo) ▸ custoManual
 // (override do pregão) ▸ (match confirmado ? produto.custo : null). Entra na
-// conta todo item com custo efetivo e valor oficial (inclusive sem match).
+// conta todo item com custo efetivo e PREÇO ESPERADO (inclusive sem match).
+// P4 — preço esperado: estado.lances[n] (ao vivo) ▸ lancePrevisto ▸
+// teto×(1−deságio) ▸ teto. Sigiloso (sem teto) só entra com lance. O teto
+// oficial (it.unit) nunca some — é mostrado ao lado do esperado na UI.
 // Sugeridos NÃO têm prévia de margem (sem custo efetivo → sem conta).
 // catalogoPorCod vem da API (App) — o mock morreu.
-export function analisar(pregao, estado, catalogoPorCod, previa) {
+export function analisar(pregao, estado, catalogoPorCod, previa, desagio) {
   const custos = (estado && estado.custos) || {};
+  const lances = (estado && estado.lances) || {};
   const matches = (estado && estado.matches) || {};
   const cat = catalogoPorCod || {};
+  const dg = Number.isFinite(desagio) && desagio > 0 ? desagio : 0;
+  let nLances = 0;
   const itens = (pregao.itens || []).map((it) => {
     const m = matches[it.n] !== undefined ? matches[it.n] : it.match;
     const produto = m && cat[m.cod] ? cat[m.cod] : null;
@@ -54,28 +60,39 @@ export function analisar(pregao, estado, catalogoPorCod, previa) {
     else if (it.custoManual != null) custo = it.custoManual;
     else if (confirmado && produto) custo = produto.custo;
 
-    if (it.sigiloso) {
-      return { ...it, matchAtual: m, produto, custo: null, coberto: false, margemPct: null, lucro: null, status: "sigiloso" };
+    // preço esperado (P4): lance ao vivo ▸ lancePrevisto ▸ teto×(1−deságio) ▸ teto
+    let lance = null;
+    if (lances[it.n] !== undefined) lance = lances[it.n];
+    else if (it.lancePrevisto != null) lance = it.lancePrevisto;
+    if (lance != null) nLances += 1;
+    let preco = null, fontePreco = null;
+    if (lance != null) { preco = lance; fontePreco = "lance"; }
+    else if (it.sigiloso) { preco = null; fontePreco = null; }
+    else if (it.unit != null && it.unit > 0) {
+      if (dg > 0) { preco = it.unit * (1 - dg); fontePreco = "desagio"; }
+      else { preco = it.unit; fontePreco = "teto"; }
     }
-    const semValor = it.unit == null || !it.unit;
+
+    // sem preço esperado (sigiloso sem lance): fora da conta, visível
+    if (preco == null || !preco) {
+      const status = m && !confirmado && custo == null ? "sugerido" : it.sigiloso ? "sigiloso" : "fora";
+      return { ...it, matchAtual: m || null, produto, custo, preco: null, fontePreco: null, coberto: false, margemPct: null, lucro: null, status };
+    }
     // sem custo efetivo: item ainda fora da conta. Pode estar sugerido (match
     // não confirmado) ou sem match — sem prévia de margem em nenhum caso.
     if (custo == null) {
       const status = m && !confirmado ? "sugerido" : "fora";
-      return { ...it, matchAtual: m || null, produto, custo: null, coberto: false, margemPct: null, lucro: null, status };
+      return { ...it, matchAtual: m || null, produto, custo: null, preco, fontePreco, coberto: false, margemPct: null, lucro: null, status };
     }
-    const margemPct = semValor ? null : ((it.unit - custo) / it.unit) * 100;
-    const lucro = semValor ? null : (it.unit - custo) * it.qtd;
-    if (semValor) {
-      // tem custo mas sem valor oficial — fora da conta, visível
-      return { ...it, matchAtual: m, produto, custo, coberto: false, margemPct: null, lucro: null, status: "fora" };
-    }
-    return { ...it, matchAtual: m, produto, custo, coberto: true, margemPct, lucro, status: statusItem(margemPct) };
+    const margemPct = ((preco - custo) / preco) * 100;
+    const lucro = (preco - custo) * it.qtd;
+    return { ...it, matchAtual: m, produto, custo, preco, fontePreco, coberto: true, margemPct, lucro, status: statusItem(margemPct) };
   });
   const cobertos = itens.filter((i) => i.coberto);
   const sugeridos = itens.filter((i) => i.status === "sugerido").length;
   const lucroTotal = cobertos.reduce((s, i) => s + i.lucro, 0);
-  const receitaCoberta = cobertos.reduce((s, i) => s + i.unit * i.qtd, 0);
+  // receita esperada (preço esperado × qtd) — peso coerente com o lucro (P4)
+  const receitaCoberta = cobertos.reduce((s, i) => s + i.preco * i.qtd, 0);
   const margemAgregada = receitaCoberta > 0 ? (lucroTotal / receitaCoberta) * 100 : 0;
   const cobertura = itens.length > 0 ? cobertos.length / itens.length : 0;
   let veredito;
@@ -85,9 +102,11 @@ export function analisar(pregao, estado, catalogoPorCod, previa) {
   else if (margemAgregada >= 20 && cobertura >= 0.6 && lucroTotal >= 1000) veredito = "vale";
   else if (margemAgregada < 8 || lucroTotal < 300) veredito = "nao";
   else veredito = "talvez";
+  // cenário do hero: teto (sem deságio, sem lance) | deságio N% | N lances [· deságio M%]
+  const cenario = { desagio: dg, lances: nLances };
   return {
     itens, lucroTotal, receitaCoberta, margemAgregada, sugeridos,
-    cobertos: cobertos.length, total: itens.length, cobertura, veredito,
+    cobertos: cobertos.length, total: itens.length, cobertura, veredito, cenario,
   };
 }
 
@@ -113,6 +132,25 @@ export const CATEGORIA_TXT = {
 };
 
 export const VEREDITO_TXT = { vale: "Vale", talvez: "Talvez", nao: "Não vale" };
+
+/* ---------- P4: rótulo do cenário de preço (hero) e da fonte (célula) ----------
+   cenário: teto | deságio de N% | N lances previstos [· deságio M%] */
+export function cenarioTexto(cenario) {
+  if (!cenario) return "teto";
+  const { desagio, lances } = cenario;
+  const pctDes = Math.round((desagio || 0) * 100);
+  if (lances > 0) {
+    const base = lances + (lances === 1 ? " lance previsto" : " lances previstos");
+    return pctDes > 0 ? base + " · deságio " + pctDes + "%" : base;
+  }
+  return pctDes > 0 ? "deságio de " + pctDes + "%" : "teto";
+}
+// rótulo curto da fonte do preço esperado na célula (lance / −15%)
+export function fontePrecoTexto(fontePreco, desagio) {
+  if (fontePreco === "lance") return "lance";
+  if (fontePreco === "desagio") return "−" + Math.round((desagio || 0) * 100) + "%";
+  return "teto";
+}
 
 /* ---------- número com tween suave ---------- */
 export function useTweenNumber(value, dur = 0.65) {
