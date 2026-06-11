@@ -1,4 +1,9 @@
-"""M1 — descoberta: rodar busca, dedup, flag novo."""
+"""M1 — descoberta: rodar busca, dedup, flag novo.
+
+Estes testes focam em persistência/dedup, então passam enriquecer=False — o
+enriquecimento na descoberta (P5, que puxa itens + matching real via e5) tem
+cobertura própria em test_p5_potencial com embed fake injetado.
+"""
 from app.services import descoberta
 
 
@@ -13,7 +18,7 @@ def _criar_busca(con) -> int:
 
 def test_rodar_busca_persiste_pregoes(con, cliente_fake):
     busca_id = _criar_busca(con)
-    r = descoberta.rodar_busca(con, busca_id, cliente_fake)
+    r = descoberta.rodar_busca(con, busca_id, cliente_fake, enriquecer=False)
     assert r["hits"] == 10          # fixture real tem 10 hits
     assert r["novos"] == r["hits"]  # primeira rodada: tudo novo
 
@@ -29,10 +34,10 @@ def test_rodar_busca_persiste_pregoes(con, cliente_fake):
 def test_mesma_busca_duas_vezes_nao_duplica(con, cliente_fake):
     """Teste exigido no CLAUDE.md M1."""
     busca_id = _criar_busca(con)
-    r1 = descoberta.rodar_busca(con, busca_id, cliente_fake)
+    r1 = descoberta.rodar_busca(con, busca_id, cliente_fake, enriquecer=False)
     total_apos_1 = con.execute("SELECT COUNT(*) c FROM pregoes").fetchone()["c"]
 
-    r2 = descoberta.rodar_busca(con, busca_id, cliente_fake)
+    r2 = descoberta.rodar_busca(con, busca_id, cliente_fake, enriquecer=False)
     total_apos_2 = con.execute("SELECT COUNT(*) c FROM pregoes").fetchone()["c"]
 
     assert r1["novos"] > 0
@@ -45,7 +50,7 @@ def test_ultima_exec_atualizada(con, cliente_fake):
     assert con.execute(
         "SELECT ultima_exec FROM buscas_salvas WHERE id=?", (busca_id,)
     ).fetchone()["ultima_exec"] is None
-    descoberta.rodar_busca(con, busca_id, cliente_fake)
+    descoberta.rodar_busca(con, busca_id, cliente_fake, enriquecer=False)
     assert con.execute(
         "SELECT ultima_exec FROM buscas_salvas WHERE id=?", (busca_id,)
     ).fetchone()["ultima_exec"] is not None
@@ -57,5 +62,5 @@ def test_rodar_todas_ativas_pula_inativas(con, cliente_fake):
         "INSERT INTO buscas_salvas (nome, termos, ativo) VALUES ('pausada','x',0)"
     )
     con.commit()
-    resultados = descoberta.rodar_todas_ativas(con, cliente_fake)
+    resultados = descoberta.rodar_todas_ativas(con, cliente_fake, enriquecer=False)
     assert [r["busca_id"] for r in resultados] == [ativa]

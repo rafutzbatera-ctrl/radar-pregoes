@@ -141,6 +141,15 @@ MIGRACOES = [
     ALTER TABLE itens_pregao ADD COLUMN lance_previsto REAL;
     INSERT OR IGNORE INTO config(chave, valor) VALUES ('desagio_esperado', '0.20');
     """,
+    # v5 — potencial aderente (P5). Item aderente = item com produto_id (sugerido
+    # ou confirmado) E preço esperado não nulo. receita_aderente = Σ preço×qtd
+    # desses itens; itens_aderentes = quantos são. Persistir a RECEITA (não o
+    # potencial) evita reprocessar quando a margem alvo muda — só o deságio (P4)
+    # dispara re-análise. Ambas preenchidas por analise.analisar_pregao.
+    """
+    ALTER TABLE pregoes ADD COLUMN receita_aderente REAL;
+    ALTER TABLE pregoes ADD COLUMN itens_aderentes INTEGER;
+    """,
 ]
 
 

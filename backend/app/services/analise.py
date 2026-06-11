@@ -88,16 +88,28 @@ def analisar_pregao(con: sqlite3.Connection, pregao_id: int) -> dict:
     lucro_potencial = 0.0
     soma_pesos = 0.0          # margem média ponderada pela RECEITA esperada
     soma_margem_peso = 0.0
+    # P5: potencial aderente — itens do RAMO do usuário (produto_id sugerido ou
+    # confirmado) com preço esperado. receita_aderente é persistida (não o
+    # potencial); o potencial = receita × margem_alvo é montado na exibição.
+    itens_aderentes = 0
+    receita_aderente = 0.0
 
     for it in itens:
         if it["match_confirmado"] and it["produto_id"] is not None:
             confirmados += 1
+        # P4: o preço esperado (lance ▸ teto×(1−deságio) ▸ teto) guia tanto a
+        # conta de custo quanto a aderência. Sem preço esperado (sigiloso sem
+        # lance) → o item fica fora de ambas.
+        preco, _fp = preco_esperado_row(it, desagio)
+        # P5: aderente = produto casado (sugerido OU confirmado) com preço
+        # esperado. Independe de custo — é "item do meu ramo nesta licitação".
+        if it["produto_id"] is not None and preco is not None and preco > 0:
+            itens_aderentes += 1
+            receita_aderente += preco * (it["qtd"] or 0)
         custo, _fonte = custo_efetivo_row(it)
         if custo is None:
             continue
-        # P4: a conta usa o PREÇO ESPERADO (lance ▸ teto×(1−deságio) ▸ teto),
-        # não o teto cru. Sem preço esperado (sigiloso sem lance) → fora.
-        preco, _fp = preco_esperado_row(it, desagio)
+        # P4: a conta usa o PREÇO ESPERADO, não o teto cru.
         if preco is None or preco <= 0:
             continue
         qtd = it["qtd"] or 0
@@ -125,9 +137,12 @@ def analisar_pregao(con: sqlite3.Connection, pregao_id: int) -> dict:
             veredito = "talvez"
 
     con.execute(
-        "UPDATE pregoes SET veredito=?, lucro_potencial=?, margem_media=? WHERE id=?",
+        "UPDATE pregoes SET veredito=?, lucro_potencial=?, margem_media=?, "
+        "receita_aderente=?, itens_aderentes=? WHERE id=?",
         (veredito, lucro_potencial if com_custo else None,
-         margem_media, pregao_id),
+         margem_media,
+         receita_aderente if itens_aderentes else None,
+         itens_aderentes, pregao_id),
     )
     con.commit()
     return {
@@ -138,6 +153,8 @@ def analisar_pregao(con: sqlite3.Connection, pregao_id: int) -> dict:
         "itens_total": total_itens,
         "itens_confirmados": confirmados,
         "itens_com_custo": com_custo,
+        "itens_aderentes": itens_aderentes,
+        "receita_aderente": receita_aderente if itens_aderentes else None,
     }
 
 

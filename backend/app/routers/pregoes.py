@@ -62,6 +62,8 @@ def _resumo_pregao(con: sqlite3.Connection, p: sqlite3.Row) -> dict:
 @router.get("")
 def listar(novos: bool | None = None, uf: str | None = None,
            salvos: bool | None = None,
+           valor_min: float | None = None, valor_max: float | None = None,
+           ordem: Literal["recente", "potencial", "valor", "prazo"] = "recente",
            con: sqlite3.Connection = Depends(get_db)):
     sql = "SELECT * FROM pregoes WHERE 1=1"
     params: list = []
@@ -74,8 +76,38 @@ def listar(novos: bool | None = None, uf: str | None = None,
     if uf:
         sql += " AND uf=?"
         params.append(uf.upper())
+    # ordem base recente = descoberto_em DESC (vem do SQL); as demais reordenam
+    # em Python sobre os resumos (listas pequenas, valor efetivo já computado).
     sql += " ORDER BY descoberto_em DESC"
-    return [_resumo_pregao(con, p) for p in con.execute(sql, params).fetchall()]
+    itens = []
+    for p in con.execute(sql, params).fetchall():
+        d = _resumo_pregao(con, p)
+        # valor efetivo para filtro/ordenação (valor_global ▸ Σ itens)
+        ve = d["valor_global"] if d.get("valor_global") is not None else d.get("valor_itens")
+        # faixa de valor inclusive; pregão sem valor efetivo só passa se não há
+        # piso/teto exigido (não inventa valor — princípio 1).
+        if valor_min is not None and (ve is None or ve < valor_min):
+            continue
+        if valor_max is not None and (ve is None or ve > valor_max):
+            continue
+        d["_ve"] = ve
+        itens.append(d)
+
+    if ordem == "potencial":
+        # receita_aderente desc, NULL/0 no fim
+        itens.sort(key=lambda d: (d.get("receita_aderente") or 0), reverse=True)
+    elif ordem == "valor":
+        # valor efetivo desc, NULL no fim
+        itens.sort(key=lambda d: (d.get("_ve") is None, -(d.get("_ve") or 0)))
+    elif ordem == "prazo":
+        # data_fim_vigencia asc, NULL no fim
+        itens.sort(key=lambda d: (d.get("data_fim_vigencia") is None,
+                                  d.get("data_fim_vigencia") or ""))
+    # "recente": mantém a ordem do SQL (descoberto_em DESC)
+
+    for d in itens:
+        d.pop("_ve", None)
+    return itens
 
 
 @router.get("/{pregao_id}")
