@@ -4,8 +4,9 @@ import React from "react";
 import { motion } from "framer-motion";
 import { api } from "./api.js";
 import {
-  MotionCtx, Ico, fmtBRL, Etiqueta, VEREDITO_TXT, normalizarVeredito, CostInput,
+  MotionCtx, Ico, fmtBRL, Etiqueta, VEREDITO_TXT, normalizarVeredito, CostInput, Resumo,
 } from "./helpers.jsx";
+import { Kanban, STATUS_PIPELINE } from "./Kanban.jsx";
 
 const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const _fmtInt = new Intl.NumberFormat("pt-BR");
@@ -133,7 +134,7 @@ function ChipsInput({ termos, excluir, aoMudar }) {
   );
 }
 
-export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, aoImportar }) {
+export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, aoImportar, mudarPipeline }) {
   const { reduzido, estatico } = React.useContext(MotionCtx);
   const [busca, setBusca] = React.useState("");          // input texto (modo radar)
   const [uf, setUf] = React.useState("todas");
@@ -143,6 +144,20 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
   // fonte: "radar" (pregões já descobertos) | "vivo" (busca ao vivo no PNCP)
   const [fonte, setFonte] = React.useState("radar");
   const aoVivo = !apenasSalvos && fonte === "vivo";
+
+  // ----- funil de disputa (Meus pregões): faixa-resumo + alternância Lista | Quadro -----
+  const [resumo, setResumo] = React.useState(null);
+  const [vista, setVista] = React.useState("lista");     // "lista" | "quadro"
+  const carregarResumo = React.useCallback(() => {
+    if (!apenasSalvos) return;
+    api.pipelineResumo().then(setResumo).catch(() => {});
+  }, [apenasSalvos]);
+  React.useEffect(() => { carregarResumo(); }, [carregarResumo]);
+  // o resumo é calculado no backend; após mudar o funil, recarrega depois do PATCH
+  const mudarPipelineEResumo = React.useCallback((id, campos) => {
+    if (mudarPipeline) mudarPipeline(id, campos);
+    setTimeout(carregarResumo, 400);
+  }, [mudarPipeline, carregarResumo]);
 
   // ----- filtros do modo "PNCP ao vivo" -----
   const [termos, setTermos] = React.useState([]);        // chips de inclusão
@@ -249,6 +264,34 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
         </motion.div>
       )}
 
+      {apenasSalvos && resumo && (
+        <motion.div className="resumo pipeline-resumo" variants={entrada}>
+          {STATUS_PIPELINE.map((s) => (
+            <Resumo key={s.id} k={s.rotulo} v={String(resumo.por_status[s.id] || 0)} />
+          ))}
+          <Resumo k="Taxa de ganho"
+            v={resumo.taxa_ganho != null ? Math.round(resumo.taxa_ganho * 100) + "%" : "—"}
+            sub={resumo.ganhos + " ganhos · " + resumo.perdidos + " perdidos"} />
+          <Resumo k="Valor ganho"
+            v={resumo.valor_ganho != null ? fmtBRL(resumo.valor_ganho) : "—"}
+            sub={resumo.ganhos_sem_valor > 0 ? resumo.ganhos_sem_valor + " ganho(s) sem valor informado" : undefined} />
+        </motion.div>
+      )}
+
+      {apenasSalvos && (
+        <motion.div className="seg vista-seg" role="group" aria-label="Modo de visualização" variants={entrada}>
+          <button type="button" className={"seg-btn" + (vista === "lista" ? " on" : "")}
+            aria-pressed={vista === "lista"} onClick={() => setVista("lista")}>
+            Lista
+          </button>
+          <button type="button" className={"seg-btn" + (vista === "quadro" ? " on" : "")}
+            aria-pressed={vista === "quadro"} onClick={() => setVista("quadro")}>
+            Quadro
+          </button>
+        </motion.div>
+      )}
+
+      {!(apenasSalvos && vista === "quadro") && (
       <motion.div className="filtros" variants={entrada}>
         {!apenasSalvos && !aoVivo && (
           <label className="busca">
@@ -315,6 +358,7 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
           </button>
         )}
       </motion.div>
+      )}
 
       {aoVivo && nTermos > 1 && (
         <motion.div className="vivo-multi-aviso silk" variants={entrada}>
@@ -322,7 +366,15 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
         </motion.div>
       )}
 
-      {aoVivo ? (
+      {apenasSalvos && vista === "quadro" ? (
+        carregando ? (
+          <EstadoCarregando entrada={entrada} />
+        ) : erro ? (
+          <EstadoErro entrada={entrada} mensagem={erro} recarregar={recarregar} />
+        ) : (
+          <Kanban pregoes={base} aoAbrir={aoAbrir} mudarPipeline={mudarPipelineEResumo} />
+        )
+      ) : aoVivo ? (
         <ListaVivo
           vivo={vivo} entrada={entrada} importar={importar} importando={importando}
           nTermos={nTermos} aoAbrir={aoAbrir} recarregar={() => buscarVivo(1, false)}

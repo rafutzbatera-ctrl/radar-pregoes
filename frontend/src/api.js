@@ -113,6 +113,9 @@ export function adaptarPregao(p) {
     linkPncp: p.link_pncp,
     salvo: !!p.salvo,
     novo: !!p.novo,
+    statusPipeline: p.status_pipeline || null,
+    dataDisputa: p.data_disputa || null,
+    valorFinal: p.valor_final,
     buscaId: p.busca_id,
     sincronizado: !!p.sincronizado,
     arquivos: (p.arquivos || []).map((a) => ({
@@ -204,6 +207,8 @@ export const api = {
   atualizarPregao: (id, corpo) =>
     req(`/pregoes/${id}`, { method: "PATCH", body: JSON.stringify(corpo) }).then(adaptarPregao),
   sincronizar: (id) => req(`/pregoes/${id}/sincronizar`, { method: "POST" }),
+  pipelineResumo: () => req("/pipeline/resumo"),
+  // PATCH genérico já existe: atualizarPregao(id, {status_pipeline, data_disputa, valor_final, salvo})
   carregarItens: (pregaoId, produtosPorId) =>
     req(`/pregoes/${pregaoId}/itens`).then((is) =>
       is.map((i) => adaptarItem(i, produtosPorId))),

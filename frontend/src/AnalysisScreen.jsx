@@ -5,8 +5,9 @@ import React from "react";
 import { motion } from "framer-motion";
 import {
   MotionCtx, Ico, fmtBRL, analisar, statusItem, fiscalDoItem, linkPncp,
-  VEREDITO_TXT, Medidor, NumBRL, NumPct, CostInput,
+  VEREDITO_TXT, Medidor, NumBRL, NumPct, CostInput, Resumo,
 } from "./helpers.jsx";
+import { STATUS_PIPELINE } from "./Kanban.jsx";
 import { HabilitacaoTab, FiscalTab } from "./Tabs.jsx";
 import DetailPanel from "./DetailPanel.jsx";
 import { EstadoCarregando, EstadoErro } from "./FindScreen.jsx";
@@ -20,6 +21,7 @@ export default function AnalysisScreen({
   pregao, estado, setCusto, confirmarCusto, setMatch, setHabil, voltar, scrollRef,
   meterVariant, config, setRegime, catalogo, catalogoPorCod,
   sincronizar, sincronizando, erroDetalhe, recarregarDetalhe,
+  mudarPipeline, salvarPregao,
 }) {
   const { reduzido, estatico } = React.useContext(MotionCtx);
   const carregandoItens = pregao.itens == null;
@@ -147,6 +149,50 @@ export default function AnalysisScreen({
                 sub={habil.length ? "de " + habil.length + " requisitos" : undefined} />
               <Resumo k="Prontidão NF-e" v={prontos + " de " + fiscalTotal + " prontos"} />
             </motion.div>
+
+            <motion.section className="mod disputa-mod" variants={entrada} aria-label="Disputa">
+              <div className="disputa-cab">
+                <div className="silk">Disputa</div>
+                {!pregao.salvo && (
+                  <button type="button" className="btn-rodar disputa-salvar"
+                    onClick={() => salvarPregao && salvarPregao(pregao.id, true)}>
+                    {Ico.raio} Salvar no funil
+                  </button>
+                )}
+              </div>
+              {pregao.salvo ? (
+                <div className="disputa-campos">
+                  <label className="silk disputa-campo">
+                    status
+                    <select className="filtro-sel" value={pregao.statusPipeline || "cotacao"}
+                      onChange={(e) => mudarPipeline(pregao.id, { status_pipeline: e.target.value })}>
+                      {STATUS_PIPELINE.map((s) => (
+                        <option key={s.id} value={s.id}>{s.rotulo}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="silk disputa-campo">
+                    data da disputa
+                    <input type="datetime-local" className="form-input mono"
+                      value={pregao.dataDisputa ? pregao.dataDisputa.replace(" ", "T").slice(0, 16) : ""}
+                      onChange={(e) => mudarPipeline(pregao.id, { data_disputa: e.target.value ? e.target.value.replace("T", " ") : null })} />
+                  </label>
+                  <label className="silk disputa-campo">
+                    valor final (R$)
+                    <input type="number" step="0.01" min="0" className="form-input mono"
+                      defaultValue={pregao.valorFinal ?? ""}
+                      key={"vf-" + (pregao.valorFinal ?? "")}
+                      onBlur={(e) => mudarPipeline(pregao.id, {
+                        valor_final: e.target.value === "" ? null : Number(e.target.value),
+                      })} />
+                  </label>
+                </div>
+              ) : (
+                <p className="disputa-vazio silk">
+                  Salve este pregão no funil para acompanhar status, data da disputa e valor final.
+                </p>
+              )}
+            </motion.section>
           </React.Fragment>
         )}
       </div>
@@ -205,18 +251,6 @@ export default function AnalysisScreen({
       </motion.div>
       <DetailPanel item={aberto} pregao={pregao} fechar={fecharItem} setCusto={setCusto} confirmarCusto={confirmarCusto} setMatch={setMatch} config={config} />
     </React.Fragment>
-  );
-}
-
-function Resumo({ k, v, sub, pequeno }) {
-  return (
-    <div className="mod resumo-mod">
-      <div className="silk">{k}</div>
-      <div className="v" style={pequeno ? { fontSize: "12px", fontWeight: 500 } : undefined}>
-        {v}
-        {sub && <small><br />{sub}</small>}
-      </div>
-    </div>
   );
 }
 

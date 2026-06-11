@@ -337,6 +337,28 @@ export default function App() {
         throw e;
       });
 
+  /* ---------- funil de disputa (P2) — otimista → API → reverte ---------- */
+  const mudarPipeline = (id, campos) => {
+    const anterior = (pregoes || []).find((p) => p.id === id);
+    setPregoes((ps) => (ps || []).map((p) => (p.id === id ? {
+      ...p,
+      statusPipeline: campos.status_pipeline !== undefined ? campos.status_pipeline : p.statusPipeline,
+      dataDisputa: campos.data_disputa !== undefined ? campos.data_disputa : p.dataDisputa,
+      valorFinal: campos.valor_final !== undefined ? campos.valor_final : p.valorFinal,
+      salvo: campos.salvo !== undefined ? campos.salvo : p.salvo,
+    } : p)));
+    api.atualizarPregao(id, campos).then((atualizado) => {
+      setPregoes((ps) => (ps || []).map((p) => (p.id === id ? atualizado : p)));
+      setDetalhe((d) => (d && d.id === id && d.pregao
+        ? { ...d, pregao: { ...d.pregao, ...atualizado } } : d));
+    }).catch(() => {
+      setPregoes((ps) => (ps || []).map((p) => (p.id === id ? anterior : p)));
+      avisar("Não foi possível atualizar o funil — revertido.");
+    });
+  };
+
+  const salvarPregao = (id, salvo) => mudarPipeline(id, { salvo });
+
   /* ---------- pregão ativo (detalhe + lista como fallback do cabeçalho) ---------- */
   const pregaoLista = idAtivo != null && pregoes ? pregoes.find((p) => p.id === idAtivo) : null;
   const detalheDoAtivo = detalhe && detalhe.id === idAtivo ? detalhe : null;
@@ -377,7 +399,8 @@ export default function App() {
       )}
       {tela.nome === "meus" && (
         <FindScreen aoAbrir={abrirPregao} apenasSalvos={true}
-          pregoes={pregoes} erro={erros.pregoes} recarregar={carregarTudo} />
+          pregoes={pregoes} erro={erros.pregoes} recarregar={carregarTudo}
+          mudarPipeline={mudarPipeline} />
       )}
       {tela.nome === "buscas" && (
         <BuscasScreen buscas={buscas} erro={erros.buscas} recarregar={carregarTudo}
@@ -403,6 +426,8 @@ export default function App() {
           sincronizando={sincronizando}
           erroDetalhe={detalheDoAtivo ? detalheDoAtivo.erro : null}
           recarregarDetalhe={() => carregarDetalhe(idAtivo)}
+          mudarPipeline={mudarPipeline}
+          salvarPregao={salvarPregao}
           voltar={() => setTela({ nome: tela.origem && tela.origem !== "analise" ? tela.origem : "find" })}
           scrollRef={scrollRef}
           meterVariant="led"

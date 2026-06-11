@@ -1580,3 +1580,27 @@ a.arq-link:hover { border-color: var(--tinta); box-shadow: 0 4px 12px -6px rgba(
 
 /* aviso sutil: várias consultas (1 req/s) quando há >1 termo */
 .vivo-multi-aviso { font-size: 11px; margin: -8px 0 14px; }
+
+/* ==== P2: funil de disputa ==== */
+.kanban { display: grid; grid-template-columns: repeat(6, minmax(180px, 1fr)); gap: 10px; align-items: start; overflow-x: auto; }
+.kanban-col { background: var(--aluminio); border: 1px solid var(--linha); border-radius: 10px; padding: 8px; min-height: 120px; }
+.kanban-cab { display: flex; justify-content: space-between; margin: 2px 4px 8px; }
+.kanban-n { color: var(--tinta-2); }
+.kanban-cards { display: flex; flex-direction: column; gap: 8px; }
+.kanban-card { background: var(--painel); border: 1px solid var(--linha); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.kanban-titulo { font-family: var(--font-display); font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; font-size: 14px; text-align: left; background: none; border: 0; cursor: pointer; padding: 0; }
+.kanban-titulo:hover { text-decoration: underline; }
+.kanban-orgao { font-size: 12px; color: var(--tinta-2); }
+.kanban-meta { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.kanban-campo { display: flex; flex-direction: column; gap: 3px; }
+.kanban-vazio { text-align: center; padding: 10px 0; }
+.pipeline-resumo { margin-bottom: 14px; }
+.vista-seg { width: fit-content; margin-bottom: 14px; }
+.disputa-mod { padding: 14px; margin-bottom: 14px; }
+.disputa-cab { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.disputa-campos { display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)); gap: 12px; }
+.disputa-campo { display: flex; flex-direction: column; gap: 4px; }
+.disputa-vazio { margin: 0; }
+.disputa-salvar { padding: 6px 12px; }
+@media (max-width: 1100px) { .kanban { grid-template-columns: repeat(3, minmax(180px, 1fr)); } }
+@media (max-width: 720px) { .disputa-campos { grid-template-columns: 1fr; } }

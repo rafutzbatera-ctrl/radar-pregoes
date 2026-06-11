@@ -252,6 +252,19 @@ export function Etiqueta({ veredito }) {
   );
 }
 
+/* ---------- cartão de resumo (faixa-resumo da análise e do funil) ---------- */
+export function Resumo({ k, v, sub, pequeno }) {
+  return (
+    <div className="mod resumo-mod">
+      <div className="silk">{k}</div>
+      <div className="v" style={pequeno ? { fontSize: "12px", fontWeight: 500 } : undefined}>
+        {v}
+        {sub && <small><br />{sub}</small>}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- célula de custo editável (tabela de itens + catálogo) ----------
    aoEditar(v): chamado a cada digitação válida (recálculo ao vivo)
    aoConfirmar(v): chamado no blur/Enter (persistência via API) */
