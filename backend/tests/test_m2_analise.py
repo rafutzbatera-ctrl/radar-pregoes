@@ -98,3 +98,62 @@ def test_nao_vale_por_margem_baixa(con):
     r = analise.analisar_pregao(con, pregao_id)
     # margem (105-100)/105 ≈ 4,8% < 8% → nao_vale
     assert r["veredito"] == "nao_vale"
+
+
+# ---------- P3: custo manual por item (custo efetivo) ----------
+
+def test_custo_manual_sem_match_entra_na_conta(con):
+    """Item SEM match mas com custo digitado entra na margem/lucro/veredito.
+    Catálogo virou atalho; o dado do usuário (custo manual) vale igual."""
+    pregao_id = _montar(con)
+    # item 3 não tem match — antes ficava fora; agora com custo manual entra
+    con.execute("UPDATE itens_pregao SET custo_manual=40 WHERE numero=3")
+    con.commit()
+    r = analise.analisar_pregao(con, pregao_id)
+    # item1 confirmado (1000) + item3 manual (60-40)*2 = 40 → 1040
+    assert r["lucro_potencial"] == pytest.approx(1040.0)
+    assert r["itens_com_custo"] == 2           # item1 (catálogo) + item3 (manual)
+    assert r["itens_confirmados"] == 1          # só item1 tem match confirmado
+    assert r["cobertura"] == pytest.approx(2 / 3)  # cobertura por CUSTO, não match
+
+
+def test_custo_manual_prevalece_sobre_catalogo(con):
+    """custo_manual ▸ catálogo: digitar custo no item confirmado sobrepõe o
+    custo do produto, sem mexer no catálogo."""
+    pregao_id = _montar(con)
+    base = analise.analisar_pregao(con, pregao_id)
+    assert base["lucro_potencial"] == pytest.approx(1000.0)  # custo catálogo 100
+    # custo manual 120 no item1 → (150-120)*20 = 600
+    con.execute("UPDATE itens_pregao SET custo_manual=120 WHERE numero=1")
+    con.commit()
+    r = analise.analisar_pregao(con, pregao_id)
+    assert r["lucro_potencial"] == pytest.approx(600.0)
+    assert r["margem_media"] == pytest.approx((150 - 120) / 150)
+    # catálogo intacto
+    assert con.execute("SELECT custo_unit FROM catalogo_produtos WHERE id=1"
+                       ).fetchone()["custo_unit"] == 100
+
+
+def test_limpar_custo_manual_volta_ao_catalogo(con):
+    """custo_manual NULL → volta a valer o custo do produto confirmado."""
+    pregao_id = _montar(con)
+    con.execute("UPDATE itens_pregao SET custo_manual=120 WHERE numero=1")
+    con.commit()
+    assert analise.analisar_pregao(con, pregao_id)["lucro_potencial"] == pytest.approx(600.0)
+    con.execute("UPDATE itens_pregao SET custo_manual=NULL WHERE numero=1")
+    con.commit()
+    # de volta ao custo do catálogo (100) → 1000
+    assert analise.analisar_pregao(con, pregao_id)["lucro_potencial"] == pytest.approx(1000.0)
+
+
+def test_custo_manual_em_item_sigiloso_nao_entra(con):
+    """Sigiloso não tem valor oficial — custo manual não força conta (princípio 3)."""
+    pregao_id = _montar(con)
+    con.execute(
+        """INSERT INTO itens_pregao
+           (pregao_id, numero, descricao, qtd, valor_unit_estimado, sigiloso, custo_manual)
+           VALUES (?,4,'Item sigiloso',12,NULL,1,30)""", (pregao_id,))
+    con.commit()
+    r = analise.analisar_pregao(con, pregao_id)
+    assert r["lucro_potencial"] == pytest.approx(1000.0)  # inalterado
+    assert r["itens_com_custo"] == 1                       # só item1

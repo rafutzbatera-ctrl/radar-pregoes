@@ -45,6 +45,37 @@ def test_migracao_v2_backfill_salvos_legados(tmp_path):
     c2.close()
 
 
+def test_migracao_v3_custo_manual_e_margem_alvo(tmp_path):
+    """v3 (P3): banco v1 populado migra preservando dados; ganha as colunas
+    custo_manual/produtos_recusados e a config margem_alvo. Idempotente."""
+    caminho = tmp_path / "radar.db"
+    con = sqlite3.connect(caminho)
+    con.executescript(db.MIGRACOES[0])          # banco v1 com dados
+    con.execute("PRAGMA user_version = 1")
+    con.execute("INSERT INTO pregoes (cnpj, ano, seq, numero_controle) "
+                "VALUES ('1',2026,1,'NC-1')")
+    pid = con.execute("SELECT id FROM pregoes").fetchone()[0]
+    con.execute("INSERT INTO itens_pregao (pregao_id, numero, descricao) "
+                "VALUES (?,1,'Item A')", (pid,))
+    con.commit(); con.close()
+
+    c2 = db.abrir(caminho)                      # migra até a última versão
+    cols = {r[1] for r in c2.execute("PRAGMA table_info(itens_pregao)")}
+    assert {"custo_manual", "produtos_recusados"} <= cols
+    # dados preservados
+    assert c2.execute("SELECT COUNT(*) c FROM itens_pregao").fetchone()["c"] == 1
+    # nova chave de config presente com o padrão 0.20
+    assert c2.execute("SELECT valor FROM config WHERE chave='margem_alvo'"
+                      ).fetchone()["valor"] == "0.20"
+    assert c2.execute("PRAGMA user_version").fetchone()[0] == len(db.MIGRACOES)
+
+    # idempotente: rodar de novo não duplica config nem quebra
+    db.migrar(c2)
+    assert c2.execute("SELECT COUNT(*) c FROM config WHERE chave='margem_alvo'"
+                      ).fetchone()["c"] == 1
+    c2.close()
+
+
 def _novo_pregao(con, nc="NC-1"):
     con.execute("INSERT INTO pregoes (cnpj, ano, seq, numero_controle) "
                 "VALUES ('1',2026,1,?)", (nc,))

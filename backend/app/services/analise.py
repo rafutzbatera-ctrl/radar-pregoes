@@ -1,8 +1,11 @@
-"""Cálculo de margem, lucro e veredito (CLAUDE.md §6.2).
+"""Cálculo de margem, lucro e veredito (CLAUDE.md §6.2 — atualizado P3).
 
-Princípio 4: só itens com match CONFIRMADO entram na conta. Item sigiloso
-(valores nulos) não entra na soma mesmo confirmado. O veredito nunca
-esconde a conta — os números crus acompanham sempre.
+Custo efetivo do item = `custo_manual` (override local do pregão) ▸ custo do
+produto com match CONFIRMADO ▸ sem custo. Todo item com custo efetivo e valor
+unitário oficial (não sigiloso) entra na conta — inclusive item com custo
+manual e SEM match. A cobertura e o veredito usam os itens COM CUSTO; o
+`itens_confirmados` (matches confirmados) segue para a UI de matching. O
+veredito nunca esconde a conta — os números crus acompanham sempre.
 """
 import sqlite3
 
@@ -21,6 +24,18 @@ def _regras(con: sqlite3.Connection) -> dict:
     return regras
 
 
+def custo_efetivo_row(it) -> tuple[float | None, str | None]:
+    """Custo efetivo e sua fonte a partir de uma linha (itens_pregao + custo_unit
+    do produto confirmado). manual ▸ catálogo (só com match confirmado) ▸ None."""
+    if it["custo_manual"] is not None:
+        return it["custo_manual"], "manual"
+    custo_cat = it["custo_unit"] if "custo_unit" in it.keys() else None
+    if (custo_cat is not None and it["match_confirmado"]
+            and it["produto_id"] is not None):
+        return custo_cat, "catalogo"
+    return None, None
+
+
 def analisar_pregao(con: sqlite3.Connection, pregao_id: int) -> dict:
     """Recalcula agregados e veredito do pregão e persiste nas colunas calculadas."""
     itens = con.execute(
@@ -31,20 +46,23 @@ def analisar_pregao(con: sqlite3.Connection, pregao_id: int) -> dict:
     ).fetchall()
 
     total_itens = len(itens)
-    confirmados = 0
+    confirmados = 0          # matches confirmados (para a UI de matching)
+    com_custo = 0            # itens com custo efetivo e valor oficial (na conta)
     lucro_potencial = 0.0
     soma_pesos = 0.0          # margem média ponderada pelo valor do item
     soma_margem_peso = 0.0
 
     for it in itens:
-        if not it["match_confirmado"] or it["produto_id"] is None:
+        if it["match_confirmado"] and it["produto_id"] is not None:
+            confirmados += 1
+        custo, _fonte = custo_efetivo_row(it)
+        if custo is None:
             continue
-        confirmados += 1
         unit = it["valor_unit_estimado"]
-        custo = it["custo_unit"]
         qtd = it["qtd"] or 0
-        if it["sigiloso"] or unit is None or custo is None or unit <= 0:
+        if it["sigiloso"] or unit is None or unit <= 0:
             continue  # sem valor oficial não há conta a fazer
+        com_custo += 1
         margem = (unit - custo) / unit
         lucro_potencial += (unit - custo) * qtd
         peso = unit * qtd
@@ -52,10 +70,10 @@ def analisar_pregao(con: sqlite3.Connection, pregao_id: int) -> dict:
         soma_margem_peso += margem * peso
 
     margem_media = (soma_margem_peso / soma_pesos) if soma_pesos > 0 else None
-    cobertura = (confirmados / total_itens) if total_itens else 0.0
+    cobertura = (com_custo / total_itens) if total_itens else 0.0
 
     veredito = None
-    if confirmados > 0 and margem_media is not None:
+    if com_custo > 0 and margem_media is not None:
         r = _regras(con)
         if (margem_media >= r["vale_margem_min"]
                 and cobertura >= r["vale_cobertura_min"]
@@ -69,17 +87,18 @@ def analisar_pregao(con: sqlite3.Connection, pregao_id: int) -> dict:
 
     con.execute(
         "UPDATE pregoes SET veredito=?, lucro_potencial=?, margem_media=? WHERE id=?",
-        (veredito, lucro_potencial if confirmados else None,
+        (veredito, lucro_potencial if com_custo else None,
          margem_media, pregao_id),
     )
     con.commit()
     return {
         "veredito": veredito,
-        "lucro_potencial": lucro_potencial if confirmados else None,
+        "lucro_potencial": lucro_potencial if com_custo else None,
         "margem_media": margem_media,
         "cobertura": cobertura,
         "itens_total": total_itens,
         "itens_confirmados": confirmados,
+        "itens_com_custo": com_custo,
     }
 
 

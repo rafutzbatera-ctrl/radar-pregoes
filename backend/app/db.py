@@ -120,6 +120,16 @@ MIGRACOES = [
     UPDATE pregoes SET status_pipeline='cotacao'
      WHERE salvo=1 AND status_pipeline IS NULL;
     """,
+    # v3 — custo manual por item, margem alvo e matching conservador (P3).
+    # custo_manual: override local do pregão (NULL = sem custo digitado, usa
+    # o catálogo se houver match confirmado). produtos_recusados: JSON [ids]
+    # de produtos que o usuário recusou para o item — não voltam como sugestão.
+    # margem_alvo: usada só na SIMULAÇÃO de itens sem custo (nunca no veredito).
+    """
+    ALTER TABLE itens_pregao ADD COLUMN custo_manual REAL;
+    ALTER TABLE itens_pregao ADD COLUMN produtos_recusados TEXT;
+    INSERT OR IGNORE INTO config(chave, valor) VALUES ('margem_alvo', '0.20');
+    """,
 ]
 
 
