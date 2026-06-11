@@ -57,3 +57,37 @@ def test_salvar_seta_cotacao_e_preserva_status_existente(client, con):
     client.patch(f"/pregoes/{pid}", json={"salvo": False})   # dessalvar preserva
     r = client.patch(f"/pregoes/{pid}", json={"salvo": True})  # re-salvar idem
     assert r.json()["status_pipeline"] == "ganho"
+
+
+def test_resumo_vazio(client):
+    r = client.get("/pipeline/resumo")
+    assert r.status_code == 200
+    corpo = r.json()
+    assert corpo["total_funil"] == 0
+    assert corpo["taxa_ganho"] is None
+    assert corpo["valor_ganho"] is None
+
+
+def test_resumo_com_funil(client, con):
+    dados = [  # (nc, status, valor_final)
+        ("NC-1", "cotacao", None), ("NC-2", "disputando", None),
+        ("NC-3", "ganho", 10000.0), ("NC-4", "ganho", None),
+        ("NC-5", "perdido", None),
+    ]
+    for i, (nc, st, vf) in enumerate(dados, 1):
+        con.execute(
+            "INSERT INTO pregoes (cnpj, ano, seq, numero_controle, salvo, "
+            "status_pipeline, valor_final) VALUES ('1',2026,?,?,1,?,?)",
+            (i, nc, st, vf))
+    # salvo=0 fica FORA do funil mesmo com status
+    con.execute("INSERT INTO pregoes (cnpj, ano, seq, numero_controle, salvo, "
+                "status_pipeline) VALUES ('1',2026,99,'NC-99',0,'ganho')")
+    con.commit()
+
+    corpo = client.get("/pipeline/resumo").json()
+    assert corpo["total_funil"] == 5
+    assert corpo["por_status"]["ganho"] == 2
+    assert corpo["ganhos"] == 2 and corpo["perdidos"] == 1
+    assert corpo["taxa_ganho"] == 2 / 3
+    assert corpo["valor_ganho"] == 10000.0   # só valores PREENCHIDOS
+    assert corpo["ganhos_sem_valor"] == 1    # honestidade: 1 ganho sem valor

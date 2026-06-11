@@ -5,7 +5,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import db, settings
-from .routers import buscas, catalogo, config, descobrir, habilitacao, itens, pregoes
+from .routers import (buscas, catalogo, config, descobrir, habilitacao, itens,
+                      pipeline, pregoes)
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -43,6 +44,7 @@ app.include_router(itens.router)
 app.include_router(catalogo.router)
 app.include_router(habilitacao.router)
 app.include_router(config.router)
+app.include_router(pipeline.router)
 
 
 @app.get("/")
