@@ -104,6 +104,7 @@ export function adaptarPregao(p) {
     amparo: jb.fundamentacao_legal || null,
     beneficio: null, // por item no PNCP; o agregado aparece na tabela de itens
     valorTotal: p.valor_global,
+    valorItens: p.valor_itens,   // Σ valor_total dos itens (oficial; fallback rotulado)
     prazo: dataBr(p.data_fim_vigencia),
     inicioPropostas: dataBr(p.data_inicio_vigencia),
     divulgacao: dataBr(jb.data_publicacao_pncp),
@@ -207,6 +208,7 @@ export const api = {
   atualizarPregao: (id, corpo) =>
     req(`/pregoes/${id}`, { method: "PATCH", body: JSON.stringify(corpo) }).then(adaptarPregao),
   sincronizar: (id) => req(`/pregoes/${id}/sincronizar`, { method: "POST" }),
+  sincronizarItens: (id) => req(`/pregoes/${id}/sincronizar-itens`, { method: "POST" }),
   pipelineResumo: () => req("/pipeline/resumo"),
   // PATCH genérico já existe: atualizarPregao(id, {status_pipeline, data_disputa, valor_final, salvo})
   carregarItens: (pregaoId, produtosPorId) =>

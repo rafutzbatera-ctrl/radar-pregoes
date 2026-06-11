@@ -27,7 +27,8 @@ def _resumo_pregao(con: sqlite3.Connection, p: sqlite3.Row) -> dict:
         """SELECT COUNT(*) total,
                   SUM(match_confirmado) confirmados,
                   SUM(CASE WHEN produto_id IS NOT NULL AND match_confirmado=0
-                      THEN 1 ELSE 0 END) sugeridos
+                      THEN 1 ELSE 0 END) sugeridos,
+                  SUM(valor_total) valor_itens
            FROM itens_pregao WHERE pregao_id=?""", (p["id"],)
     ).fetchone()
     hab = con.execute(
@@ -46,6 +47,9 @@ def _resumo_pregao(con: sqlite3.Connection, p: sqlite3.Row) -> dict:
     d["itens_total"] = contagens["total"] or 0
     d["itens_confirmados"] = contagens["confirmados"] or 0
     d["itens_sugeridos"] = contagens["sugeridos"] or 0
+    # valor derivado: Σ valor_total dos itens (oficial do PNCP) — usado pela UI
+    # quando o valor_global da busca vem nulo, sempre rotulado "Σ dos itens"
+    d["valor_itens"] = contagens["valor_itens"]
     d["cobertura"] = (d["itens_confirmados"] / d["itens_total"]) if d["itens_total"] else 0
     d["habilitacao_total"] = hab["total"] or 0
     d["habilitacao_pendentes"] = hab["pendentes"] or 0
@@ -111,6 +115,19 @@ def atualizar(pregao_id: int, corpo: PregaoPatch,
 def sincronizar(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
     try:
         return sincronizacao.sincronizar(con, pregao_id)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@router.post("/{pregao_id}/sincronizar-itens")
+def sincronizar_itens(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
+    """Sincronização leve (itens + matching + análise), sem PDF/habilitação.
+
+    Roda automaticamente quando a UI abre um pregão sem itens — os itens vêm
+    da API pública do PNCP, nunca de extração de PDF.
+    """
+    try:
+        return sincronizacao.sincronizar_itens(con, pregao_id)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
 

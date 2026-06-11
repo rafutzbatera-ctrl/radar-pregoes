@@ -142,7 +142,11 @@ export default function AnalysisScreen({
             </motion.section>
 
             <motion.div className="resumo" variants={entrada}>
-              <Resumo k="Valor total estimado" v={pregao.valorTotal != null ? fmtBRL(pregao.valorTotal) : "—"} />
+              <Resumo k="Valor total estimado"
+                v={pregao.valorTotal != null ? fmtBRL(pregao.valorTotal)
+                   : pregao.valorItens != null ? fmtBRL(pregao.valorItens) : "—"}
+                sub={pregao.valorTotal == null && pregao.valorItens != null
+                     ? "Σ dos itens do edital" : undefined} />
               <Resumo k="Cobertura do catálogo" v={a.cobertos + " de " + a.total} sub={a.sugeridos > 0 ? a.sugeridos + " sugeridos a confirmar" : "sem pendências"} />
               <Resumo k="Habilitação"
                 v={habil.length ? pendentesHabil + " pendentes" : !habilCarregada ? "carregando…" : pregao.sincronizado ? "sem requisitos" : "não sincronizada"}

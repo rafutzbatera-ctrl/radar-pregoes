@@ -60,6 +60,25 @@ def test_sincronizar_duas_vezes_nao_duplica_itens(con, cliente_fake, tmp_path, m
     assert cliente_fake.chamadas["baixar"] == 1
 
 
+def test_sincronizar_itens_leve_sem_arquivos(con, cliente_fake):
+    """Sincronização leve (abre pregão → itens automáticos): persiste itens e
+    calcula análise SEM baixar nenhum arquivo/PDF."""
+    pregao_id = _criar_pregao(con)
+    r = sincronizacao.sincronizar_itens(con, pregao_id, cliente_fake,
+                                        embed=_embed_fake)
+    assert r["itens"] == 4
+    assert r["erros"] == []
+    assert cliente_fake.chamadas["arquivos"] == 0
+    assert cliente_fake.chamadas["baixar"] == 0   # leve = zero download
+    total = con.execute("SELECT COUNT(*) c FROM itens_pregao").fetchone()["c"]
+    assert total == 4
+    # valor derivado disponível para a UI (Σ valor_total oficial dos itens)
+    soma = con.execute(
+        "SELECT SUM(valor_total) s FROM itens_pregao WHERE pregao_id=?",
+        (pregao_id,)).fetchone()["s"]
+    assert soma == 4659.0 + 43840.0 + 18504.0 + 76180.0  # fixture real Imbaú
+
+
 def test_sincronizar_com_habilitacao_heuristico_nao_explode(
     con, cliente_fake, tmp_path, monkeypatch
 ):

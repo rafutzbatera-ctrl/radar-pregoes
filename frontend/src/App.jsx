@@ -94,12 +94,16 @@ export default function App() {
         api.carregarItens(id, mapa),
         api.carregarHabilitacao(id),
       ]).then(([rp, ri, rh]) => {
+        const itensOk = ri.status === "fulfilled" ? ri.value : null;
+        // pregão sem itens: busca automática na API do PNCP (sincronização
+        // leve, sem PDF) — itens vêm da API pública, não de extração
+        const precisaItens = rp.status === "fulfilled" && itensOk && itensOk.length === 0;
         setDetalhe((d) => {
           if (!d || d.id !== id) return d; // o usuário trocou de pregão no meio
           return {
             id,
             pregao: rp.status === "fulfilled" ? rp.value : null,
-            itens: ri.status === "fulfilled" ? ri.value : null,
+            itens: precisaItens ? null : itensOk,   // null = skeleton enquanto busca
             habilitacao: rh.status === "fulfilled" ? rh.value : null,
             erro:
               rp.status === "rejected" ? (rp.reason && rp.reason.message) || "erro"
@@ -107,6 +111,25 @@ export default function App() {
               : null,
           };
         });
+        if (precisaItens) {
+          api.sincronizarItens(id)
+            .catch(() => {})   // PNCP fora: a recarga abaixo mostra lista vazia
+            .then(() => Promise.allSettled([api.pregao(id), api.carregarItens(id, mapa)]))
+            .then(([rp2, ri2]) => {
+              setDetalhe((d) => {
+                if (!d || d.id !== id) return d;
+                return {
+                  ...d,
+                  pregao: rp2.status === "fulfilled" ? rp2.value : d.pregao,
+                  itens: ri2.status === "fulfilled" ? ri2.value : [],
+                };
+              });
+              // agregados novos (veredito/cobertura) também na lista
+              if (rp2.status === "fulfilled") {
+                setPregoes((ps) => (ps || []).map((p) => (p.id === id ? rp2.value : p)));
+              }
+            });
+        }
         // PDF oficial a um clique mesmo sem sincronizar: se o pregão ainda não
         // tem arquivos no banco, busca só os metadados na API do PNCP
         const pregaoOk = rp.status === "fulfilled" ? rp.value : null;

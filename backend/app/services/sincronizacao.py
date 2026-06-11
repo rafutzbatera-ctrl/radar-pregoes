@@ -81,6 +81,36 @@ def sincronizar(con: sqlite3.Connection, pregao_id: int,
     return resultado
 
 
+def sincronizar_itens(con: sqlite3.Connection, pregao_id: int,
+                      cliente: pncp.ClientePNCP | None = None,
+                      embed=None) -> dict:
+    """Sincronização LEVE: só itens (API 4.2) + matching + análise.
+
+    Sem download de arquivos nem extração de habilitação — é o que roda
+    automaticamente ao abrir um pregão (1-2 requisições, cache 6h).
+    """
+    cliente = cliente or pncp.cliente()
+    pregao = con.execute("SELECT * FROM pregoes WHERE id=?", (pregao_id,)).fetchone()
+    if pregao is None:
+        raise ValueError(f"Pregão {pregao_id} não existe")
+
+    resultado: dict = {"pregao_id": pregao_id, "erros": []}
+    try:
+        itens = cliente.itens(pregao["cnpj"], pregao["ano"], pregao["seq"])
+        resultado["itens"] = _persistir_itens(con, pregao_id, itens)
+    except Exception as exc:
+        log.exception("Falha ao sincronizar itens do pregão %s", pregao_id)
+        resultado["erros"].append(f"itens: {exc}")
+    try:
+        kwargs = {"embed": embed} if embed else {}
+        resultado["matches_sugeridos"] = matching.sugerir_matches(con, pregao_id, **kwargs)
+    except Exception as exc:
+        log.exception("Falha no matching do pregão %s", pregao_id)
+        resultado["erros"].append(f"matching: {exc}")
+    resultado["analise"] = analise.analisar_pregao(con, pregao_id)
+    return resultado
+
+
 def _persistir_itens(con: sqlite3.Connection, pregao_id: int, itens: list) -> int:
     for it in itens:
         con.execute(

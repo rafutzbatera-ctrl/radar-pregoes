@@ -513,7 +513,9 @@ export function CartaoPregao({ pregao, variants, onClick }) {
       <span className="card-orgao">{pregao.orgao}</span>
       {pregao.descricao && <span className="card-desc">{pregao.descricao}</span>}
       <span className="card-meta mono">
-        <span><span className="k">Valor estimado</span>{pregao.valorTotal != null ? fmtBRL(pregao.valorTotal) : "—"}</span>
+        <span><span className="k">Valor estimado</span>
+          {pregao.valorTotal != null ? fmtBRL(pregao.valorTotal)
+           : pregao.valorItens != null ? fmtBRL(pregao.valorItens) + " (Σ itens)" : "—"}</span>
         <span><span className="k">Propostas até</span>{pregao.prazo || "—"}</span>
         <span><span className="k">Itens</span>{ag.itensTotal > 0 ? ag.itensTotal : "—"}</span>
         <span className="desktop-only"><span className="k">Cobertura</span>{ag.itensTotal > 0 ? ag.itensConfirmados + "/" + ag.itensTotal + " no catálogo" : "—"}</span>
