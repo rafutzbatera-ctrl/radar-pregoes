@@ -1,0 +1,16 @@
+[
+  {
+    "uri": "https://pncp.gov.br/pncp-api/v1/orgaos/01613770000172/compras/2026/67/arquivos/1",
+    "url": "https://pncp.gov.br/pncp-api/v1/orgaos/01613770000172/compras/2026/67/arquivos/1",
+    "cnpj": "01613770000172",
+    "anoCompra": 2026,
+    "sequencialCompra": 67,
+    "statusAtivo": true,
+    "dataPublicacaoPncp": "2026-06-03T10:31:29",
+    "sequencialDocumento": 1,
+    "titulo": "Edital EX PE 27.2026 AquisiÃ§Ã£o de Palanques",
+    "tipoDocumentoNome": "Edital",
+    "tipoDocumentoId": 2,
+    "tipoDocumentoDescricao": "Edital"
+  }
+]
