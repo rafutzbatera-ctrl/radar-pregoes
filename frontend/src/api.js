@@ -3,10 +3,27 @@
 const BASE = import.meta.env.VITE_API_URL || "/api";
 
 async function req(caminho, opcoes = {}) {
-  const r = await fetch(BASE + caminho, {
-    headers: { "Content-Type": "application/json" },
-    ...opcoes,
-  });
+  // timeoutMs: backend zumbi deixava a requisição pendurada e a UI em
+  // skeleton eterno — com timeout ela cai no estado de erro com retry.
+  // Só usado onde a espera legítima tem teto conhecido (ex.: descobrir).
+  const { timeoutMs, ...resto } = opcoes;
+  const ctrl = timeoutMs ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+  let r;
+  try {
+    r = await fetch(BASE + caminho, {
+      headers: { "Content-Type": "application/json" },
+      ...(ctrl ? { signal: ctrl.signal } : {}),
+      ...resto,
+    });
+  } catch (e) {
+    if (e.name === "AbortError") {
+      throw new Error("o servidor não respondeu — confira se o backend está rodando");
+    }
+    throw e;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   if (!r.ok) {
     let detalhe = "";
     try {
@@ -308,7 +325,9 @@ export const api = {
     if (esferas && esferas.length) p.set("esferas", esferas.join(","));
     if (pagina != null) p.set("pagina", pagina);
     const s = p.toString();
-    return req("/descobrir" + (s ? `?${s}` : "")).then((r) => ({
+    // 90s: multi-termo (até 5×1 req/s) + retries do WAF cabem; backend morto
+    // não pendura mais a UI em skeleton eterno
+    return req("/descobrir" + (s ? `?${s}` : ""), { timeoutMs: 90000 }).then((r) => ({
       total: r.total,
       totalExato: r.total_exato,
       fonte: r.fonte,           // "consulta" (bulk, valores oficiais) | "busca" (textual)

@@ -184,6 +184,18 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
   const [valorMinVivo, setValorMinVivo] = React.useState("");
   const [valorMaxVivo, setValorMaxVivo] = React.useState("");
   const [ordemVivoLocal, setOrdemVivoLocal] = React.useState("recente");
+  // select ÚNICO de ordenação no ao vivo: -data|data|relevancia vão ao servidor
+  // do PNCP; potencial|valor ordenam localmente os carregados (limpando o outro eixo)
+  const ordemVivoSel = ordemVivoLocal !== "recente" ? ordemVivoLocal : ordemVivo;
+  const mudarOrdemVivo = (v) => {
+    if (v === "potencial" || v === "valor") {
+      setOrdemVivoLocal(v);
+      setOrdemVivo("-data");
+    } else {
+      setOrdemVivoLocal("recente");
+      setOrdemVivo(v);
+    }
+  };
 
   // parse pt-BR ("1.234,50" ou "1234.50") → número | null
   const parseValor = (s) => {
@@ -463,12 +475,17 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
               <option value="ata">Atas</option>
               <option value="contrato">Contratos</option>
             </select>
-            <select className="filtro-sel" value={ordemVivo} onChange={(e) => setOrdemVivo(e.target.value)} aria-label="Ordenação">
+            {/* ordenação UNIFICADA (eram 2 selects "Mais recentes" duplicados):
+                as 3 primeiras opções ordenam no servidor do PNCP; as 2 últimas
+                ordenam localmente os carregados/avaliados */}
+            <select className="filtro-sel" value={ordemVivoSel} onChange={(e) => mudarOrdemVivo(e.target.value)} aria-label="Ordenar">
               <option value="-data">Mais recentes</option>
               <option value="data">Mais antigos</option>
               <option value="relevancia">Mais relevantes</option>
+              <option value="potencial">Potencial p/ você (carregados)</option>
+              <option value="valor">Maior valor (carregados)</option>
             </select>
-            {/* P6: faixa de valor + ordenação CLIENT-SIDE (aplicam aos carregados) */}
+            {/* P6: faixa de valor CLIENT-SIDE (aplica aos carregados) */}
             <div className="filtro-valor mono" role="group" aria-label="Faixa de valor (aplicada aos carregados)">
               <input type="text" inputMode="decimal" className="filtro-valor-input"
                 value={valorMinVivo} onChange={(e) => setValorMinVivo(e.target.value)}
@@ -478,11 +495,6 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
                 value={valorMaxVivo} onChange={(e) => setValorMaxVivo(e.target.value)}
                 placeholder="valor máx" aria-label="Valor máximo (carregados)" />
             </div>
-            <select className="filtro-sel" value={ordemVivoLocal} onChange={(e) => setOrdemVivoLocal(e.target.value)} aria-label="Ordenar carregados">
-              <option value="recente">Mais recentes</option>
-              <option value="potencial">Potencial p/ você</option>
-              <option value="valor">Maior valor</option>
-            </select>
           </React.Fragment>
         )}
 
