@@ -31,8 +31,10 @@ Não é consultoria jurídica nem contábil. Não dá lances. Não emite NF-e.
    casados com o catálogo; item sem match fica fora da conta, visível e cinza.
 5. **Fiscal é sugestão.** NCM/CFOP/CST-CSOSN aparecem sempre com a etiqueta
    "sugestão — confirme com contador". Nada é apresentado como definitivo.
-6. **Gentileza com API pública:** máx. 1 req/s ao PNCP, backoff exponencial em
-   erro, cache local de respostas, User-Agent identificável
+6. **Gentileza com API pública:** máx. 1 req/s em lotes (itens/downloads);
+   chamadas interativas avulsas a 0,3s — pico combinado ~4 req/s (atualizado
+   12/06/2026 — decisão do dono: paginação não espera atrás de lotes). Backoff
+   exponencial em erro, cache local de respostas, User-Agent identificável
    (`RadarPregoes/0.1 (uso pessoal)`).
 
 ## 3. Stack

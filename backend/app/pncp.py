@@ -1,7 +1,18 @@
 """Cliente da API pública do PNCP (CLAUDE.md §4).
 
-Gentileza com API pública (princípio 6): máx. 1 req/s, backoff exponencial
-em erro, cache local de respostas JSON, User-Agent identificável.
+Gentileza com API pública (princípio 6, atualizado 12/06/2026): a fila tem
+DUAS PISTAS independentes (lock + último_ts próprios), para que a paginação do
+usuário não fique presa atrás de lotes de avaliação:
+
+- pista "interativa" (intervalo 0,3s): 1 chamada por ação do usuário —
+  `buscar`, `consulta_propostas`, `detalhe_compra`, `arquivos` (metadados).
+- pista "pesada" (intervalo 1,0s, como sempre): loops de avaliação/sincronização
+  — `itens` e `baixar_arquivo`.
+
+Pico teórico somando as duas pistas ~4,3 req/s (3,3 interativa + 1,0 pesada) —
+ainda gentil com a API pública (decisão do dono: paginação não espera atrás de
+lotes). Backoff exponencial em erro, cache local de respostas JSON, User-Agent
+identificável seguem intactos.
 """
 import hashlib
 import json
@@ -21,7 +32,10 @@ BASE_SEARCH = "https://pncp.gov.br/api/search/"
 BASE_API = "https://pncp.gov.br/api/pncp/v1"
 BASE_CONSULTA = "https://pncp.gov.br/api/consulta/v1"
 
-_MIN_INTERVALO = 1.0  # segundos entre requisições
+# intervalos por pista (segundos entre requisições da MESMA pista)
+_INTERVALO_PESADA = 1.0       # itens/downloads (loops) — como sempre
+_INTERVALO_INTERATIVA = 0.3   # buscar/consulta/detalhe/arquivos (ação avulsa)
+_MIN_INTERVALO = _INTERVALO_PESADA  # compat: pista pesada é o default
 # a busca do PNCP costuma derrubar as primeiras conexões (WAF); o backoff resolve
 _TENTATIVAS = 5
 _CACHE_TTL = 6 * 3600  # 6 h
@@ -36,8 +50,14 @@ class ClientePNCP:
         self.cache_dir = Path(cache_dir) if cache_dir else settings.CACHE_DIR
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.cache_ttl = cache_ttl
-        self._lock = threading.Lock()
-        self._ultima_req = 0.0
+        # duas pistas independentes: cada uma tem o próprio lock + último_ts, de
+        # modo que a pista interativa nunca espera atrás de um lote da pesada.
+        self._pistas = {
+            "pesada": {"lock": threading.Lock(), "ultima": 0.0,
+                       "intervalo": _INTERVALO_PESADA},
+            "interativa": {"lock": threading.Lock(), "ultima": 0.0,
+                           "intervalo": _INTERVALO_INTERATIVA},
+        }
         self._http = httpx.Client(
             headers={"User-Agent": settings.USER_AGENT},
             timeout=60,
@@ -46,27 +66,33 @@ class ClientePNCP:
 
     # ---------- infra ----------
 
-    def _esperar_vez(self) -> None:
-        """Garante no máximo 1 req/s, mesmo com chamadas concorrentes."""
-        with self._lock:
+    def _esperar_vez(self, pista: str = "pesada") -> None:
+        """Respeita o intervalo da PISTA indicada, mesmo com chamadas concorrentes.
+
+        Cada pista tem lock + último_ts próprios → a pista interativa (0,3s) não
+        espera atrás de um lote da pesada (1,0s) e vice-versa.
+        """
+        p = self._pistas[pista]
+        with p["lock"]:
             agora = time.monotonic()
-            falta = _MIN_INTERVALO - (agora - self._ultima_req)
+            falta = p["intervalo"] - (agora - p["ultima"])
             if falta > 0:
                 time.sleep(falta)
-            self._ultima_req = time.monotonic()
+            p["ultima"] = time.monotonic()
 
     def _chave_cache(self, url: str, params: dict) -> Path:
         bruto = url + "?" + json.dumps(params, sort_keys=True, ensure_ascii=False)
         return self.cache_dir / (hashlib.sha256(bruto.encode()).hexdigest() + ".json")
 
-    def _get_json(self, url: str, params: dict, usar_cache: bool = True):
+    def _get_json(self, url: str, params: dict, usar_cache: bool = True,
+                  pista: str = "pesada"):
         arq = self._chave_cache(url, params)
         if usar_cache and arq.exists() and time.time() - arq.stat().st_mtime < self.cache_ttl:
             return json.loads(arq.read_text(encoding="utf-8"))
 
         ultima_exc: Exception | None = None
         for tentativa in range(_TENTATIVAS):
-            self._esperar_vez()
+            self._esperar_vez(pista)
             try:
                 resp = self._http.get(url, params=params)
                 if resp.status_code in (429, 500, 502, 503, 504):
@@ -126,7 +152,8 @@ class ClientePNCP:
             params["modalidades"] = modalidades
         if esferas:
             params["esferas"] = esferas
-        return self._get_json(BASE_SEARCH, params, usar_cache)
+        # pista interativa: 1 chamada por ação do usuário (paginação/digitação)
+        return self._get_json(BASE_SEARCH, params, usar_cache, pista="interativa")
 
     def consulta_propostas(self, data_final: str, modalidade: str = "",
                            uf: str = "", pagina: int = 1, tamanho: int = 50,
@@ -151,8 +178,10 @@ class ClientePNCP:
             params["codigoModalidadeContratacao"] = modalidade
         if uf:
             params["uf"] = uf
+        # pista interativa: paginação em massa também é ação do usuário
         return self._get_json(
-            f"{BASE_CONSULTA}/contratacoes/proposta", params, usar_cache
+            f"{BASE_CONSULTA}/contratacoes/proposta", params, usar_cache,
+            pista="interativa",
         )
 
     def detalhe_compra(self, cnpj: str, ano: int, seq: int,
@@ -165,16 +194,22 @@ class ClientePNCP:
         pela UI (o bulk já embute o valor em cada registro).
         """
         url = f"{BASE_CONSULTA}/orgaos/{cnpj}/compras/{ano}/{seq}"
-        return self._get_json(url, {}, usar_cache)
+        # pista interativa: detalhe avulso (1 compra por ação)
+        return self._get_json(url, {}, usar_cache, pista="interativa")
 
     def itens(self, cnpj: str, ano: int, seq: int, usar_cache: bool = True) -> list:
-        """4.2 — itens do pregão (pagina até esgotar)."""
+        """4.2 — itens do pregão (pagina até esgotar).
+
+        Pista PESADA (1,0s): roda em loops de avaliação/sincronização — fica na
+        fila lenta para não atrapalhar a paginação interativa do usuário.
+        """
         todos: list = []
         pagina = 1
         while True:
             url = f"{BASE_API}/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
             lote = self._get_json(
-                url, {"pagina": pagina, "tamanhoPagina": 100}, usar_cache
+                url, {"pagina": pagina, "tamanhoPagina": 100}, usar_cache,
+                pista="pesada",
             )
             if not lote:
                 break
@@ -185,16 +220,26 @@ class ClientePNCP:
         return todos
 
     def arquivos(self, cnpj: str, ano: int, seq: int, usar_cache: bool = True) -> list:
-        """4.3 — arquivos do pregão (edital, TR, anexos)."""
+        """4.3 — arquivos do pregão (edital, TR, anexos).
+
+        Pista INTERATIVA (0,3s): só metadados (lista de URLs), 1 chamada por
+        ação — o download do binário é que vai na pista pesada.
+        """
         url = f"{BASE_API}/orgaos/{cnpj}/compras/{ano}/{seq}/arquivos"
-        return self._get_json(url, {"pagina": 1, "tamanhoPagina": 20}, usar_cache) or []
+        return self._get_json(
+            url, {"pagina": 1, "tamanhoPagina": 20}, usar_cache, pista="interativa"
+        ) or []
 
     def baixar_arquivo(self, url: str, destino_dir: Path) -> Path:
-        """Baixa o binário de um arquivo, respeitando o nome do content-disposition."""
+        """Baixa o binário de um arquivo, respeitando o nome do content-disposition.
+
+        Pista PESADA (1,0s): o binário pode ter MBs e roda em lote junto da
+        sincronização — fica na fila lenta.
+        """
         destino_dir.mkdir(parents=True, exist_ok=True)
         ultima_exc: Exception | None = None
         for tentativa in range(_TENTATIVAS):
-            self._esperar_vez()
+            self._esperar_vez("pesada")
             try:
                 resp = self._http.get(url)
                 resp.raise_for_status()
