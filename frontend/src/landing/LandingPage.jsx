@@ -199,22 +199,31 @@ export default function LandingPage({ aoEntrar }) {
       <canvas className="ld-canvas" ref={canvasRef} aria-hidden="true" />
 
       {/* ---------- HERO ---------- */}
+      {/* Desktop (≥1024px): o hero vira grid de 2 linhas — topo (identidade +
+          sub/CTAs) e o stat como faixa horizontal de rodapé na largura cheia.
+          Mobile/base: empilha como antes (os wrappers são transparentes). */}
       <section className="ld-hero">
-        <p className="ld-eyebrow">RADAR DE PREGÕES · LEI 14.133 · FONTE OFICIAL PNCP</p>
-        <h1 className="ld-h1">
-          <span className="ld-h1-linha"><span className="ld-h1-inner">O PNCP INTEIRO</span></span>
-          <span className="ld-h1-linha"><span className="ld-h1-inner">NO SEU RADAR.</span></span>
-        </h1>
-        <p className="ld-sub">
-          Busca ao vivo nos ~37 mil editais nacionais, margem e veredito
-          calculados no preço esperado de disputa — sempre com a fonte oficial
-          à vista.
-        </p>
-        <div className="ld-ctas">
-          <button type="button" className="ld-cta" onClick={aoEntrar}>
-            Entrar no radar →
-          </button>
-          <a className="ld-cta-2" href="#como-funciona">Ver como funciona ↓</a>
+        <div className="ld-hero-topo">
+          <div className="ld-hero-id">
+            <p className="ld-eyebrow">RADAR DE PREGÕES · LEI 14.133 · FONTE OFICIAL PNCP</p>
+            <h1 className="ld-h1">
+              <span className="ld-h1-linha"><span className="ld-h1-inner">O PNCP INTEIRO</span></span>
+              <span className="ld-h1-linha"><span className="ld-h1-inner">NO SEU RADAR.</span></span>
+            </h1>
+          </div>
+          <div className="ld-hero-acao">
+            <p className="ld-sub">
+              Busca ao vivo nos ~37 mil editais nacionais, margem e veredito
+              calculados no preço esperado de disputa — sempre com a fonte oficial
+              à vista.
+            </p>
+            <div className="ld-ctas">
+              <button type="button" className="ld-cta" onClick={aoEntrar}>
+                Entrar no radar →
+              </button>
+              <a className="ld-cta-2" href="#como-funciona">Ver como funciona ↓</a>
+            </div>
+          </div>
         </div>
         {statVivo != null && (
           <p className="ld-stat">
@@ -230,95 +239,110 @@ export default function LandingPage({ aoEntrar }) {
       </section>
 
       {/* ---------- COMO FUNCIONA ---------- */}
+      {/* Inner (.ld-wrap) centraliza o conteúdo num max-width largo no desktop,
+          mantendo o padding clamp da seção nas bordas. Cada .ld-ato vira grid
+          de 2 colunas alternadas em ≥1024px (texto ↔ mockup). */}
       <section className="ld-como" id="como-funciona">
-        <h2 className="ld-h2">COMO FUNCIONA</h2>
+        <div className="ld-wrap">
+          <h2 className="ld-h2">COMO FUNCIONA</h2>
 
-        <div className="ld-ato">
-          <span className="ld-ato-num">01</span>
-          <div className="ld-ato-corpo">
-            <h3 className="ld-ato-titulo">DESCOBRIR</h3>
-            <p className="ld-ato-texto">
-              Varra o Brasil por palavra-chave ou navegue tudo aberto. Filtro de
-              compra de verdade: sem credenciamento, sem leilão, sem ruído.
-            </p>
+          <div className="ld-ato">
+            <div className="ld-ato-corpo">
+              <span className="ld-ato-num">01</span>
+              <h3 className="ld-ato-titulo">DESCOBRIR</h3>
+              <p className="ld-ato-texto">
+                Varra o Brasil por palavra-chave ou navegue tudo aberto. Filtro de
+                compra de verdade: sem credenciamento, sem leilão, sem ruído.
+              </p>
+            </div>
+            <div className="ld-ato-mock"><MockDescobrir /></div>
           </div>
-          <MockDescobrir />
-        </div>
 
-        <div className="ld-ato">
-          <span className="ld-ato-num">02</span>
-          <div className="ld-ato-corpo">
-            <h3 className="ld-ato-titulo">ANALISAR</h3>
-            <p className="ld-ato-texto">
-              Itens cruzados com o seu catálogo, margem no preço esperado de
-              disputa (não no teto) e veredito honesto: Vale, Talvez ou Não vale
-              — com a conta sempre à mostra.
-            </p>
+          <div className="ld-ato">
+            <div className="ld-ato-corpo">
+              <span className="ld-ato-num">02</span>
+              <h3 className="ld-ato-titulo">ANALISAR</h3>
+              <p className="ld-ato-texto">
+                Itens cruzados com o seu catálogo, margem no preço esperado de
+                disputa (não no teto) e veredito honesto: Vale, Talvez ou Não vale
+                — com a conta sempre à mostra.
+              </p>
+            </div>
+            <div className="ld-ato-mock"><MockAnalisar /></div>
           </div>
-          <MockAnalisar />
-        </div>
 
-        <div className="ld-ato">
-          <span className="ld-ato-num">03</span>
-          <div className="ld-ato-corpo">
-            <h3 className="ld-ato-titulo">DISPUTAR</h3>
-            <p className="ld-ato-texto">
-              Checklist de habilitação extraído do edital com citação verificada
-              página por página, e o funil da disputa até o resultado.
-            </p>
+          <div className="ld-ato">
+            <div className="ld-ato-corpo">
+              <span className="ld-ato-num">03</span>
+              <h3 className="ld-ato-titulo">DISPUTAR</h3>
+              <p className="ld-ato-texto">
+                Checklist de habilitação extraído do edital com citação verificada
+                página por página, e o funil da disputa até o resultado.
+              </p>
+            </div>
+            <div className="ld-ato-mock"><MockDisputar /></div>
           </div>
-          <MockDisputar />
         </div>
       </section>
 
       {/* ---------- MANIFESTO ---------- */}
+      {/* Cada .ld-frase vira grid de 2 colunas em ≥1024px: frase display gigante
+          à esquerda, corpo (~32rem) à direita alinhado pela baseline. */}
       <section className="ld-manifesto">
-        <div className="ld-frase">
-          <span className="ld-led" aria-hidden="true" />
-          <h2 className="ld-frase-titulo">NUNCA INVENTA.</h2>
-          <p className="ld-frase-corpo">
-            Toda exigência sai com o trecho literal do edital, página e
-            verificação. O que não foi achado fica marcado: não encontrado.
-          </p>
-        </div>
-        <div className="ld-frase">
-          <span className="ld-led" aria-hidden="true" />
-          <h2 className="ld-frase-titulo">FONTE OFICIAL SEMPRE À VISTA.</h2>
-          <p className="ld-frase-corpo">
-            Valores e prazos vêm do PNCP. O link do edital oficial nunca sai da
-            tela.
-          </p>
-        </div>
-        <div className="ld-frase">
-          <span className="ld-led" aria-hidden="true" />
-          <h2 className="ld-frase-titulo">A CONTA É SUA.</h2>
-          <p className="ld-frase-corpo">
-            Custo é dado seu; simulação vem rotulada de simulação. O veredito
-            nunca esconde os números.
-          </p>
+        <div className="ld-wrap">
+          <div className="ld-frase">
+            <span className="ld-led" aria-hidden="true" />
+            <h2 className="ld-frase-titulo">NUNCA INVENTA.</h2>
+            <p className="ld-frase-corpo">
+              Toda exigência sai com o trecho literal do edital, página e
+              verificação. O que não foi achado fica marcado: não encontrado.
+            </p>
+          </div>
+          <div className="ld-frase">
+            <span className="ld-led" aria-hidden="true" />
+            <h2 className="ld-frase-titulo">FONTE OFICIAL SEMPRE À VISTA.</h2>
+            <p className="ld-frase-corpo">
+              Valores e prazos vêm do PNCP. O link do edital oficial nunca sai da
+              tela.
+            </p>
+          </div>
+          <div className="ld-frase">
+            <span className="ld-led" aria-hidden="true" />
+            <h2 className="ld-frase-titulo">A CONTA É SUA.</h2>
+            <p className="ld-frase-corpo">
+              Custo é dado seu; simulação vem rotulada de simulação. O veredito
+              nunca esconde os números.
+            </p>
+          </div>
         </div>
       </section>
 
       {/* ---------- CTA FINAL ---------- */}
+      {/* Em ≥1024px o CTA centraliza em largura cheia e o rodapé vira 2 colunas
+          (um aviso em cada). */}
       <section className="ld-final">
-        <h2 className="ld-h2 ld-final-h2">
-          <span className="ld-h1-linha">PRONTO PARA O</span>
-          <span className="ld-h1-linha">PRÓXIMO PREGÃO?</span>
-        </h2>
-        <button type="button" className="ld-cta" onClick={aoEntrar}>
-          Entrar no radar →
-        </button>
+        <div className="ld-wrap">
+          <div className="ld-final-bloco">
+            <h2 className="ld-h2 ld-final-h2">
+              <span className="ld-h1-linha">PRONTO PARA O</span>
+              <span className="ld-h1-linha">PRÓXIMO PREGÃO?</span>
+            </h2>
+            <button type="button" className="ld-cta" onClick={aoEntrar}>
+              Entrar no radar →
+            </button>
+          </div>
 
-        <footer className="ld-rodape">
-          <p className="ld-aviso">
-            Ferramenta de apoio à decisão. O edital oficial e os valores estão
-            no PNCP. Confira antes de dar lance.
-          </p>
-          <p className="ld-aviso">
-            Sugestões fiscais (NCM, CFOP, CST/CSOSN) são apoio, não orientação
-            contábil. Confirme com seu contador antes de emitir a nota.
-          </p>
-        </footer>
+          <footer className="ld-rodape">
+            <p className="ld-aviso">
+              Ferramenta de apoio à decisão. O edital oficial e os valores estão
+              no PNCP. Confira antes de dar lance.
+            </p>
+            <p className="ld-aviso">
+              Sugestões fiscais (NCM, CFOP, CST/CSOSN) são apoio, não orientação
+              contábil. Confirme com seu contador antes de emitir a nota.
+            </p>
+          </footer>
+        </div>
       </section>
     </div>
   );
