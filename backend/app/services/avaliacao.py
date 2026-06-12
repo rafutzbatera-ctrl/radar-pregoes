@@ -78,10 +78,14 @@ def avaliar_alvos(con: sqlite3.Connection, alvos: list[dict],
             continue
 
         valor_itens = None
+        itens_servico = 0
         for it in itens:
             vt = it.get("valorTotal")
             if vt is not None:
                 valor_itens = (valor_itens or 0.0) + vt
+            # "M"/"S" oficial do PNCP — alimenta o filtro "só compra de bens"
+            if (it.get("materialOuServico") or "").upper() == "S":
+                itens_servico += 1
 
         itens_aderentes = 0
         receita_aderente = 0.0
@@ -103,6 +107,7 @@ def avaliar_alvos(con: sqlite3.Connection, alvos: list[dict],
         avaliados[nc] = {
             "valor_itens": valor_itens,
             "itens_total": len(itens),
+            "itens_servico": itens_servico,
             "itens_aderentes": itens_aderentes,
             "receita_aderente": receita_aderente if itens_aderentes else None,
         }

@@ -145,6 +145,14 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
   const [fonte, setFonte] = React.useState("radar");
   const aoVivo = !apenasSalvos && fonte === "vivo";
 
+  // P9 — "Só compra de bens" (padrão LIGADO): credenciamentos/chamamentos
+  // (modalidade 12) e leilões (1/13, governo VENDENDO) afogam a lista de quem
+  // fornece material. Ligado e sem seleção manual de modalidades, a fonte usa
+  // só as modalidades de COMPRA: Concorrências (4,5), Pregões (6,7) e
+  // Dispensa (8). Após a avaliação, pregões 100% serviço também somem.
+  const [soCompras, setSoCompras] = React.useState(true);
+  const MODALIDADES_COMPRA = ["4", "5", "6", "7", "8"];
+
   // ----- P5: faixa de valor + ordenação (radar e Meus pregões; NÃO no ao vivo) -----
   // O App mantém `pregoes` global como fonte do resto do app; aqui, quando algum
   // filtro/ordem ≠ default, buscamos a lista filtrada LOCAL no backend (debounce
@@ -250,11 +258,15 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
   const [vivo, setVivo] = React.useState({ itens: [], total: 0, totalExato: true, fonte: "consulta", pagina: 1, carregando: false, erro: null });
   const [importando, setImportando] = React.useState(null); // numero_controle em importação
 
-  // filtros atuais empacotados (mesma página para todos os termos no "carregar mais")
+  // filtros atuais empacotados (mesma página para todos os termos no "carregar mais").
+  // P9: seleção manual de modalidades VENCE o toggle; sem seleção e com o
+  // toggle ligado, a fonte recebe só as modalidades de compra.
   const filtrosVivo = React.useCallback((pagina) => ({
-    termos, excluir, ufs: ufsVivo, modalidades: modVivo, esferas: esferasVivo,
+    termos, excluir, ufs: ufsVivo,
+    modalidades: modVivo.length ? modVivo : (soCompras ? MODALIDADES_COMPRA : []),
+    esferas: esferasVivo,
     status: statusVivo, tipo: tipoVivo, ordenacao: ordemVivo, pagina,
-  }), [termos, excluir, ufsVivo, modVivo, esferasVivo, statusVivo, tipoVivo, ordemVivo]);
+  }), [termos, excluir, ufsVivo, modVivo, esferasVivo, statusVivo, tipoVivo, ordemVivo, soCompras]);
 
   const buscarVivo = React.useCallback((pagina, concatenar) => {
     setVivo((v) => ({ ...v, carregando: true, erro: null }));
@@ -308,6 +320,7 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
                 ...i, avaliado: true, naoAvaliavel: false,
                 valorItens: dados.valor_itens,
                 itensTotal: dados.itens_total,
+                itensServico: dados.itens_servico,
                 itensAderentes: dados.itens_aderentes,
                 receitaAderente: dados.receita_aderente,
               };
@@ -337,13 +350,17 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
   // P6: faixa de valor + ordenação aplicadas CLIENT-SIDE aos itens carregados.
   // valor efetivo do item = valorItens (avaliado) ▸ valorTotal do hit.
   const valorEfetivoVivo = (i) => (i.valorItens != null ? i.valorItens : i.valorTotal);
+  // P9: pregão avaliado e 100% serviço some quando "só compra de bens" ligado
+  const sohServico = (i) => i.avaliado && i.itensTotal > 0 && i.itensServico === i.itensTotal;
   const filtroVivoAtivo =
-    valorMinVivo.trim() !== "" || valorMaxVivo.trim() !== "" || ordemVivoLocal !== "recente";
+    valorMinVivo.trim() !== "" || valorMaxVivo.trim() !== "" ||
+    ordemVivoLocal !== "recente" || soCompras;
   const vivoExibido = React.useMemo(() => {
     if (!filtroVivoAtivo) return vivo;
     const min = parseValor(valorMinVivo);
     const max = parseValor(valorMaxVivo);
     let itens = vivo.itens.filter((i) => {
+      if (soCompras && sohServico(i)) return false;
       const v = valorEfetivoVivo(i);
       if (min != null && (v == null || v < min)) return false;
       if (max != null && (v == null || v > max)) return false;
@@ -366,7 +383,7 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
         .map(([i]) => i);
     }
     return { ...vivo, itens };
-  }, [vivo, filtroVivoAtivo, valorMinVivo, valorMaxVivo, ordemVivoLocal]);
+  }, [vivo, filtroVivoAtivo, valorMinVivo, valorMaxVivo, ordemVivoLocal, soCompras]);
 
   const importar = (item) => {
     if (importando) return;
@@ -474,6 +491,13 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
               <option value="encerradas">Encerradas</option>
               <option value="todos">Todas</option>
             </select>
+            {/* P9: corta credenciamentos/leilões na fonte e, após avaliação,
+                some também com pregões 100% serviço */}
+            <button type="button" className={"filtro-status" + (soCompras ? " on" : "")}
+              aria-pressed={soCompras} onClick={() => setSoCompras(!soCompras)}
+              title="Restringe às modalidades de compra (Concorrências, Pregões, Dispensa) e esconde pregões 100% serviço após a avaliação. Selecionar modalidades manualmente substitui o corte.">
+              <span className="led" aria-hidden="true"></span>Só compra de bens
+            </button>
             <select className="filtro-sel" value={tipoVivo} onChange={(e) => setTipoVivo(e.target.value)} aria-label="Tipo de documento">
               <option value="edital">Editais e avisos</option>
               <option value="ata">Atas</option>
@@ -652,7 +676,10 @@ function ListaVivo({ vivo, entrada, importar, importando, nTermos, aoAbrir, reca
     ? (bulk
         ? `${fmtInt(total)} ${total === 1 ? "oportunidade no PNCP · valor oficial embutido" : "oportunidades no PNCP · valores oficiais embutidos"}`
         : `${fmtInt(total)} ${total === 1 ? "oportunidade no PNCP" : "oportunidades no PNCP"}`)
-    : `até ${fmtInt(total)} oportunidades (somando ${nTermos} termo${nTermos === 1 ? "" : "s"})`;
+    : nTermos > 0
+      ? `até ${fmtInt(total)} oportunidades (somando ${nTermos} termo${nTermos === 1 ? "" : "s"})`
+      // sem termos a soma é por modalidades/UFs (fan-out da fonte em massa)
+      : `até ${fmtInt(total)} oportunidades (somando modalidades${bulk ? " · valores oficiais embutidos" : ""})`;
 
   return (
     <div className="cards">
@@ -755,7 +782,11 @@ export function CartaoPregaoVivo({ pregao, variants, importar, importando, aoAbr
           {fmtBRL(potencial)} <em className="margem-pill sim">sim.</em>
         </span>
       ) : pregao.avaliado ? (
-        <span className="card-potencial vazio silk">nenhum item do seu ramo</span>
+        <span className="card-potencial vazio silk">
+          {pregao.itensTotal > 0 && pregao.itensServico === pregao.itensTotal
+            ? "100% serviços — fora do seu ramo"
+            : "nenhum item do seu ramo"}
+        </span>
       ) : null}
       <span className="card-vered">
         {noRadar ? (

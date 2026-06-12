@@ -21,6 +21,28 @@ def _patch_pncp(monkeypatch, cliente):
     monkeypatch.setattr(pncp_mod, "cliente", lambda: cliente)
 
 
+def test_avaliar_conta_itens_de_servico(con):
+    """materialOuServico S/M oficial alimenta o filtro 'só compra de bens' (P9)."""
+    class ClienteMisto:
+        def itens(self, cnpj, ano, seq):
+            return [
+                {"numeroItem": 1, "descricao": "Serviço de manutenção predial",
+                 "materialOuServico": "S", "valorTotal": 100.0,
+                 "valorUnitarioEstimado": 100.0, "quantidade": 1},
+                {"numeroItem": 2, "descricao": "Cabo HDMI 5 m",
+                 "materialOuServico": "M", "valorTotal": 50.0,
+                 "valorUnitarioEstimado": 50.0, "quantidade": 1},
+            ]
+
+    r = avaliacao.avaliar_alvos(
+        con, [{"cnpj": "1", "ano": 2026, "seq": 1, "numero_controle": "NC-MISTO"}],
+        cliente=ClienteMisto(), embed=lambda ts: [(0.0, 1.0) for _ in ts],
+    )
+    av = r["avaliados"]["NC-MISTO"]
+    assert av["itens_total"] == 2
+    assert av["itens_servico"] == 1
+
+
 def _add_produto(con, nome="Palanque tipo T", custo=20.0):
     con.execute(
         "INSERT INTO catalogo_produtos (nome, custo_unit, ativo) VALUES (?,?,1)",
