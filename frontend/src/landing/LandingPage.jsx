@@ -1,5 +1,6 @@
 import React from "react";
 import "./landing.css";
+import RadarScene from "./RadarScene.js";
 
 /** Porta de entrada do app (spec 2026-06-12). aoEntrar() leva ao app.
  *  Estático nesta task — a cena Three.js (Task 3), a coreografia GSAP
@@ -7,10 +8,32 @@ import "./landing.css";
  *  O conteúdo nasce VISÍVEL: nenhum estado inicial de animação no CSS. */
 export default function LandingPage({ aoEntrar }) {
   const canvasRef = React.useRef(null);
+  const cenaRef = React.useRef(null);
 
   // stat vivo do hero (Task 5 liga via api.descobrir). null = a linha NÃO
   // renderiza — nunca um número inventado (princípio 1 do CLAUDE.md).
   const [statVivo] = React.useState(null);
+
+  // Cena Three.js do radar (classe pura). Boot CRT + varredura; em
+  // reduced-motion renderiza UM frame estático. Cleanup faz dispose completo.
+  React.useEffect(() => {
+    const reduzido = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const mobile = window.matchMedia("(max-width: 720px)").matches;
+    const cena = new RadarScene(canvasRef.current, { reduzido, mobile });
+    cenaRef.current = cena;
+    cena.ligar();
+    const aoMover = (e) =>
+      cena.setPonteiro(
+        (e.clientX / window.innerWidth) * 2 - 1,
+        (e.clientY / window.innerHeight) * 2 - 1,
+      );
+    if (!mobile && !reduzido) window.addEventListener("pointermove", aoMover);
+    return () => {
+      window.removeEventListener("pointermove", aoMover);
+      cena.dispose();
+      cenaRef.current = null;
+    };
+  }, []);
 
   return (
     <div className="landing">
