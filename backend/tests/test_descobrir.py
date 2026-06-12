@@ -129,12 +129,69 @@ def test_descobrir_repassa_kwargs_e_status_todos(client, cliente_fake, monkeypat
     r = client.get("/descobrir?q=áudio&status=todos&tipos_documento=ata"
                    "&ordenacao=relevancia&modalidades=6,8&esferas=M,F")
     assert r.status_code == 200
-    chamada = cliente_fake.buscas[-1]
-    assert chamada["status"] == "todos"      # "todos" repassado (e nunca omitido)
-    assert chamada["tipos_documento"] == "ata"
-    assert chamada["ordenacao"] == "relevancia"
-    assert chamada["modalidades"] == "6,8"
-    assert chamada["esferas"] == "M,F"
+    # a busca do PNCP só aceita UM valor por filtro (csv → total=0 silencioso,
+    # verificado 12/06/2026): modalidades × esferas viram produto cartesiano
+    pares = sorted((b["modalidades"], b["esferas"]) for b in cliente_fake.buscas)
+    assert pares == [("6", "F"), ("6", "M"), ("8", "F"), ("8", "M")]
+    for chamada in cliente_fake.buscas:
+        assert chamada["status"] == "todos"  # "todos" repassado (e nunca omitido)
+        assert chamada["tipos_documento"] == "ata"
+        assert chamada["ordenacao"] == "relevancia"
+
+
+# --------- fan-out por modalidade/UF/esfera na busca textual (12/06/2026) ---------
+
+def test_busca_multi_modalidades_uma_chamada_por_id(client, monkeypatch):
+    # modalidades=6,8 com 1 termo → 2 chamadas (nunca csv); total = soma e segue
+    # EXATO (cada pregão tem uma única modalidade — eixos disjuntos)
+    cli = ClienteCapturador(por_termo={"notebook": [_hit("A")]}, total_por_termo=10)
+    _patch_pncp(monkeypatch, cli)
+    r = client.get("/descobrir?q=notebook&modalidades=6,8")
+    corpo = r.json()
+    assert sorted(b["modalidades"] for b in cli.buscas) == ["6", "8"]
+    assert all(b["q"] == "notebook" for b in cli.buscas)
+    assert corpo["total"] == 20
+    assert corpo["total_exato"] is True
+
+
+def test_busca_fanout_cartesiano_uf_esfera(client, monkeypatch):
+    # ufs=SP,RJ × esferas=M,F → 4 chamadas, cada uma com valor ÚNICO por filtro
+    cli = ClienteCapturador(por_termo={"x": [_hit("A")]}, total_por_termo=5)
+    _patch_pncp(monkeypatch, cli)
+    r = client.get("/descobrir?q=x&ufs=SP,RJ&esferas=M,F")
+    pares = sorted((b["ufs"], b["esferas"]) for b in cli.buscas)
+    assert pares == [("RJ", "F"), ("RJ", "M"), ("SP", "F"), ("SP", "M")]
+    assert r.json()["total"] == 20
+
+
+def test_busca_excesso_de_ufs_descarta_filtro(client, monkeypatch):
+    # >4 UFs → sem filtro server-side (mesmo padrão do bulk) e total vira "até N"
+    cli = ClienteCapturador(por_termo={"x": [_hit("A")]})
+    _patch_pncp(monkeypatch, cli)
+    r = client.get("/descobrir?q=x&ufs=SP,RJ,MG,PR,SC")
+    assert [b["ufs"] for b in cli.buscas] == [""]
+    assert r.json()["total_exato"] is False
+
+
+def test_busca_todas_as_esferas_descarta_filtro(client, monkeypatch):
+    # >3 esferas (= praticamente todas) → sem filtro server-side
+    cli = ClienteCapturador(por_termo={"x": [_hit("A")]})
+    _patch_pncp(monkeypatch, cli)
+    r = client.get("/descobrir?q=x&esferas=F,E,M,D")
+    assert [b["esferas"] for b in cli.buscas] == [""]
+    assert r.json()["total_exato"] is False
+
+
+def test_busca_estouro_de_chamadas_descarta_ufs_preserva_modalidades(client, monkeypatch):
+    # 2 termos × 5 modalidades × 3 UFs = 30 > teto (25) → descarta o eixo UF;
+    # modalidades ficam (carregam o "só compra de bens") e termos são sagrados
+    cli = ClienteCapturador(por_termo={"a": [_hit("A")], "b": [_hit("B")]})
+    _patch_pncp(monkeypatch, cli)
+    r = client.get("/descobrir?q=a&q=b&modalidades=4,5,6,7,8&ufs=SP,RJ,MG")
+    assert len(cli.buscas) == 10                       # 2 termos × 5 modalidades
+    assert all(b["ufs"] == "" for b in cli.buscas)
+    assert {b["modalidades"] for b in cli.buscas} == {"4", "5", "6", "7", "8"}
+    assert r.json()["total_exato"] is False
 
 
 def test_descobrir_multi_termo_n_chamadas_e_dedup(client, monkeypatch):

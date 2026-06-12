@@ -37,6 +37,13 @@ DIAS_JANELA_BULK = 90
 # limites a fan-out fica cara demais → deixamos o filtro p/ o client (UI já tem)
 MAX_MODALIDADES_BULK = 5
 MAX_UFS_BULK = 4
+# a BUSCA TEXTUAL também só aceita UM valor por filtro: modalidades/ufs/esferas
+# em csv retornam total=0 EM SILÊNCIO (verificado 12/06/2026) → fan-out de
+# 1 chamada por valor (produto cartesiano com os termos), somando os totais
+MAX_MODALIDADES_BUSCA = 5   # cobre o "só compra de bens" (4,5,6,7,8)
+MAX_UFS_BUSCA = 4           # mesmo teto do bulk
+MAX_ESFERAS_BUSCA = 3       # as 4 = todas = sem filtro
+MAX_CHAMADAS_BUSCA = 25     # teto de chamadas por página (5 termos × 5 modalidades)
 
 
 def _normalizar(texto: str) -> str:
@@ -241,24 +248,53 @@ def _merge_round_robin(listas: list[list[dict]]) -> list[dict]:
     return hits_ordem
 
 
+def _eixo_busca(csv_valores: str, maximo: int) -> tuple[list[str], bool]:
+    """Valores de um filtro p/ fan-out. Acima do teto → sem filtro server-side."""
+    vals = [v for v in csv_valores.split(",") if v] if csv_valores else []
+    if len(vals) > maximo:
+        return [""], True
+    return (vals or [""]), False
+
+
 def _hits_busca(termos, ufs, status, tipos_documento, ordenacao,
                 modalidades, esferas, pagina):
-    """Fonte textual (§4.1): uma consulta por termo, merge round-robin."""
-    def _consultar(termo: str) -> dict:
+    """Fonte textual (§4.1): fan-out 1 chamada por termo × modalidade × UF × esfera.
+
+    A busca do PNCP aceita só UM valor por filtro — csv (ex. modalidades=6,8)
+    retorna total=0 em silêncio (verificado 12/06/2026). Cada chamada vai com
+    valor único; os totais somam EXATO entre combos (eixos disjuntos: cada
+    pregão tem uma única modalidade/UF/esfera; só termos sobrepõem). Acima dos
+    tetos por eixo, ou do teto de chamadas por página, o filtro do eixo é
+    descartado (esferas → UFs; modalidades ficam — carregam o "só compra de
+    bens") e o total vira "até N" (total_exato=False).
+    """
+    mods, desc_m = _eixo_busca(modalidades, MAX_MODALIDADES_BUSCA)
+    sigs, desc_u = _eixo_busca(ufs, MAX_UFS_BUSCA)
+    esfs, desc_e = _eixo_busca(esferas, MAX_ESFERAS_BUSCA)
+    descartou = desc_m or desc_u or desc_e
+
+    if len(termos) * len(mods) * len(sigs) * len(esfs) > MAX_CHAMADAS_BUSCA and len(esfs) > 1:
+        esfs, descartou = [""], True
+    if len(termos) * len(mods) * len(sigs) * len(esfs) > MAX_CHAMADAS_BUSCA and len(sigs) > 1:
+        sigs, descartou = [""], True
+
+    def _consultar(termo: str, mod: str, uf: str, esf: str) -> dict:
         try:
             return pncp.cliente().buscar(
-                q=termo, ufs=ufs, status=status, pagina=pagina, tamanho=TAMANHO,
+                q=termo, ufs=uf, status=status, pagina=pagina, tamanho=TAMANHO,
                 tipos_documento=tipos_documento, ordenacao=ordenacao,
-                modalidades=modalidades, esferas=esferas,
+                modalidades=mod, esferas=esf,
             )
         except RuntimeError as exc:  # PNCP fora do ar após os retries
             raise HTTPException(503, str(exc))
 
-    respostas = [_consultar(termo) for termo in termos]
+    combos = [(t, m, u, e)
+              for t in termos for m in mods for u in sigs for e in esfs]
+    respostas = [_consultar(*combo) for combo in combos]
     total = sum(r.get("total", 0) for r in respostas)
     hits = _merge_round_robin([list(r.get("items", [])) for r in respostas])
-    # exato ⇔ ≤1 termo (a soma dos totais por termo pode ter sobreposição)
-    return hits, total, len(termos) <= 1, "busca"
+    # exato ⇔ ≤1 termo (termos sobrepõem) E nenhum filtro descartado
+    return hits, total, len(termos) <= 1 and not descartou, "busca"
 
 
 def _hits_bulk(modalidades: str, ufs: str, pagina: int):

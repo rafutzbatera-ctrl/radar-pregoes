@@ -64,7 +64,7 @@ GET https://pncp.gov.br/api/search/
   ?q={palavras}                  # busca textual
   &tipos_documento=edital
   &status=recebendo_proposta     # ou omitir para todos
-  &ufs=SP                        # opcional, aceita lista "SP,RJ"
+  &ufs=SP                        # opcional, UMA sigla (csv quebra — ver abaixo)
   &ordenacao=-data
   &pagina=1&tamanhoPagina=50     # máx ~50/página
 ```
@@ -80,10 +80,16 @@ ver §4.4, com `valorTotalEstimado`/`valorTotalHomologado`; o caminho antigo
 `(orgao_cnpj, ano, numero_sequencial)`.
 
 Params adicionais VERIFICADOS empiricamente (11/06/2026):
-modalidades=<ids csv> (1 Leilão-Eletr · 2 Diálogo Comp. · 3 Concurso · 4 Concorrência-Eletr · 5 Concorrência-Pres · 6 Pregão-Eletr · 7 Pregão-Pres · 8 Dispensa · 9 Inexigibilidade · 10 Manif. Interesse · 11 Pré-qualificação · 12 Credenciamento · 13 Leilão-Pres)
-esferas=<F|E|M|D csv> · ordenacao=-data|data|relevancia
+modalidades=<id ÚNICO> (1 Leilão-Eletr · 2 Diálogo Comp. · 3 Concurso · 4 Concorrência-Eletr · 5 Concorrência-Pres · 6 Pregão-Eletr · 7 Pregão-Pres · 8 Dispensa · 9 Inexigibilidade · 10 Manif. Interesse · 11 Pré-qualificação · 12 Credenciamento · 13 Leilão-Pres)
+esferas=<F|E|M|D ÚNICA> · ordenacao=-data|data|relevancia
 status: só recebendo_proposta|encerradas filtram; todos = sem filtro; OMITIR dá 400
 tamanhoPagina: máx. efetivo 10 na busca. municipios/orgaos: formato desconhecido, não usar.
+**ATENÇÃO (corrigido 12/06/2026):** `ufs`, `modalidades` e `esferas` aceitam SÓ
+UM valor cada — csv (ex. `modalidades=6,8` ou `ufs=SP,RJ`) retorna `total=0`
+EM SILÊNCIO; param repetido vale só o último. Multi-valor = fan-out de 1 req
+por valor e somar os totais (eixos disjuntos → soma exata; o router
+`/descobrir` já faz, com tetos de 5 modalidades · 4 UFs · 3 esferas · 25
+chamadas/página — acima, o filtro do eixo é descartado e o total vira "até N").
 
 ### 4.2 Itens do pregão
 ```
