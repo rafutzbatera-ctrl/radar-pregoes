@@ -417,6 +417,8 @@ export default class RadarScene {
     this.pausado = false;
     // evita salto de dt após pausa longa
     this._ultimoTs = performance.now();
+    // nunca dois loops concorrentes (toggles rápidos de visibilidade)
+    if (this.rafId) cancelAnimationFrame(this.rafId);
     this.rafId = requestAnimationFrame(this._loop);
   }
 

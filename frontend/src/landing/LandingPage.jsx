@@ -26,18 +26,23 @@ export default function LandingPage({ aoEntrar }) {
   React.useEffect(() => {
     const reduzido = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const mobile = window.matchMedia("(max-width: 720px)").matches;
-    const cena = new RadarScene(canvasRef.current, { reduzido, mobile });
-    cenaRef.current = cena;
-    cena.ligar();
+    let cena = null;
+    try {
+      cena = new RadarScene(canvasRef.current, { reduzido, mobile });
+      cenaRef.current = cena;
+      cena.ligar();
+    } catch {
+      cenaRef.current = null; // sem WebGL: a landing segue inteira, só sem 3D
+    }
     const aoMover = (e) =>
       cena.setPonteiro(
         (e.clientX / window.innerWidth) * 2 - 1,
         (e.clientY / window.innerHeight) * 2 - 1,
       );
-    if (!mobile && !reduzido) window.addEventListener("pointermove", aoMover);
+    if (cena && !mobile && !reduzido) window.addEventListener("pointermove", aoMover);
     return () => {
       window.removeEventListener("pointermove", aoMover);
-      cena.dispose();
+      if (cena) cena.dispose();
       cenaRef.current = null;
     };
   }, []);

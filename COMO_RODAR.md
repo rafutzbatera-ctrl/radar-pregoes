@@ -33,7 +33,10 @@ backend\.venv\Scripts\python scripts\seed_catalogo.py
 ```
 
 ## 3. Rodar
-Dois terminais:
+**Atalho:** dois cliques em `iniciar.bat` na raiz — abre os dois servidores em
+janelas próprias e o navegador. (Fechar as janelas = parar.)
+
+Ou manualmente, dois terminais:
 
 ```powershell
 # terminal 1 — API (porta 8000) + monitoramento 2x/dia (06:00/18:00)
