@@ -221,10 +221,14 @@ export function NumPct({ value, className }) {
    Escada de LEDs estilo VU master, escala em % de margem:
    −10 ─ 8 (clip / não vale) ─ 20 (pico / talvez) ─ 40 (sinal / vale) */
 const MED_MIN = -10, MED_MAX = 40, MED_N = 32;
+// corLed = mesmo valor dos tokens do tema (--clip/--pico/--sinal); usado como
+// hex literal (6 dígitos) porque os glows do medidor concatenam alfa direto na
+// string (`${cor}55`/`${cor}66`), o que var() não suporta. Reskin noite-fósforo:
+// agora são exatamente as cores semânticas da paleta.
 const ZONAS = [
-  { ate: 8, cor: "var(--clip)", corLed: "#E5604F" },
-  { ate: 20, cor: "var(--pico)", corLed: "#EFB02A" },
-  { ate: Infinity, cor: "var(--sinal)", corLed: "#35C580" },
+  { ate: 8, cor: "var(--clip)", corLed: "#E25A4A" },
+  { ate: 20, cor: "var(--pico)", corLed: "#E0A21B" },
+  { ate: Infinity, cor: "var(--sinal)", corLed: "#2BD97F" },
 ];
 const corDaPos = (pos) => ZONAS.find((z) => pos < z.ate).corLed;
 

@@ -577,7 +577,7 @@ export default function App() {
 
   if (tela.nome === "landing") {
     return (
-      <React.Suspense fallback={<div style={{ position: "fixed", inset: 0, background: "#0A0F0D" }} />}>
+      <React.Suspense fallback={<div style={{ position: "fixed", inset: 0, background: "var(--aluminio)" }} />}>
         <LandingPage aoEntrar={() => {
           localStorage.setItem("radar_visitou", "1");
           setTela({ nome: "find" });

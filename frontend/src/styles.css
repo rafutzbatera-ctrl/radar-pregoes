@@ -1344,12 +1344,12 @@ body {
 .busca-card-nome { font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: 0.02em; text-transform: uppercase; }
 .busca-card-status { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--silk); }
 .busca-card-status .led { width: 8px; height: 8px; border-radius: 50%; background: var(--linha); }
-.busca-card-status.on .led { background: var(--sinal); box-shadow: 0 0 5px rgba(20,147,87,.6); }
+.busca-card-status.on .led { background: var(--sinal); box-shadow: 0 0 5px rgba(43,217,127,.6); }
 .busca-termos { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 11px; }
 .termo-chip {
   font-family: var(--font-mono);
   font-size: 11px;
-  background: #EEF1EB;
+  background: var(--fundo-2);
   border: 1px solid var(--linha);
   border-radius: 6px;
   padding: 3px 9px;
@@ -1363,7 +1363,7 @@ body {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #fff;
+  color: #0A0F0D;
   background: var(--sinal);
   padding: 3px 8px;
   border-radius: 6px;
@@ -1492,10 +1492,11 @@ body {
 .toast {
   position: fixed; right: 16px; bottom: 52px; z-index: 80;
   display: flex; align-items: center; gap: 9px;
-  background: rgba(23, 28, 26, 0.96); color: #F0F4EE;
+  background: var(--painel); color: var(--tinta);
+  border: 1px solid rgba(224, 162, 27, 0.45);
   font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.02em;
   padding: 10px 14px; border-radius: 8px;
-  box-shadow: 0 10px 26px -12px rgba(18, 24, 20, 0.55);
+  box-shadow: 0 10px 26px -12px rgba(0, 0, 0, 0.7);
   max-width: min(440px, calc(100vw - 32px));
 }
 .toast .aviso-led { width: 7px; height: 7px; border-radius: 50%; background: var(--pico); flex: none; }
@@ -1503,18 +1504,18 @@ body {
 /* status Ativa/Pausada agora é um toggle real (botão) */
 button.busca-card-status { border: none; background: none; padding: 0; cursor: pointer; }
 button.busca-card-status:hover { color: var(--tinta-2); }
-button.busca-card-status:focus-visible { outline: 2px solid var(--tinta); outline-offset: 2px; border-radius: 4px; }
+button.busca-card-status:focus-visible { outline: 2px solid var(--sinal); outline-offset: 2px; border-radius: 4px; }
 
 /* formulários (nova busca / novo produto) seguindo tokens: módulo, mono, raios */
 .form-mod { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
 .form-linhas { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .form-input {
   font-family: var(--font-mono); font-size: 12px; color: var(--tinta);
-  background: #FFFFFF; border: 1px solid var(--linha); border-radius: 7px;
+  background: #0A0F0D; border: 1px solid var(--linha); border-radius: 7px;
   padding: 8px 10px; min-width: 0; flex: 1 1 160px;
 }
 .form-input::placeholder { color: var(--silk); }
-.form-input:focus-visible { outline: 2px solid var(--tinta); outline-offset: 1px; }
+.form-input:focus-visible { outline: 2px solid var(--sinal); outline-offset: 1px; }
 .form-input.curta { flex: 0 1 130px; }
 .form-input.longa { flex: 2 1 260px; }
 
@@ -1565,8 +1566,8 @@ button.busca-card-status:focus-visible { outline: 2px solid var(--tinta); outlin
 .base-wrap { margin-top: 22px; }
 /* variante âmbar do gate-aviso: este aviso é "atenção, é referência", não gate */
 .gate-aviso.ambar {
-  background: linear-gradient(180deg, #FBF3E0, var(--painel));
-  border-color: #E7C778;
+  background: linear-gradient(180deg, rgba(224,162,27,0.10), var(--painel));
+  border-color: rgba(224,162,27,0.40);
 }
 .gate-aviso.ambar .gate-ico { color: var(--pico); }
 
@@ -1583,9 +1584,9 @@ button.busca-card-status:focus-visible { outline: 2px solid var(--tinta); outlin
   letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap;
   padding: 2px 7px; border-radius: 4px; flex: none;
 }
-.base-freq.f-quase-sempre { color: #0F7A47; background: rgba(20, 147, 87, 0.12); }
-.base-freq.f-comum { color: #9A6A04; background: rgba(201, 138, 4, 0.12); }
-.base-freq.f-depende-do-objeto { color: var(--silk); background: rgba(105, 113, 108, 0.12); }
+.base-freq.f-quase-sempre { color: var(--sinal); background: rgba(43, 217, 127, 0.14); }
+.base-freq.f-comum { color: var(--pico); background: rgba(224, 162, 27, 0.16); }
+.base-freq.f-depende-do-objeto { color: var(--silk); background: var(--fundo-2); }
 
 /* veredito pendente (sem item confirmado): palavra apagada, sem cor de chute */
 .hero-veredito-palavra.pendente { color: rgba(255,255,255,0.28); text-shadow: none; font-size: clamp(30px, 3.2vw, 44px); }
@@ -1621,7 +1622,7 @@ a.arq-link:hover { border-color: var(--tinta); box-shadow: 0 4px 12px -6px rgba(
 }
 .kw-chip.excl .kw-x { color: var(--clip); }
 .kw-x:hover { color: var(--tinta); }
-.kw-chip.excl .kw-x:hover { color: #F08A7D; }
+.kw-chip.excl .kw-x:hover { color: var(--clip); filter: brightness(1.15); }
 
 /* dropdown multisseleção — mesmo visual dos .filtro-sel */
 .multi-sel { position: relative; }
@@ -1657,7 +1658,7 @@ a.arq-link:hover { border-color: var(--tinta); box-shadow: 0 4px 12px -6px rgba(
 
 /* ==== P2: funil de disputa ==== */
 .kanban { display: grid; grid-template-columns: repeat(6, minmax(180px, 1fr)); gap: 10px; align-items: start; overflow-x: auto; }
-.kanban-col { background: var(--aluminio); border: 1px solid var(--linha); border-radius: 10px; padding: 8px; min-height: 120px; }
+.kanban-col { background: var(--fundo-2); border: 1px solid var(--linha); border-radius: 10px; padding: 8px; min-height: 120px; }
 .kanban-cab { display: flex; justify-content: space-between; margin: 2px 4px 8px; }
 .kanban-n { color: var(--tinta-2); }
 .kanban-cards { display: flex; flex-direction: column; gap: 8px; }
@@ -1669,6 +1670,9 @@ a.arq-link:hover { border-color: var(--tinta); box-shadow: 0 4px 12px -6px rgba(
 .kanban-campo { display: flex; flex-direction: column; gap: 3px; }
 .kanban-vazio { text-align: center; padding: 10px 0; }
 .pipeline-resumo { margin-bottom: 14px; }
+/* faixa-resumo do funil: números em fósforo (estado vivo do pipeline) — spec §4 */
+.pipeline-resumo .resumo-mod .v { color: var(--sinal); }
+.pipeline-resumo .resumo-mod .v small { color: var(--tinta-2); }
 .vista-seg { width: fit-content; margin-bottom: 14px; }
 .disputa-mod { padding: 14px; margin-bottom: 14px; }
 .disputa-cab { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
@@ -1701,9 +1705,9 @@ a.arq-link:hover { border-color: var(--tinta); box-shadow: 0 4px 12px -6px rgba(
 }
 .margem-alvo-input:focus {
   outline: none;
-  border-color: var(--tinta);
-  background: #FFFFFF;
-  box-shadow: 0 0 0 3px rgba(23, 28, 26, 0.12);
+  border-color: var(--sinal);
+  background: var(--aluminio);
+  box-shadow: 0 0 0 3px var(--halo);
 }
 
 /* célula de custo: input + tag manual + limpar */
@@ -1717,8 +1721,8 @@ a.arq-link:hover { border-color: var(--tinta); box-shadow: 0 4px 12px -6px rgba(
   font-size: 8.5px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #8A5F03;
-  background: rgba(201, 138, 4, 0.14);
+  color: var(--pico);
+  background: rgba(224, 162, 27, 0.16);
   border-radius: 4px;
   padding: 1px 5px;
 }
@@ -1735,7 +1739,7 @@ a.arq-link:hover { border-color: var(--tinta); box-shadow: 0 4px 12px -6px rgba(
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.custo-limpar:hover { background: rgba(204, 69, 55, 0.12); color: #A03328; }
+.custo-limpar:hover { background: rgba(226, 90, 74, 0.16); color: var(--clip); }
 
 /* DetailPanel: linha de simulação rotulada */
 .painel-custo-edit { display: inline-flex; align-items: center; gap: 6px; }
@@ -1743,7 +1747,7 @@ a.arq-link:hover { border-color: var(--tinta); box-shadow: 0 4px 12px -6px rgba(
 .painel-custo-linha.simulacao .mono { font-size: 12px; }
 
 /* ==== camada simulada (custos assumidos na margem alvo) — sempre rotulada ==== */
-.margem-pill.sim { background: rgba(201,138,4,0.12); color: var(--pico); border: 1px dashed var(--pico); }
+.margem-pill.sim { background: rgba(224,162,27,0.14); color: var(--pico); border: 1px dashed var(--pico); }
 .margem-pill.sim em, .lucro-sim em { font-style: normal; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.8; }
 .lucro-sim { color: var(--pico); font-style: italic; }
 .hero-sim { opacity: 0.82; font-style: italic; }
