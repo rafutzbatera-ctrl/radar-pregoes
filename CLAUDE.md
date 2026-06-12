@@ -72,8 +72,10 @@ numero_controle_pncp, municipio_nome, uf, modalidade_licitacao_nome,
 situacao_nome, data_publicacao_pncp, data_inicio_vigencia,
 data_fim_vigencia, valor_global, item_url`.
 **Importante:** o detalhe de metadados vem DESTA resposta — persista o JSON do
-hit. (O endpoint de detalhe da compra não responde publicamente; não dependa
-dele.) Identidade do pregão = `(orgao_cnpj, ano, numero_sequencial)`.
+hit. (O detalhe da compra TAMBÉM responde publicamente, pela API de Consulta —
+ver §4.4, com `valorTotalEstimado`/`valorTotalHomologado`; o caminho antigo
+`api/pncp/v1/.../compras/{ano}/{seq}` dá 301.) Identidade do pregão =
+`(orgao_cnpj, ano, numero_sequencial)`.
 
 Params adicionais VERIFICADOS empiricamente (11/06/2026):
 modalidades=<ids csv> (1 Leilão-Eletr · 2 Diálogo Comp. · 3 Concurso · 4 Concorrência-Eletr · 5 Concorrência-Pres · 6 Pregão-Eletr · 7 Pregão-Pres · 8 Dispensa · 9 Inexigibilidade · 10 Manif. Interesse · 11 Pré-qualificação · 12 Credenciamento · 13 Leilão-Pres)
@@ -104,6 +106,32 @@ Resposta: lista com `titulo, tipoDocumentoNome ("Edital"), url`.
 A `url` retorna o binário direto (HTTP 200, `content-disposition` com o nome
 `*.pdf`). Baixar para `data/arquivos/{cnpj}_{ano}_{seq}/`, respeitando o nome
 do `content-disposition`. Tamanhos típicos: centenas de KB a alguns MB.
+
+### 4.4 API de Consulta (VERIFICADA 12/06/2026)
+Fonte EM MASSA dos valores oficiais. Pública, sem autenticação.
+```
+GET https://pncp.gov.br/api/consulta/v1/contratacoes/proposta
+  ?dataFinal=AAAAMMDD            # obrigatório (encerramento até a data)
+  &pagina=N&tamanhoPagina=50
+  &codigoModalidadeContratacao=6 # opcional, id ÚNICO 1-13 (§4.1)
+  &uf=SP                          # opcional, sigla ÚNICA
+```
+Resposta: `{"data": [...], "totalRegistros": N, "totalPaginas": N, ...}`.
+**TODO registro traz `valorTotalEstimado` preenchido** (≠ da busca textual §4.1,
+onde `valor_global` vem null). Campos por registro: `numeroControlePNCP,
+objetoCompra, numeroCompra, anoCompra, sequencialCompra, modalidadeNome,
+situacaoCompraNome, valorTotalEstimado, valorTotalHomologado,
+dataEncerramentoProposta, dataPublicacaoPncp, tipoInstrumentoConvocatorioNome,
+amparoLegal{nome,descricao}, orgaoEntidade{cnpj,razaoSocial},
+unidadeOrgao{municipioNome,ufSigla,nomeUnidade}`.
+```
+GET https://pncp.gov.br/api/consulta/v1/orgaos/{cnpj}/compras/{ano}/{seq}
+```
+Detalhe de uma compra: responde com `valorTotalEstimado`/`valorTotalHomologado`
+(o caminho `api/pncp/v1/...` dá 301). No router /descobrir, quando o usuário
+navega SEM palavra-chave (`q` vazio + `status=recebendo_proposta` +
+`tipos_documento=edital`), a fonte é esta consulta em massa (campo `fonte:
+"consulta"`); com termo, segue na busca textual (`fonte: "busca"`).
 
 ## 5. Modelo de dados (SQLite)
 ```

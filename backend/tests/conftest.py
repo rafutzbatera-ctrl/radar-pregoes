@@ -32,9 +32,14 @@ class ClientePNCPFake:
     """Serve as respostas REAIS gravadas em tests/fixtures/ sem bater na API."""
 
     def __init__(self):
-        self.chamadas = {"buscar": 0, "itens": 0, "arquivos": 0, "baixar": 0}
+        self.chamadas = {
+            "buscar": 0, "itens": 0, "arquivos": 0, "baixar": 0,
+            "consulta": 0, "detalhe": 0,
+        }
         # captura dos kwargs de cada chamada a buscar (para testes de repasse)
         self.buscas = []
+        # idem para a API de Consulta em massa (§4.4)
+        self.consultas = []
 
     def buscar(self, q="", ufs="", status="", pagina=1, tamanho=50, usar_cache=True,
                tipos_documento="edital", ordenacao="-data", modalidades="",
@@ -46,6 +51,23 @@ class ClientePNCPFake:
             "ordenacao": ordenacao, "modalidades": modalidades, "esferas": esferas,
         })
         return carregar_fixture("search_audio_sp.json")
+
+    def consulta_propostas(self, data_final, modalidade="", uf="", pagina=1,
+                           tamanho=50, usar_cache=True):
+        self.chamadas["consulta"] += 1
+        self.consultas.append({
+            "data_final": data_final, "modalidade": modalidade, "uf": uf,
+            "pagina": pagina, "tamanho": tamanho,
+        })
+        return carregar_fixture("consulta_propostas_sp.json")
+
+    def detalhe_compra(self, cnpj, ano, seq, usar_cache=True):
+        self.chamadas["detalhe"] += 1
+        return {
+            "numeroControlePNCP": f"{cnpj}-1-{int(seq):06d}/{ano}",
+            "valorTotalEstimado": 12345.67,
+            "valorTotalHomologado": None,
+        }
 
     def itens(self, cnpj, ano, seq, usar_cache=True):
         self.chamadas["itens"] += 1

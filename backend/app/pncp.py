@@ -19,6 +19,7 @@ log = logging.getLogger("radar.pncp")
 
 BASE_SEARCH = "https://pncp.gov.br/api/search/"
 BASE_API = "https://pncp.gov.br/api/pncp/v1"
+BASE_CONSULTA = "https://pncp.gov.br/api/consulta/v1"
 
 _MIN_INTERVALO = 1.0  # segundos entre requisições
 # a busca do PNCP costuma derrubar as primeiras conexões (WAF); o backoff resolve
@@ -126,6 +127,45 @@ class ClientePNCP:
         if esferas:
             params["esferas"] = esferas
         return self._get_json(BASE_SEARCH, params, usar_cache)
+
+    def consulta_propostas(self, data_final: str, modalidade: str = "",
+                           uf: str = "", pagina: int = 1, tamanho: int = 50,
+                           usar_cache: bool = True) -> dict:
+        """4.4 — API de Consulta (bulk): contratações com proposta em aberto.
+
+        `GET /consulta/v1/contratacoes/proposta?dataFinal=AAAAMMDD&pagina&tamanhoPagina`.
+        TODO registro traz `valorTotalEstimado` preenchido (≠ da busca textual,
+        onde valor_global vem null) — é a fonte EM MASSA dos valores oficiais.
+
+        Params verificados (12/06/2026): `codigoModalidadeContratacao` (id único
+        1-13, CLAUDE.md §4.1) e `uf` (sigla única). Só entram quando truthy;
+        `dataFinal` é sempre obrigatório. Resposta:
+        `{"data": [...], "totalRegistros": N, "totalPaginas": N, ...}`.
+        """
+        params = {
+            "dataFinal": data_final,
+            "pagina": pagina,
+            "tamanhoPagina": tamanho,
+        }
+        if modalidade:
+            params["codigoModalidadeContratacao"] = modalidade
+        if uf:
+            params["uf"] = uf
+        return self._get_json(
+            f"{BASE_CONSULTA}/contratacoes/proposta", params, usar_cache
+        )
+
+    def detalhe_compra(self, cnpj: str, ano: int, seq: int,
+                       usar_cache: bool = True) -> dict:
+        """4.4 — detalhe de uma compra pela API de Consulta.
+
+        `GET /consulta/v1/orgaos/{cnpj}/compras/{ano}/{seq}` responde
+        publicamente com `valorTotalEstimado`/`valorTotalHomologado` (o caminho
+        antigo `api/pncp/v1/...` dá 301). Disponível e testado; ainda não usado
+        pela UI (o bulk já embute o valor em cada registro).
+        """
+        url = f"{BASE_CONSULTA}/orgaos/{cnpj}/compras/{ano}/{seq}"
+        return self._get_json(url, {}, usar_cache)
 
     def itens(self, cnpj: str, ano: int, seq: int, usar_cache: bool = True) -> list:
         """4.2 — itens do pregão (pagina até esgotar)."""

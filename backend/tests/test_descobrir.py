@@ -34,7 +34,10 @@ def test_descobrir_q_vazio_nao_quebra(client, cliente_fake, monkeypatch):
     _patch_pncp(monkeypatch, cliente_fake)
     r = client.get("/descobrir")
     assert r.status_code == 200
-    assert r.json()["total"] == 39
+    # P7: q vazio + recebendo + edital → fonte EM MASSA (§4.4); total da consulta
+    corpo = r.json()
+    assert corpo["fonte"] == "consulta"
+    assert corpo["total"] == 4874
 
 
 def test_descobrir_marca_ja_no_radar(client, con, cliente_fake, monkeypatch):

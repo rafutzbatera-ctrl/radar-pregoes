@@ -1,11 +1,18 @@
-"""PNCP ao vivo — explorar a busca do PNCP sem persistir (CLAUDE.md §4.1).
+"""PNCP ao vivo — explorar o PNCP sem persistir (CLAUDE.md §4.1 e §4.4).
 
-O usuário pode navegar os ~37 mil editais nacionais ao vivo (a API de busca
-aceita consulta sem termo) e importar para o radar local sob demanda. Tudo
-passa pelo cliente PNCP compartilhado (1 req/s + cache 6h, princípio 6).
+O usuário pode navegar os ~37 mil editais nacionais ao vivo e importar para o
+radar local sob demanda. Tudo passa pelo cliente PNCP compartilhado (1 req/s +
+cache 6h, princípio 6). Duas fontes:
+
+- BUSCA textual (§4.1): quando há palavra-chave (ou tipo/status fora do padrão).
+  O valor (valor_global) vem null nesse endpoint.
+- CONSULTA em massa (§4.4): quando o usuário navega SEM palavra-chave em
+  editais recebendo proposta — TODO registro já traz `valorTotalEstimado`, então
+  os valores oficiais aparecem embutidos em todos os cartões instantaneamente.
 """
 import sqlite3
 import unicodedata
+from datetime import date, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -24,6 +31,12 @@ MAX_TERMOS = 5
 MAX_ALVOS = avaliacao.MAX_ALVOS  # avaliação sob demanda: máx. alvos por chamada (P6)
 MODALIDADES_VALIDAS = {str(i) for i in range(1, 14)}  # ids 1..13 (CLAUDE.md §4.1)
 ESFERAS_VALIDAS = {"F", "E", "M", "D"}
+# janela do bulk: contratações com proposta encerrando até hoje+90d (AAAAMMDD)
+DIAS_JANELA_BULK = 90
+# o server-side da consulta aceita 1 modalidade e 1 UF por request; acima destes
+# limites a fan-out fica cara demais → deixamos o filtro p/ o client (UI já tem)
+MAX_MODALIDADES_BULK = 5
+MAX_UFS_BULK = 4
 
 
 def _normalizar(texto: str) -> str:
@@ -53,6 +66,51 @@ def _validar_esferas(esferas: str) -> str:
         if e not in ESFERAS_VALIDAS:
             raise HTTPException(422, f"esfera inválida: {e!r} (use F, E, M ou D)")
     return ",".join(letras)
+
+
+def _amparo_texto(amparo) -> str | None:
+    """amparoLegal pode ser objeto {nome, descricao} ou string — extrai o texto."""
+    if not amparo:
+        return None
+    if isinstance(amparo, str):
+        return amparo
+    if isinstance(amparo, dict):
+        return amparo.get("descricao") or amparo.get("nome")
+    return None
+
+
+def _mapear_consulta(reg: dict) -> dict:
+    """Registro da API de Consulta (§4.4) → MESMO shape de hit da busca (§4.1).
+
+    O `hit` resultante alimenta tanto `_adaptar` (cartão da UI) quanto
+    `persistir_hit` no importar — sem mudanças nesses dois. Por isso usa as
+    chaves crus da busca textual (title/orgao_cnpj/ano/numero_sequencial…).
+    O valor (`valor_global`) vem de `valorTotalEstimado`, sempre preenchido.
+    """
+    orgao = reg.get("orgaoEntidade") or {}
+    unidade = reg.get("unidadeOrgao") or {}
+    tipo_nome = reg.get("tipoInstrumentoConvocatorioNome") or "Edital"
+    numero = reg.get("numeroCompra")
+    ano = reg.get("anoCompra")
+    title = f"{tipo_nome} nº {numero}/{ano}" if numero else f"{tipo_nome} {ano or ''}".strip()
+    return {
+        "title": title,
+        "description": reg.get("objetoCompra"),
+        "orgao_cnpj": orgao.get("cnpj"),
+        "orgao_nome": orgao.get("razaoSocial"),
+        "ano": ano,
+        "numero_sequencial": reg.get("sequencialCompra"),
+        "numero_controle_pncp": reg.get("numeroControlePNCP"),
+        "municipio_nome": unidade.get("municipioNome"),
+        "uf": unidade.get("ufSigla"),
+        "modalidade_licitacao_nome": reg.get("modalidadeNome"),
+        "situacao_nome": reg.get("situacaoCompraNome"),
+        "data_fim_vigencia": reg.get("dataEncerramentoProposta"),
+        "data_publicacao_pncp": reg.get("dataPublicacaoPncp"),
+        "valor_global": reg.get("valorTotalEstimado"),
+        "unidade_nome": unidade.get("nomeUnidade"),
+        "fundamentacao_legal": _amparo_texto(reg.get("amparoLegal")),
+    }
 
 
 def _adaptar(hit: dict, ja_no_radar: bool, pregao_id: int | None) -> dict:
@@ -92,17 +150,26 @@ def descobrir(
     pagina: int = Query(1, ge=1),
     con: sqlite3.Connection = Depends(get_db),
 ):
-    """Consulta AO VIVO a busca do PNCP, sem persistir nada.
+    """Consulta AO VIVO o PNCP, sem persistir nada. Duas fontes (campo `fonte`):
+
+    - `"consulta"` (EM MASSA, §4.4): quando NÃO há palavra-chave, `status` é
+      `recebendo_proposta` e `tipos_documento` é `edital`. TODO registro já traz
+      `valorTotalEstimado` → os valores oficiais aparecem embutidos em todos os
+      cartões instantaneamente. Fan-out 1 chamada por modalidade × UF (limites
+      server-side: 5 modalidades, 4 UFs; acima disso o filtro fica no client).
+    - `"busca"` (TEXTUAL, §4.1): demais casos (com `q`, ou status/tipo fora do
+      padrão acima). O valor (`valor_global`) vem null nesse endpoint.
 
     - `q` é REPETÍVEL (`?q=microfone&q=caixa de som`): cada termo vira UMA
       consulta (mesma `pagina`); o resultado é mesclado com dedup por
       `numero_controle` intercalando round-robin (não enviesa para o 1º termo).
-      Sem `q` → uma consulta única (total nacional). Máx. 5 termos (422 acima).
+      Sem `q` → fonte em massa (acima). Máx. 5 termos (422 acima).
     - `excluir` (repetível, máx. 5): descarta hits cujo `title+description+orgao`
-      contenha qualquer termo (normalizado: caixa baixa + acentos removidos).
+      contenha qualquer termo (normalizado: caixa baixa + acentos removidos);
+      aplica-se às duas fontes como pós-filtro (aí `total_exato=false`).
     - `status`: só recebendo_proposta|encerradas filtram; todos = sem filtro.
-    - `total_exato`: true ⇔ ≤1 termo E sem exclusão (caso contrário a soma dos
-      totais por termo pode ter sobreposição; a UI deve sinalizar "até N").
+    - `total_exato`: true ⇔ uma única consulta E sem exclusão (caso contrário a
+      soma dos totais pode ter sobreposição; a UI sinaliza "até N").
     """
     if len(q) > MAX_TERMOS:
         raise HTTPException(422, f"máx. {MAX_TERMOS} termos de busca")
@@ -113,36 +180,23 @@ def descobrir(
 
     termos = [t for t in (s.strip() for s in q) if t] or [""]
     excl = [_normalizar(t) for t in excluir if t.strip()]
+    tem_q = any(t for t in termos)
 
-    def _consultar(termo: str) -> dict:
-        try:
-            return pncp.cliente().buscar(
-                q=termo, ufs=ufs, status=status, pagina=pagina, tamanho=TAMANHO,
-                tipos_documento=tipos_documento, ordenacao=ordenacao,
-                modalidades=modalidades, esferas=esferas,
-            )
-        except RuntimeError as exc:  # PNCP fora do ar após os retries
-            raise HTTPException(503, str(exc))
+    # FONTE EM MASSA (§4.4): navegação SEM palavra-chave, editais recebendo
+    # proposta. Aqui o valor oficial vem embutido em cada registro.
+    usar_bulk = (
+        not tem_q
+        and status == "recebendo_proposta"
+        and tipos_documento == "edital"
+    )
 
-    # uma consulta por termo; guarda os hits e o total de cada uma
-    respostas = [_consultar(termo) for termo in termos]
-    total = sum(r.get("total", 0) for r in respostas)
-
-    # merge round-robin com dedup por numero_controle (intercala os termos)
-    listas = [list(r.get("items", [])) for r in respostas]
-    hits_ordem: list[dict] = []
-    vistos: set = set()
-    for col in range(max((len(l) for l in listas), default=0)):
-        for lst in listas:
-            if col >= len(lst):
-                continue
-            hit = lst[col]
-            nc = hit.get("numero_controle_pncp")
-            chave = nc if nc is not None else id(hit)
-            if chave in vistos:
-                continue
-            vistos.add(chave)
-            hits_ordem.append(hit)
+    if usar_bulk:
+        hits_ordem, total, total_exato, fonte = _hits_bulk(modalidades, ufs, pagina)
+    else:
+        hits_ordem, total, total_exato, fonte = _hits_busca(
+            termos, ufs, status, tipos_documento, ordenacao,
+            modalidades, esferas, pagina,
+        )
 
     itens = []
     for hit in hits_ordem:
@@ -159,12 +213,91 @@ def descobrir(
         itens.append(_adaptar(hit, local is not None, local["id"] if local else None))
 
     return {
+        # exclusão presente → o total bruto pode superestimar (filtro client-side)
         "total": total,
-        "total_exato": len(termos) <= 1 and not excl,
+        "total_exato": total_exato and not excl,
         "pagina": pagina,
         "tamanho": TAMANHO,
+        "fonte": fonte,
         "itens": itens,
     }
+
+
+def _merge_round_robin(listas: list[list[dict]]) -> list[dict]:
+    """Intercala N listas com dedup por numero_controle (não enviesa p/ a 1ª)."""
+    hits_ordem: list[dict] = []
+    vistos: set = set()
+    for col in range(max((len(l) for l in listas), default=0)):
+        for lst in listas:
+            if col >= len(lst):
+                continue
+            hit = lst[col]
+            nc = hit.get("numero_controle_pncp")
+            chave = nc if nc is not None else id(hit)
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            hits_ordem.append(hit)
+    return hits_ordem
+
+
+def _hits_busca(termos, ufs, status, tipos_documento, ordenacao,
+                modalidades, esferas, pagina):
+    """Fonte textual (§4.1): uma consulta por termo, merge round-robin."""
+    def _consultar(termo: str) -> dict:
+        try:
+            return pncp.cliente().buscar(
+                q=termo, ufs=ufs, status=status, pagina=pagina, tamanho=TAMANHO,
+                tipos_documento=tipos_documento, ordenacao=ordenacao,
+                modalidades=modalidades, esferas=esferas,
+            )
+        except RuntimeError as exc:  # PNCP fora do ar após os retries
+            raise HTTPException(503, str(exc))
+
+    respostas = [_consultar(termo) for termo in termos]
+    total = sum(r.get("total", 0) for r in respostas)
+    hits = _merge_round_robin([list(r.get("items", [])) for r in respostas])
+    # exato ⇔ ≤1 termo (a soma dos totais por termo pode ter sobreposição)
+    return hits, total, len(termos) <= 1, "busca"
+
+
+def _hits_bulk(modalidades: str, ufs: str, pagina: int):
+    """Fonte em massa (§4.4): valor oficial embutido em cada registro.
+
+    Fan-out controlado: 1 chamada por modalidade × UF selecionada. Acima dos
+    limites server-side (5 modalidades, 4 UFs) ignoramos o filtro e deixamos o
+    pós-filtro para o client (a UI já filtra por modalidade/UF localmente).
+    """
+    data_final = (date.today() + timedelta(days=DIAS_JANELA_BULK)).strftime("%Y%m%d")
+
+    mods = [m for m in modalidades.split(",") if m] if modalidades else []
+    if len(mods) > MAX_MODALIDADES_BULK:
+        mods = []          # muitas → filtra no client
+    siglas = [u.strip() for u in ufs.split(",") if u.strip()] if ufs else []
+    if len(siglas) > MAX_UFS_BULK:
+        siglas = []        # muitas → filtra no client
+
+    # produto cartesiano modalidade × uf; vazio em qualquer eixo = sem o param
+    combos = [(m, u) for m in (mods or [""]) for u in (siglas or [""])]
+
+    def _consultar(mod: str, uf: str) -> dict:
+        try:
+            return pncp.cliente().consulta_propostas(
+                data_final=data_final, modalidade=mod, uf=uf,
+                pagina=pagina, tamanho=TAMANHO,
+            )
+        except RuntimeError as exc:  # PNCP fora do ar após os retries
+            raise HTTPException(503, str(exc))
+
+    respostas = [_consultar(m, u) for (m, u) in combos]
+    total = sum(r.get("totalRegistros", 0) for r in respostas)
+    listas = [
+        [_mapear_consulta(reg) for reg in (r.get("data") or [])]
+        for r in respostas
+    ]
+    hits = _merge_round_robin(listas)
+    # exato ⇔ uma única combinação (somar totais de combos sobrepõe)
+    return hits, total, len(combos) <= 1, "consulta"
 
 
 class AlvoAvaliacao(BaseModel):
