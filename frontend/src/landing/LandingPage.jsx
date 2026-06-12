@@ -3,21 +3,23 @@ import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import "./landing.css";
 import RadarScene from "./RadarScene.js";
+import { api } from "../api.js";
 
 gsap.registerPlugin(ScrollTrigger);
 
 /** Porta de entrada do app (spec 2026-06-12). aoEntrar() leva ao app.
- *  Cena Three.js (Task 3) + coreografia GSAP (Task 4). O stat vivo do PNCP
- *  (Task 5) entra na próxima task. O conteúdo nasce VISÍVEL: nenhum estado
- *  inicial de animação no CSS — só via gsap.set DENTRO do bloco animado. */
+ *  Cena Three.js (Task 3) + coreografia GSAP (Task 4) + stat vivo do PNCP
+ *  (Task 5). O conteúdo nasce VISÍVEL: nenhum estado inicial de animação no
+ *  CSS — só via gsap.set DENTRO do bloco animado. */
 export default function LandingPage({ aoEntrar }) {
   const raizRef = React.useRef(null);     // .landing — scroller dos ScrollTriggers
   const canvasRef = React.useRef(null);
   const cenaRef = React.useRef(null);
+  const statNumRef = React.useRef(null);  // alvo do roll-up GSAP do stat vivo
 
-  // stat vivo do hero (Task 5 liga via api.descobrir). null = a linha NÃO
-  // renderiza — nunca um número inventado (princípio 1 do CLAUDE.md).
-  const [statVivo] = React.useState(null);
+  // stat vivo do hero (Task 5): total real do PNCP via api.descobrir. null = a
+  // linha NÃO renderiza — nunca um número inventado (princípio 1 do CLAUDE.md).
+  const [statVivo, setStatVivo] = React.useState(null);
 
   // Cena Three.js do radar (classe pura). Boot CRT + varredura; em
   // reduced-motion renderiza UM frame estático. Cleanup faz dispose completo.
@@ -144,6 +146,47 @@ export default function LandingPage({ aoEntrar }) {
     return () => mm.revert();
   }, []);
 
+  // ---------- Task 5: stat vivo honesto (total real do PNCP) ----------
+  // Sucesso com total > 0 → renderiza a linha + roll-up. Falha/timeout → catch
+  // silencioso, statVivo segue null → a linha NÃO renderiza (nunca inventa).
+  React.useEffect(() => {
+    let vivo = true;
+    api
+      .descobrir({ pagina: 1 })
+      .then((r) => {
+        if (vivo && r && r.total > 0) setStatVivo(r.total);
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  // Roll-up do número ao aparecer (snap 1, formato pt-BR). Respeita reduced-
+  // motion: sob "reduce" escreve o total final direto, sem animar.
+  React.useEffect(() => {
+    if (statVivo == null) return undefined;
+    const alvo = statNumRef.current;
+    if (!alvo) return undefined;
+    const reduzido = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const escrever = (n) => {
+      alvo.textContent = Math.round(n).toLocaleString("pt-BR");
+    };
+    if (reduzido) {
+      escrever(statVivo);
+      return undefined;
+    }
+    const contador = { v: 0 };
+    const tween = gsap.to(contador, {
+      v: statVivo,
+      duration: 1.1,
+      ease: "power2.out",
+      snap: { v: 1 },
+      onUpdate: () => escrever(contador.v),
+    });
+    return () => tween.kill();
+  }, [statVivo]);
+
   return (
     <div className="landing" ref={raizRef}>
       <canvas className="ld-canvas" ref={canvasRef} aria-hidden="true" />
@@ -168,7 +211,11 @@ export default function LandingPage({ aoEntrar }) {
         </div>
         {statVivo != null && (
           <p className="ld-stat">
-            <span className="ld-stat-num">{statVivo.toLocaleString("pt-BR")}</span>
+            {/* o número é escrito pelo roll-up GSAP (ref); valor inicial já
+                formatado p/ reduced-motion e p/ caso o tween não rode. */}
+            <span className="ld-stat-num" ref={statNumRef}>
+              {statVivo.toLocaleString("pt-BR")}
+            </span>
             <span className="ld-stat-txt"> oportunidades recebendo propostas agora</span>
             <span className="ld-stat-fonte">fonte: PNCP ao vivo</span>
           </p>
