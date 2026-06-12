@@ -58,7 +58,10 @@ export default function LandingPage({ aoEntrar }) {
 
       // (a) Page-load orquestrado — UMA timeline, ease power3.out. Coincide com
       // o boot da cena (já disparado no mount). Estados iniciais via gsap.set.
-      gsap.set(q(".ld-eyebrow, .ld-sub, .ld-ctas > *, .ld-stat"), { autoAlpha: 0, y: 24 });
+      // O .ld-stat NÃO entra: ele só existe depois da resposta do PNCP (async)
+      // e nasce visível com roll-up próprio — mirá-lo aqui só gera o warning
+      // GSAP target not found.
+      gsap.set(q(".ld-eyebrow, .ld-sub, .ld-ctas > *"), { autoAlpha: 0, y: 24 });
       gsap.set(q(".ld-hero .ld-h1-inner"), {
         yPercent: 110,
         clipPath: "inset(0 0 100% 0)",
@@ -73,8 +76,7 @@ export default function LandingPage({ aoEntrar }) {
           "-=0.2",
         )
         .to(q(".ld-sub"), { autoAlpha: 1, y: 0, duration: 0.5 }, "-=0.4")
-        .to(q(".ld-ctas > *"), { autoAlpha: 1, y: 0, duration: 0.5, stagger: 0.08 }, "-=0.3")
-        .to(q(".ld-stat"), { autoAlpha: 1, y: 0, duration: 0.5 }, "-=0.3");
+        .to(q(".ld-ctas > *"), { autoAlpha: 1, y: 0, duration: 0.5, stagger: 0.08 }, "-=0.3");
 
       // (b) Scrub global: o scroll é do contêiner .landing (fixed/overflow-y).
       // Passamos o ELEMENTO como scroller (não a string) p/ evitar ambiguidade.

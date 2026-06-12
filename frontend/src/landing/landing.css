@@ -46,12 +46,29 @@
   background-size: 3px 3px;
 }
 
-/* canvas da cena 3D (Task 3): fundo de tudo, sem capturar ponteiro */
+/* canvas da cena 3D (Task 3): fundo de tudo, sem capturar ponteiro.
+   width/height explícitos: canvas é replaced element — inset sozinho NÃO
+   estica, e ele ficaria no tamanho do buffer (viewport × DPR), estourando. */
 .ld-canvas {
   position: fixed;
   inset: 0;
+  width: 100%;
+  height: 100%;
   z-index: 0;
   pointer-events: none;
+}
+
+/* scrollbar escura — a nativa clara rasga o tema */
+.landing {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(43, 217, 127, 0.35) transparent;
+}
+.landing::-webkit-scrollbar { width: 10px; }
+.landing::-webkit-scrollbar-track { background: transparent; }
+.landing::-webkit-scrollbar-thumb {
+  background: rgba(43, 217, 127, 0.28);
+  border-radius: 5px;
+  border: 2px solid #0A0F0D;
 }
 
 /* todas as seções acima do canvas/grain */

@@ -41,7 +41,7 @@ export default class RadarScene {
 
     // Estado de animação
     this.rafId = 0;
-    this.relogio = new THREE.Clock(false);
+    this._ultimoTs = 0; // delta manual via performance.now (THREE.Clock está deprecado)
     this.tempo = 0;
     this.anguloFeixe = 0;
     this.bootInicio = 0;
@@ -386,7 +386,7 @@ export default class RadarScene {
     this.rodando = true;
     this.pausado = false;
     this.bootInicio = performance.now();
-    this.relogio.start();
+    this._ultimoTs = performance.now();
     this.rafId = requestAnimationFrame(this._loop);
   }
 
@@ -416,7 +416,7 @@ export default class RadarScene {
     if (!this.rodando || !this.pausado || this.reduzido) return;
     this.pausado = false;
     // evita salto de dt após pausa longa
-    this.relogio.getDelta();
+    this._ultimoTs = performance.now();
     this.rafId = requestAnimationFrame(this._loop);
   }
 
@@ -495,7 +495,9 @@ export default class RadarScene {
     if (!this.rodando || this.pausado) return;
     this.rafId = requestAnimationFrame(this._loop);
 
-    const dt = Math.min(this.relogio.getDelta(), 0.05); // clamp p/ estabilidade
+    const agora = performance.now();
+    const dt = Math.min((agora - this._ultimoTs) / 1000, 0.05); // clamp p/ estabilidade
+    this._ultimoTs = agora;
     this.tempo += dt;
 
     // boot 0→1 em 1.6s (easeOut cúbico)
