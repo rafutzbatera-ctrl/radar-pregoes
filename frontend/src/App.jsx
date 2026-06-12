@@ -577,7 +577,7 @@ export default function App() {
 
   if (tela.nome === "landing") {
     return (
-      <React.Suspense fallback={<div style={{ position: "fixed", inset: 0, background: "var(--aluminio)" }} />}>
+      <React.Suspense fallback={<div style={{ position: "fixed", inset: 0, background: "#0A0F0D" }} />}>
         <LandingPage aoEntrar={() => {
           localStorage.setItem("radar_visitou", "1");
           setTela({ nome: "find" });
@@ -654,8 +654,37 @@ function Sidebar({ tela, irPara, semFramer }) {
         ))}
       </nav>
       <div className="sidebar-foot">PNCP · dados reais</div>
+      <BotaoTema />
       <button type="button" className="nav-apresentacao"
         onClick={() => irPara("landing")}>Apresentação</button>
     </motion.aside>
+  );
+}
+
+// Toggle de tema na sidebar. Escuro "noite fósforo" é o padrão; só o claro
+// grava em localStorage (main.jsx restaura antes do render). A landing fica
+// sempre dark. O rótulo descreve o tema PARA O QUAL alterna.
+function BotaoTema() {
+  const [claro, setClaro] = React.useState(
+    () => document.documentElement.dataset.tema === "claro"
+  );
+  const alternar = () => {
+    const html = document.documentElement;
+    const proximoClaro = html.dataset.tema !== "claro";
+    if (proximoClaro) {
+      html.dataset.tema = "claro";
+      localStorage.setItem("radar_tema", "claro");
+    } else {
+      delete html.dataset.tema;
+      localStorage.removeItem("radar_tema");
+    }
+    setClaro(proximoClaro);
+  };
+  return (
+    <button type="button" className="nav-apresentacao"
+      aria-pressed={claro}
+      onClick={alternar}>
+      {claro ? "Tema escuro" : "Tema claro"}
+    </button>
   );
 }

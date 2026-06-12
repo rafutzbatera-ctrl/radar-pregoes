@@ -28,11 +28,39 @@
   --led-off: rgba(43, 217, 127, 0.10);
   --fundo-2: #0D1411;
   --halo: rgba(43, 217, 127, 0.14);
+  /* tokens auxiliares de tematização (valores = dark atual; o tema claro
+     sobrescreve abaixo). well = fundo de inputs/wells; sobre-acento = texto
+     sobre fósforo/âmbar; profundo = superfícies escuras NOS DOIS temas
+     (sidebar, aviso, fundo do hero); atmosfera = halos do body. */
+  --well: #0A0F0D;
+  --sobre-acento: #0A0F0D;
+  --profundo: #050807;
+  --atmosfera:
+    radial-gradient(60% 50% at 82% 6%, rgba(43, 217, 127, 0.04), transparent 70%),
+    radial-gradient(50% 60% at 6% 92%, rgba(43, 217, 127, 0.035), transparent 72%);
   --font-display: "Big Shoulders Display", sans-serif;
   --font-body: "Archivo", sans-serif;
   --font-mono: "IBM Plex Mono", monospace;
   --row-pad: 13px;
   --sidebar-w: 236px;
+}
+
+/* ---------- Tema claro (opcional) — "mesa de operação" original ----------
+   Aplicado em <html data-tema="claro"> (App.jsx grava no localStorage e
+   main.jsx restaura antes do render, sem flash). O escuro "noite fósforo"
+   segue sendo o PADRÃO. Vence o :root por ordem (vem depois) e por seletor de
+   atributo (especificidade ≥ :root). Superfícies que ficam escuras nos dois
+   temas (sidebar, .aviso, hero) usam --profundo e seguem dark aqui também. */
+[data-tema="claro"] {
+  --aluminio: #E4E7E1; --painel: #FAFBF8; --tinta: #171C1A; --tinta-2: #3C443F;
+  --silk: #69716C; --linha: #CDD2CA;
+  --sinal: #0E7C44;  /* verde do claro levemente mais fundo que o original
+                        #149357 → branco sobre ele dá ~5.5:1 (AA) */
+  --pico: #9A6B03; --clip: #B23A2E;  /* âmbar/clip escurecidos p/ AA sobre claro */
+  --led-off: rgba(23, 28, 26, 0.10);
+  --fundo-2: #EDF0EA; --halo: rgba(14, 124, 68, 0.18);
+  --well: #FFFFFF; --sobre-acento: #FFFFFF; --profundo: #171C1A;
+  --atmosfera: none;
 }
 
 * { box-sizing: border-box; }
@@ -48,23 +76,23 @@ body {
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   /* atmosfera noturna: halos fosforosos discretos (~4%) sobre o verde-noite
-     (eco da .landing, mais contida — é mesa de trabalho, não vitrine) */
-  background-image:
-    radial-gradient(60% 50% at 82% 6%, rgba(43, 217, 127, 0.04), transparent 70%),
-    radial-gradient(50% 60% at 6% 92%, rgba(43, 217, 127, 0.035), transparent 72%);
+     (eco da .landing, mais contida — é mesa de trabalho, não vitrine). No tema
+     claro --atmosfera: none zera os halos. */
+  background-image: var(--atmosfera);
   background-attachment: fixed;
 }
 #root { height: 100%; }
 
-/* scrollbars escuras — a nativa clara rasga o tema noturno */
+/* scrollbar temável — thumb derivado de --halo (fósforo no escuro, verde-fundo
+   no claro); a nativa clara rasgaria o tema noturno */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(43, 217, 127, 0.30) transparent;
+  scrollbar-color: var(--halo) transparent;
 }
 *::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb {
-  background: rgba(43, 217, 127, 0.24);
+  background: var(--halo);
   border-radius: 5px;
   border: 2px solid var(--aluminio);
 }
@@ -97,9 +125,13 @@ body {
 
 /* ---------- Sidebar (channel strip) ---------- */
 /* re-mapeada à mão: --tinta agora é neve (texto), então a SUPERFÍCIE da
-   sidebar usa #050807 — mais profunda que o chassi --aluminio (#0A0F0D). */
+   sidebar usa --profundo (#050807) — mais profunda que o chassi --aluminio.
+   --profundo segue ESCURO nos dois temas; por isso a sidebar re-fixa os tokens
+   NEUTROS (texto/linha) em valores dark para todo o subtree (nav, marca, pé,
+   botões tema/apresentação). Os SEMÂNTICOS (--sinal/--halo) seguem o tema,
+   como na spec §6 — o LED/realce da aba ativa muda de tom junto. */
 .sidebar {
-  background: #050807;
+  background: var(--profundo);
   color: var(--tinta);
   display: flex;
   flex-direction: column;
@@ -108,6 +140,10 @@ body {
   position: relative;
   z-index: 30;
   border-right: 1px solid var(--linha);
+  --tinta: #E9F2EC;
+  --tinta-2: #B9C6BE;
+  --silk: #7C8A81;
+  --linha: #1F2A24;
 }
 .brand {
   padding: 0 12px 18px 12px;
@@ -217,15 +253,18 @@ body {
 }
 .screen-inner { max-width: 1180px; margin: 0 auto; }
 
-/* ---------- Aviso fixo ---------- */
+/* ---------- Aviso fixo ----------
+   Barra escura NOS DOIS temas (superfície --profundo): por isso o texto usa
+   valores claros FIXOS (não --tinta/--tinta-2, que escureceriam no claro e
+   sumiriam sobre o fundo escuro). */
 .aviso {
   position: fixed;
   left: var(--sidebar-w);
   right: 0;
   bottom: 0;
   z-index: 40;
-  background: rgba(5, 8, 7, 0.96);
-  color: var(--tinta-2);
+  background: var(--profundo);
+  color: #B9C6BE;
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.02em;
@@ -235,7 +274,7 @@ body {
   gap: 10px;
   border-top: 1px solid var(--linha);
 }
-.aviso strong { color: var(--tinta); font-weight: 600; }
+.aviso strong { color: #E9F2EC; font-weight: 600; }
 .aviso-led { width: 7px; height: 7px; border-radius: 50%; background: var(--pico); flex: none; }
 
 /* ---------- Módulos ---------- */
@@ -268,7 +307,7 @@ body {
   display: flex;
   align-items: center;
   gap: 9px;
-  background: #0A0F0D;
+  background: var(--well);
   border: 1px solid var(--linha);
   border-radius: 8px;
   padding: 0 12px;
@@ -291,7 +330,7 @@ body {
 .filtro-sel {
   height: 40px;
   border: 1px solid var(--linha);
-  background: #0A0F0D;
+  background: var(--well);
   border-radius: 8px;
   font-family: var(--font-mono);
   font-size: 12px;
@@ -306,7 +345,7 @@ body {
   align-items: center;
   gap: 8px;
   border: 1px solid var(--linha);
-  background: #0A0F0D;
+  background: var(--well);
   border-radius: 8px;
   font-family: var(--font-mono);
   font-size: 11.5px;
@@ -439,15 +478,26 @@ body {
 /* hero veredito (módulo escuro — face do console) */
 /* hero veredito (módulo escuro — face do console; re-mapeado à mão: o
    gradiente ia de cinza-escuro até --tinta, que agora é neve. Vira painel
-   levemente elevado descendo ao chassi noturno, hairline --linha) */
+   levemente elevado descendo ao --profundo, hairline --linha).
+   ESCURO NOS DOIS TEMAS: por isso a cor de texto base é um claro FIXO
+   (#E9F2EC) — não --tinta, que escureceria no claro. Veredito/LEDs seguem os
+   tokens semânticos (--sinal/--pico/--clip) e mudam de tom junto. */
 .hero {
   margin-top: 16px;
-  background: linear-gradient(180deg, #16201A 0%, var(--aluminio) 100%);
+  background: linear-gradient(180deg, #16201A 0%, var(--profundo) 100%);
   border: 1px solid var(--linha);
   border-radius: 12px;
   padding: 20px 24px 22px 24px;
-  color: var(--tinta);
+  color: #E9F2EC;
   box-shadow: inset 0 1px 0 rgba(43,217,127,0.06), 0 14px 34px -18px rgba(0,0,0,0.7);
+  /* superfície escura nos dois temas: re-fixa os tokens NEUTROS (texto/linha)
+     em valores dark para todo o subtree do hero (labels .silk, medidor, regra).
+     Os tokens SEMÂNTICOS (--sinal/--pico/--clip/--halo/--led-off) NÃO são
+     re-fixados — vereditos/LEDs seguem o tema, como definido na spec §6. */
+  --tinta: #E9F2EC;
+  --tinta-2: #B9C6BE;
+  --silk: #7C8A81;
+  --linha: #1F2A24;
 }
 .hero-top {
   display: flex;
@@ -946,7 +996,7 @@ body {
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #0A0F0D;
+  color: var(--sobre-acento);
   background: var(--sinal);
   padding: 2px 6px;
   border-radius: 4px;
@@ -958,7 +1008,7 @@ body {
 .filtro-badge {
   font-style: normal;
   background: var(--sinal);
-  color: #0A0F0D;
+  color: var(--sobre-acento);
   font-size: 9px;
   font-weight: 700;
   padding: 1px 5px;
@@ -1084,10 +1134,10 @@ body {
 .match-btn svg { flex: none; }
 .match-btn:hover { background: var(--fundo-2); border-color: rgba(124,138,129,0.35); color: var(--tinta); }
 .match-btn.ok { border-color: rgba(43,217,127,.5); color: var(--sinal); }
-.match-btn.ok:hover { background: var(--sinal); color: #0A0F0D; border-color: var(--sinal); }
+.match-btn.ok:hover { background: var(--sinal); color: var(--sobre-acento); border-color: var(--sinal); }
 .match-btn.ok:disabled { opacity: 0.5; cursor: not-allowed; }
 .match-btn.nao { border-color: rgba(226,90,74,.4); color: var(--clip); }
-.match-btn.nao:hover { background: var(--clip); color: #0A0F0D; border-color: var(--clip); }
+.match-btn.nao:hover { background: var(--clip); color: var(--sobre-acento); border-color: var(--clip); }
 .match-btn.trocar:hover, .match-btn.neutro:hover { border-color: var(--tinta-2); color: var(--tinta); }
 
 /* ---------- HABILITAÇÃO ---------- */
@@ -1259,7 +1309,7 @@ body {
   transition: background 0.13s, color 0.13s;
 }
 .seg-btn + .seg-btn { border-left: 1px solid var(--linha); }
-.seg-btn.on { background: var(--sinal); color: #0A0F0D; }
+.seg-btn.on { background: var(--sinal); color: var(--sobre-acento); }
 .fiscal-uf { font-size: 10.5px; color: var(--silk); }
 
 .fiscal-tbl { overflow: hidden; }
@@ -1366,7 +1416,7 @@ body {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #0A0F0D;
+  color: var(--sobre-acento);
   background: var(--sinal);
   padding: 3px 8px;
   border-radius: 6px;
@@ -1381,7 +1431,7 @@ body {
   align-items: center;
   gap: 7px;
   background: var(--sinal);
-  color: #0A0F0D;
+  color: var(--sobre-acento);
   border: none;
   border-radius: 8px;
   padding: 11px 18px;
@@ -1396,8 +1446,11 @@ body {
 .btn-rodar svg { flex: none; }
 .spin {
   width: 13px; height: 13px;
-  border: 2px solid rgba(10,15,13,0.35);
-  border-top-color: #0A0F0D;
+  /* gira sobre o botão fósforo (.btn-rodar): trilho apagado + cabeça opaca, na
+     cor sobre-acento (como o rótulo). color-mix mantém o contraste trilho/cabeça
+     temável sem hardcode. */
+  border: 2px solid color-mix(in srgb, var(--sobre-acento) 35%, transparent);
+  border-top-color: var(--sobre-acento);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -1445,7 +1498,7 @@ body {
   display: block;
   height: 12px;
   border-radius: 5px;
-  background: linear-gradient(90deg, #101713 25%, rgba(124, 138, 129, 0.12) 50%, #101713 75%);
+  background: linear-gradient(90deg, var(--fundo-2) 25%, rgba(124, 138, 129, 0.12) 50%, var(--fundo-2) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.3s ease-in-out infinite;
   margin-bottom: 10px;
@@ -1514,7 +1567,7 @@ button.busca-card-status:focus-visible { outline: 2px solid var(--sinal); outlin
 .form-linhas { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .form-input {
   font-family: var(--font-mono); font-size: 12px; color: var(--tinta);
-  background: #0A0F0D; border: 1px solid var(--linha); border-radius: 7px;
+  background: var(--well); border: 1px solid var(--linha); border-radius: 7px;
   padding: 8px 10px; min-width: 0; flex: 1 1 160px;
 }
 .form-input::placeholder { color: var(--silk); }
@@ -1544,7 +1597,7 @@ button.busca-card-status:focus-visible { outline: 2px solid var(--sinal); outlin
 .card-noradar {
   font-family: var(--font-mono); font-style: normal; font-size: 8.5px;
   font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
-  color: #0A0F0D; background: var(--pico); padding: 2px 6px; border-radius: 4px;
+  color: var(--sobre-acento); background: var(--pico); padding: 2px 6px; border-radius: 4px;
   margin-right: 9px; vertical-align: 1px;
 }
 
@@ -1765,7 +1818,7 @@ a.arq-link:hover { border-color: var(--silk); box-shadow: 0 4px 12px -6px rgba(0
   gap: 6px;
   height: 40px;
   border: 1px solid var(--linha);
-  background: #0A0F0D;
+  background: var(--well);
   border-radius: 8px;
   padding: 0 10px;
 }
