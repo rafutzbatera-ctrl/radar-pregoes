@@ -50,7 +50,9 @@ cd frontend
 npm run dev
 ```
 
-Abra http://localhost:5173.
+Abra http://localhost:5173 — a raiz `/` é SEMPRE a apresentação (landing);
+o app vive em **http://localhost:5173/radar** (favorite este para o dia a dia;
+no futuro o login entra aí).
 
 ## 4. Fluxo de uso
 1. **Buscas salvas** → criar busca (ex.: termos `áudio, microfone, caixa de som`, UF `SP`) → "Rodar agora" (ou aguardar o agendador 2×/dia).

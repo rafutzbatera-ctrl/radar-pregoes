@@ -75,9 +75,22 @@ export default function App() {
   React.useEffect(() => { carregarTudo(); }, [carregarTudo]);
 
   /* ---------- navegação ---------- */
+  // Rotas por pathname (sem lib — rotas reais/login ficam para o futuro):
+  // "/" = apresentação (SEMPRE) · "/radar" = o app. As telas internas seguem
+  // no estado `tela`; o caminho só distingue landing × app.
   const [tela, setTela] = React.useState(() =>
-    localStorage.getItem("radar_visitou") ? { nome: "find" } : { nome: "landing" }
+    window.location.pathname.startsWith("/radar")
+      ? { nome: "find" }
+      : { nome: "landing" }
   );
+  React.useEffect(() => {
+    const aoVoltar = () =>
+      setTela(window.location.pathname.startsWith("/radar")
+        ? { nome: "find" }
+        : { nome: "landing" });
+    window.addEventListener("popstate", aoVoltar);
+    return () => window.removeEventListener("popstate", aoVoltar);
+  }, []);
   // estado por pregão: { custos:{n:v}, matches:{n:match|null}, habilitacao:{id:status} }
   const [estadoPregoes, setEstadoPregoes] = React.useState({});
   const scrollRef = React.useRef(null);
@@ -579,7 +592,7 @@ export default function App() {
     return (
       <React.Suspense fallback={<div style={{ position: "fixed", inset: 0, background: "#0A0F0D" }} />}>
         <LandingPage aoEntrar={() => {
-          localStorage.setItem("radar_visitou", "1");
+          window.history.pushState({}, "", "/radar");
           setTela({ nome: "find" });
         }} />
       </React.Suspense>
@@ -656,7 +669,10 @@ function Sidebar({ tela, irPara, semFramer }) {
       <div className="sidebar-foot">PNCP · dados reais</div>
       <BotaoTema />
       <button type="button" className="nav-apresentacao"
-        onClick={() => irPara("landing")}>Apresentação</button>
+        onClick={() => {
+          window.history.pushState({}, "", "/");
+          irPara("landing");
+        }}>Apresentação</button>
     </motion.aside>
   );
 }
