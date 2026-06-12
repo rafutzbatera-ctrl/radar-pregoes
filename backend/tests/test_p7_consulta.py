@@ -130,11 +130,17 @@ def test_importar_registro_da_consulta_cria_pregao_com_valor(client, con,
 # ---------- params do bulk: janela, modalidade, uf, fan-out ----------
 
 def test_consulta_envia_data_final_futura(client, cliente_fake, monkeypatch):
+    # horizonte AMPLO (verificado 12/06/2026): 90d cortava ~9 mil oportunidades
+    # com encerramento distante (28.698 vs 37.895 com 25 anos)
     from datetime import date, timedelta
+
+    from app.routers.descobrir import DIAS_JANELA_BULK
+
+    assert DIAS_JANELA_BULK >= 365 * 20
     _patch_pncp(monkeypatch, cliente_fake)
     client.get("/descobrir")
     chamada = cliente_fake.consultas[-1]
-    esperado = (date.today() + timedelta(days=90)).strftime("%Y%m%d")
+    esperado = (date.today() + timedelta(days=DIAS_JANELA_BULK)).strftime("%Y%m%d")
     assert chamada["data_final"] == esperado
     # sem filtro → modalidade/uf vazios
     assert chamada["modalidade"] == ""

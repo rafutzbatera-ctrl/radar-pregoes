@@ -56,6 +56,29 @@ def test_erro_persistente_estoura(tmp_path, monkeypatch):
         cli.buscar("áudio", usar_cache=False)
 
 
+def test_cache_vencido_serve_quando_pncp_cai(tmp_path, monkeypatch):
+    """Resiliência (12/06/2026): PNCP fora do ar + cache VENCIDO existente →
+    serve o cache antigo (dado oficial, só mais velho) em vez de estourar.
+    Sem cache nenhum, segue estourando (teste acima)."""
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    chamadas = {"n": 0}
+
+    def handler(request):
+        chamadas["n"] += 1
+        if chamadas["n"] == 1:
+            return httpx.Response(200, json={"items": [{"x": 1}], "total": 1})
+        return httpx.Response(500)
+
+    cli = _cliente_com_transport(tmp_path, handler)
+    cli.cache_ttl = 0                      # tudo vence na hora
+    ok = cli.buscar("áudio")               # 1ª: sucesso, grava o cache
+    assert ok["total"] == 1
+    resp = cli.buscar("áudio")             # 2ª: cache vencido + API caída → stale
+    assert resp == ok
+    # tentou DE VERDADE (todas as tentativas) antes de cair no cache vencido
+    assert chamadas["n"] == 1 + pncp._TENTATIVAS
+
+
 def test_204_vira_lista_vazia(tmp_path, monkeypatch):
     monkeypatch.setattr("time.sleep", lambda s: None)
 

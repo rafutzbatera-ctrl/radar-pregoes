@@ -31,8 +31,11 @@ MAX_TERMOS = 5
 MAX_ALVOS = avaliacao.MAX_ALVOS  # avaliação sob demanda: máx. alvos por chamada (P6)
 MODALIDADES_VALIDAS = {str(i) for i in range(1, 14)}  # ids 1..13 (CLAUDE.md §4.1)
 ESFERAS_VALIDAS = {"F", "E", "M", "D"}
-# janela do bulk: contratações com proposta encerrando até hoje+90d (AAAAMMDD)
-DIAS_JANELA_BULK = 90
+# janela do bulk: contratações com proposta encerrando até hoje+N dias (AAAAMMDD).
+# Horizonte AMPLO (verificado 12/06/2026): 90d devolvia 28.698; 25 anos devolve
+# 37.895 ≈ tudo que está recebendo proposta (paridade com o total do PNCP) —
+# credenciamentos e concorrências grandes encerram a anos de distância.
+DIAS_JANELA_BULK = 365 * 25
 # o server-side da consulta aceita 1 modalidade e 1 UF por request; acima destes
 # limites a fan-out fica cara demais → deixamos o filtro p/ o client (UI já tem)
 MAX_MODALIDADES_BULK = 5

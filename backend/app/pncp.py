@@ -111,6 +111,13 @@ class ClientePNCP:
                 espera = 2**tentativa  # 1, 2, 4, 8 s
                 log.warning("PNCP %s falhou (%s); retry em %ss", url, exc, espera)
                 time.sleep(espera)
+        # Resiliência (12/06/2026): o PNCP cai/intermite com alguma frequência
+        # ("Erro na comunicação com o banco de dados"). Cache VENCIDO ainda é o
+        # dado oficial — só mais velho; servir é melhor que tela vazia. Só após
+        # esgotar TODAS as tentativas, e nunca quando usar_cache=False.
+        if usar_cache and arq.exists():
+            log.warning("PNCP %s segue fora; servindo cache vencido", url)
+            return json.loads(arq.read_text(encoding="utf-8"))
         raise RuntimeError(f"PNCP indisponível após {_TENTATIVAS} tentativas: {ultima_exc}")
 
     # ---------- endpoints (CLAUDE.md §4) ----------
