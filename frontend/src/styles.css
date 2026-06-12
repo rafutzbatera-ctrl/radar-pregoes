@@ -36,6 +36,9 @@
 }
 
 * { box-sizing: border-box; }
+/* button não herda color (UA default = preto) — no tema noturno isso vira
+   texto invisível; regras com cor explícita seguem vencendo por especificidade */
+button { color: inherit; }
 html, body { margin: 0; padding: 0; height: 100%; }
 body {
   font-family: var(--font-body);
@@ -1663,7 +1666,7 @@ a.arq-link:hover { border-color: var(--tinta); box-shadow: 0 4px 12px -6px rgba(
 .kanban-n { color: var(--tinta-2); }
 .kanban-cards { display: flex; flex-direction: column; gap: 8px; }
 .kanban-card { background: var(--painel); border: 1px solid var(--linha); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
-.kanban-titulo { font-family: var(--font-display); font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; font-size: 14px; text-align: left; background: none; border: 0; cursor: pointer; padding: 0; }
+.kanban-titulo { font-family: var(--font-display); font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; font-size: 14px; text-align: left; background: none; border: 0; cursor: pointer; padding: 0; color: var(--tinta); /* button não herda color — UA default é preto */ }
 .kanban-titulo:hover { text-decoration: underline; }
 .kanban-orgao { font-size: 12px; color: var(--tinta-2); }
 .kanban-meta { display: flex; gap: 8px; align-items: center; font-size: 12px; }
