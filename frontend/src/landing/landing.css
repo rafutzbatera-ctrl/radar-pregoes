@@ -1,0 +1,16 @@
+.landing {
+  --noite: #0A0F0D; --fosforo: #2BD97F; --fosforo-2: rgba(43,217,127,0.14);
+  --neve: #E9F2EC; --cinza: #7C8A81; --ambar: #E0A21B; --rubi: #E25A4A;
+  position: fixed; inset: 0; overflow-y: auto; background: var(--noite);
+  color: var(--neve); font-family: var(--font-body);
+}
+.ld-eyebrow { font-family: var(--font-mono); font-size: 12px;
+  letter-spacing: 0.14em; color: var(--cinza); }
+.ld-h1 { font-family: var(--font-display); font-weight: 800;
+  font-size: clamp(64px, 12vw, 160px); line-height: 0.92; margin: 0;
+  text-transform: uppercase; }
+.ld-cta { font-family: var(--font-mono); font-weight: 600; font-size: 14px;
+  background: var(--fosforo); color: var(--noite); border: 0;
+  padding: 16px 28px; min-height: 44px; cursor: pointer; }
+.ld-hero { min-height: 100dvh; display: grid; align-content: center;
+  gap: 24px; padding: 24px clamp(20px, 6vw, 96px); }

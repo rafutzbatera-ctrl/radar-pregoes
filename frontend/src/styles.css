@@ -156,6 +156,20 @@ body {
   color: #5F6B63;
   text-transform: uppercase;
 }
+.nav-apresentacao {
+  margin: 0 12px 8px 12px;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--silk);
+  text-align: left;
+}
+.nav-apresentacao:hover { color: #E9EDE9; text-decoration: underline; }
 
 /* ---------- Main / screens ---------- */
 .main { position: relative; overflow: hidden; }

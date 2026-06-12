@@ -7,6 +7,8 @@ import { MotionCtx, Ico } from "./helpers.jsx";
 import { FindScreen, BuscasScreen, CatalogScreen, EstadoCarregando, EstadoErro } from "./FindScreen.jsx";
 import AnalysisScreen from "./AnalysisScreen.jsx";
 
+const LandingPage = React.lazy(() => import("./landing/LandingPage.jsx"));
+
 const NAV = [
   { id: "find", rotulo: "Encontrar pregões", ico: "radar" },
   { id: "meus", rotulo: "Meus pregões", ico: "pasta" },
@@ -73,7 +75,9 @@ export default function App() {
   React.useEffect(() => { carregarTudo(); }, [carregarTudo]);
 
   /* ---------- navegação ---------- */
-  const [tela, setTela] = React.useState({ nome: "find" });
+  const [tela, setTela] = React.useState(() =>
+    localStorage.getItem("radar_visitou") ? { nome: "find" } : { nome: "landing" }
+  );
   // estado por pregão: { custos:{n:v}, matches:{n:match|null}, habilitacao:{id:status} }
   const [estadoPregoes, setEstadoPregoes] = React.useState({});
   const scrollRef = React.useRef(null);
@@ -571,6 +575,17 @@ export default function App() {
     </motion.div>
   );
 
+  if (tela.nome === "landing") {
+    return (
+      <React.Suspense fallback={<div style={{ position: "fixed", inset: 0, background: "#0A0F0D" }} />}>
+        <LandingPage aoEntrar={() => {
+          localStorage.setItem("radar_visitou", "1");
+          setTela({ nome: "find" });
+        }} />
+      </React.Suspense>
+    );
+  }
+
   return (
     <MotionCtx.Provider value={modo}>
       <div className="app" key={semFramer ? "estatico" : "animado"}>
@@ -639,6 +654,8 @@ function Sidebar({ tela, irPara, semFramer }) {
         ))}
       </nav>
       <div className="sidebar-foot">PNCP · dados reais</div>
+      <button type="button" className="nav-apresentacao"
+        onClick={() => irPara("landing")}>Apresentação</button>
     </motion.aside>
   );
 }
