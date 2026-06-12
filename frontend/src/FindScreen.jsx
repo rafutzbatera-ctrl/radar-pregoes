@@ -278,15 +278,19 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
 
   // ----- P6: avaliação sob demanda no modo ao vivo -----
   const [avaliando, setAvaliando] = React.useState(false);
+  // P8: clique manual ainda processa até 40; a avaliação AUTOMÁTICA cai p/ 12
+  // (lote menor → potencial chega progressivo e a pista pesada não engole tudo).
+  const CAP_MANUAL = 40;
+  const CAP_AUTO = 12;
   // quantos itens ainda não foram avaliados (nem deram erro) — alvos do próximo clique
   const naoAvaliados = vivo.itens.filter((i) => !i.avaliado && !i.naoAvaliavel);
-  const aValiar = Math.min(naoAvaliados.length, 40);     // cap 40 por clique
+  const aValiar = Math.min(naoAvaliados.length, CAP_MANUAL); // cap 40 por clique
   // X ≈ N×1.5s, arredondado em passos de 5s (mínimo 5s)
   const segEstimados = Math.max(5, Math.round((aValiar * 1.5) / 5) * 5);
 
-  const avaliar = () => {
+  const avaliar = (cap = CAP_MANUAL) => {
     if (avaliando || aValiar === 0) return;
-    const lote = naoAvaliados.slice(0, 40);
+    const lote = naoAvaliados.slice(0, cap);
     const alvos = lote.map((i) => ({
       cnpj: i.cnpj, ano: i.ano, seq: i.seq, numero_controle: i.numeroControle,
     }));
@@ -326,7 +330,7 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
   avaliarRef.current = avaliar;
   React.useEffect(() => {
     if (!aoVivo || avaliando || aValiar === 0) return;
-    const t = setTimeout(() => avaliarRef.current(), 1500);
+    const t = setTimeout(() => avaliarRef.current(CAP_AUTO), 1500); // lote auto = 12
     return () => clearTimeout(t);
   }, [aoVivo, avaliando, aValiar]);
 
@@ -591,6 +595,31 @@ function ListaVivo({ vivo, entrada, importar, importando, nTermos, aoAbrir, reca
   carregarMais, margemAlvo, avaliar, avaliando, aValiar, segEstimados,
   filtroLocalAtivo, nCarregados }) {
   const { itens, total, totalExato, fonte, carregando, erro } = vivo;
+
+  // P8: scroll infinito com PRÉ-BUSCA — um sentinela no fim da lista dispara
+  // carregarMais() quando ainda faltam ~900px para o usuário chegar ao fim
+  // (sensação instantânea). Só dispara se não está carregando, sem erro e ainda
+  // há páginas (itens < total). Hooks ANTES dos early returns (Rules of Hooks).
+  const sentinelaRef = React.useRef(null);
+  // ref com o estado fresco lido pelo callback do observer (evita recriar o
+  // observer a cada render e capturar valores velhos no closure)
+  const podeMais = React.useRef({ carregando, erro, itens, total, carregarMais });
+  podeMais.current = { carregando, erro, itens, total, carregarMais };
+  // a lista (e portanto o sentinela) só aparece após a 1ª carga assentar; o
+  // observer (re)anexa quando isso muda, já que o sentinela entra no DOM só aí
+  const listaVisivel = itens.length > 0;
+  React.useEffect(() => {
+    const alvo = sentinelaRef.current;
+    if (!alvo) return;
+    const obs = new IntersectionObserver((entradas) => {
+      if (!entradas.some((e) => e.isIntersecting)) return;
+      const s = podeMais.current;
+      if (!s.carregando && !s.erro && s.itens.length < s.total) s.carregarMais();
+    }, { rootMargin: "900px" });
+    obs.observe(alvo);
+    return () => obs.disconnect();   // desconecta no unmount / saída do ao vivo
+  }, [listaVisivel]);
+
   // primeira carga (sem itens ainda) mostra skeleton; cargas seguintes mantêm a lista
   if (carregando && itens.length === 0) return <EstadoCarregando entrada={entrada} />;
   if (erro && itens.length === 0) return <EstadoErro entrada={entrada} mensagem={erro} recarregar={recarregar} />;
@@ -608,9 +637,9 @@ function ListaVivo({ vivo, entrada, importar, importando, nTermos, aoAbrir, reca
     <div className="cards">
       <motion.div variants={entrada} className="vivo-topo" style={{ marginBottom: "2px" }}>
         <span className="silk">{contador}</span>
-        {/* P6: avaliar sob demanda — N = carregados ainda não avaliados (cap 40) */}
+        {/* P6: avaliar sob demanda — N = carregados ainda não avaliados (clique = cap 40; auto = 12) */}
         <button type="button" className={"btn-avaliar" + (avaliando ? " rodando" : "")}
-          disabled={avaliando || aValiar === 0} onClick={avaliar}
+          disabled={avaliando || aValiar === 0} onClick={() => avaliar()}
           aria-label={aValiar > 0 ? `Avaliar ${aValiar} pregões carregados` : "Tudo avaliado"}>
           {avaliando
             ? <React.Fragment><span className="spin" aria-hidden="true"></span> avaliando {aValiar} pregões — itens vêm da API do PNCP a 1 req/s…</React.Fragment>
@@ -646,13 +675,22 @@ function ListaVivo({ vivo, entrada, importar, importando, nTermos, aoAbrir, reca
           <p>Remova chips de palavra-chave para ver o total nacional, ou afrouxe UF, modalidade e esfera. Os dados vêm direto da busca oficial do PNCP.</p>
         </motion.div>
       )}
-      {itens.length > 0 && itens.length < total && (
-        <button type="button" className={"btn-rodar vivo-mais" + (carregando ? " rodando" : "")}
-          disabled={carregando} onClick={carregarMais}>
-          {carregando
-            ? <React.Fragment><span className="spin" aria-hidden="true"></span> Carregando…</React.Fragment>
-            : <React.Fragment>{Ico.raio} Carregar mais ({fmtInt(total - itens.length)} restantes)</React.Fragment>}
+      {/* P8: enquanto carrega a próxima página, a barra "Carregando…" de sempre */}
+      {itens.length > 0 && itens.length < total && carregando && (
+        <div className="btn-rodar vivo-mais rodando" aria-live="polite">
+          <span className="spin" aria-hidden="true"></span> Carregando…
+        </div>
+      )}
+      {/* P8: botão antigo vira FALLBACK só em erro (junto do tentar de novo) */}
+      {itens.length > 0 && itens.length < total && erro && !carregando && (
+        <button type="button" className="btn-rodar vivo-mais" onClick={carregarMais}>
+          {Ico.raio} Carregar mais ({fmtInt(total - itens.length)} restantes)
         </button>
+      )}
+      {/* P8: sentinela de pré-busca (IntersectionObserver, rootMargin 900px) —
+          dispara carregarMais ANTES de o usuário chegar ao fim */}
+      {itens.length > 0 && itens.length < total && (
+        <div ref={sentinelaRef} className="vivo-sentinela" aria-hidden="true"></div>
       )}
     </div>
   );

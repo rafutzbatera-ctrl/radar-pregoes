@@ -1781,3 +1781,10 @@ a.arq-link:hover { border-color: var(--tinta); box-shadow: 0 4px 12px -6px rgba(
 @media (max-width: 920px) {
   .btn-avaliar { width: 100%; justify-content: center; }
 }
+
+/* ============================================================
+   P8 — scroll infinito do "PNCP ao vivo": sentinela de pré-busca
+   ============================================================ */
+/* alvo invisível no fim da lista; o IntersectionObserver (rootMargin 900px)
+   dispara o carregarMais antes de o usuário chegar ao fim */
+.vivo-sentinela { height: 1px; }
