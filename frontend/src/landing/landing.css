@@ -80,7 +80,10 @@
   text-transform: uppercase;
   letter-spacing: -0.01em;
 }
-.ld-h1-linha { display: block; }
+/* cada linha do H1 é uma máscara que recorta o reveal (y + clip-path da Task 4).
+   sem JS o inner fica em repouso (transform/clip default) → texto visível. */
+.ld-h1-linha { display: block; overflow: hidden; }
+.ld-h1-inner { display: block; will-change: transform; }
 .ld-h2 {
   font-family: var(--font-display);
   font-weight: 800;

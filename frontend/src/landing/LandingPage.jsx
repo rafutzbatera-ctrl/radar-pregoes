@@ -1,12 +1,17 @@
 import React from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import "./landing.css";
 import RadarScene from "./RadarScene.js";
 
+gsap.registerPlugin(ScrollTrigger);
+
 /** Porta de entrada do app (spec 2026-06-12). aoEntrar() leva ao app.
- *  Estático nesta task — a cena Three.js (Task 3), a coreografia GSAP
- *  (Task 4) e o stat vivo do PNCP (Task 5) entram nas tasks seguintes.
- *  O conteúdo nasce VISÍVEL: nenhum estado inicial de animação no CSS. */
+ *  Cena Three.js (Task 3) + coreografia GSAP (Task 4). O stat vivo do PNCP
+ *  (Task 5) entra na próxima task. O conteúdo nasce VISÍVEL: nenhum estado
+ *  inicial de animação no CSS — só via gsap.set DENTRO do bloco animado. */
 export default function LandingPage({ aoEntrar }) {
+  const raizRef = React.useRef(null);     // .landing — scroller dos ScrollTriggers
   const canvasRef = React.useRef(null);
   const cenaRef = React.useRef(null);
 
@@ -35,16 +40,120 @@ export default function LandingPage({ aoEntrar }) {
     };
   }, []);
 
+  // ---------- Task 4: coreografia GSAP (load orquestrado + scroll scrub) ----------
+  // TUDO dentro de gsap.matchMedia(): motion completo só em no-preference; no
+  // modo reduzido nenhum trigger é criado (a cena já é no-op) e o conteúdo nasce
+  // visível — estados iniciais vêm de gsap.set DENTRO do bloco, nunca do CSS.
+  // Este effect é registrado DEPOIS do da cena → seu cleanup (mm.revert) roda
+  // ANTES do dispose da cena (React limpa effects em ordem reversa).
+  React.useEffect(() => {
+    const raiz = raizRef.current;
+    if (!raiz) return undefined;
+    const mm = gsap.matchMedia();
+
+    mm.add("(prefers-reduced-motion: no-preference)", () => {
+      const q = gsap.utils.selector(raiz);
+
+      // (a) Page-load orquestrado — UMA timeline, ease power3.out. Coincide com
+      // o boot da cena (já disparado no mount). Estados iniciais via gsap.set.
+      gsap.set(q(".ld-eyebrow, .ld-sub, .ld-ctas > *, .ld-stat"), { autoAlpha: 0, y: 24 });
+      gsap.set(q(".ld-hero .ld-h1-inner"), {
+        yPercent: 110,
+        clipPath: "inset(0 0 100% 0)",
+      });
+
+      const tlLoad = gsap.timeline({ defaults: { ease: "power3.out" } });
+      tlLoad
+        .to(q(".ld-eyebrow"), { autoAlpha: 1, y: 0, duration: 0.5 })
+        .to(
+          q(".ld-hero .ld-h1-inner"),
+          { yPercent: 0, clipPath: "inset(0 0 0% 0)", duration: 0.8, stagger: 0.08 },
+          "-=0.2",
+        )
+        .to(q(".ld-sub"), { autoAlpha: 1, y: 0, duration: 0.5 }, "-=0.4")
+        .to(q(".ld-ctas > *"), { autoAlpha: 1, y: 0, duration: 0.5, stagger: 0.08 }, "-=0.3")
+        .to(q(".ld-stat"), { autoAlpha: 1, y: 0, duration: 0.5 }, "-=0.3");
+
+      // (b) Scrub global: o scroll é do contêiner .landing (fixed/overflow-y).
+      // Passamos o ELEMENTO como scroller (não a string) p/ evitar ambiguidade.
+      // setProgresso só ajusta alvos (lerp interno) → sem throttle no onUpdate.
+      const scrub = ScrollTrigger.create({
+        scroller: raiz,
+        trigger: raiz,
+        start: 0,
+        end: "max",
+        onUpdate: (st) => cenaRef.current?.setProgresso(st.progress),
+      });
+
+      // (c) Reveals por seção (once: true) — disparam uma única vez ao entrar.
+      const atos = q(".ld-ato");
+      gsap.set(atos, { autoAlpha: 0, y: 40 });
+      atos.forEach((ato) => {
+        gsap.to(ato, {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.7,
+          ease: "power3.out",
+          scrollTrigger: { scroller: raiz, trigger: ato, start: "top 82%", once: true },
+        });
+      });
+
+      // manifesto: o LED acende (cor + glow) e o texto da frase sobe.
+      const frases = q(".ld-frase");
+      gsap.set(frases, { autoAlpha: 0, y: 36 });
+      gsap.set(q(".ld-frase .ld-led"), {
+        backgroundColor: "rgba(124,138,129,0.35)",
+        boxShadow: "0 0 0 0 rgba(43,217,127,0)",
+      });
+      frases.forEach((frase) => {
+        const led = frase.querySelector(".ld-led");
+        gsap
+          .timeline({
+            defaults: { ease: "power3.out" },
+            scrollTrigger: { scroller: raiz, trigger: frase, start: "top 80%", once: true },
+          })
+          .to(led, {
+            backgroundColor: "#2BD97F",
+            boxShadow: "0 0 14px 2px rgba(43,217,127,0.75)",
+            duration: 0.45,
+          })
+          .to(frase, { autoAlpha: 1, y: 0, duration: 0.7 }, "-=0.25");
+      });
+
+      // CTA final: o bloco inteiro entra junto.
+      const final = q(".ld-final");
+      if (final.length) {
+        gsap.set(final, { autoAlpha: 0, y: 40 });
+        gsap.to(final, {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.8,
+          ease: "power3.out",
+          scrollTrigger: { scroller: raiz, trigger: final, start: "top 85%", once: true },
+        });
+      }
+
+      return () => {
+        tlLoad.kill();
+        scrub.kill();
+      };
+    });
+
+    // Bloco reduzido: NADA (sem triggers, sem sets) — conteúdo já visível.
+
+    return () => mm.revert();
+  }, []);
+
   return (
-    <div className="landing">
+    <div className="landing" ref={raizRef}>
       <canvas className="ld-canvas" ref={canvasRef} aria-hidden="true" />
 
       {/* ---------- HERO ---------- */}
       <section className="ld-hero">
         <p className="ld-eyebrow">RADAR DE PREGÕES · LEI 14.133 · FONTE OFICIAL PNCP</p>
         <h1 className="ld-h1">
-          <span className="ld-h1-linha">O PNCP INTEIRO</span>
-          <span className="ld-h1-linha">NO SEU RADAR.</span>
+          <span className="ld-h1-linha"><span className="ld-h1-inner">O PNCP INTEIRO</span></span>
+          <span className="ld-h1-linha"><span className="ld-h1-inner">NO SEU RADAR.</span></span>
         </h1>
         <p className="ld-sub">
           Busca ao vivo nos ~37 mil editais nacionais, margem e veredito
