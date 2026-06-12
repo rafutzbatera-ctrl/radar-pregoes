@@ -1,24 +1,33 @@
 /* ============================================================
-   RADAR DE PREGÕES — direção "Mesa de operação"
-   Paleta nomeada (mundo pregão/AV):
-   --aluminio  #E4E7E1  chassi do console (fundo)
-   --painel    #FAFBF8  módulos / faces de painel
-   --tinta     #171C1A  serigrafia / channel strip
-   --sinal     #149357  LED verde (margem saudável)
-   --pico      #C98A04  LED âmbar (atenção)
-   --clip      #CC4537  LED vermelho (prejuízo)
+   RADAR DE PREGÕES — direção "Mesa de operação" → TURNO DA NOITE
+   Re-skin "noite fósforo" (2026-06-12): os NOMES dos tokens são
+   históricos da mesa de operação (chassi/painel/tinta/LEDs); os
+   VALORES agora são o turno da noite, na mesma linguagem da landing
+   (verde-noite #0A0F0D + fósforo #2BD97F). Atenção: --tinta deixou de
+   ser o quase-preto e virou NEVE (texto); onde --tinta era usada como
+   SUPERFÍCIE escura (sidebar, botões primários), o uso foi re-mapeado
+   à mão para superfícies noturnas / fósforo-sobre-noite.
+   Paleta nomeada:
+   --aluminio  #0A0F0D  chassi do console (fundo verde-noite)
+   --painel    #101713  módulos / faces de painel noturno
+   --tinta     #E9F2EC  TEXTO principal (neve)
+   --sinal     #2BD97F  LED verde / fósforo (margem saudável)
+   --pico      #E0A21B  LED âmbar (atenção)
+   --clip      #E25A4A  LED vermelho (prejuízo)
    ============================================================ */
 :root {
-  --aluminio: #E4E7E1;
-  --painel: #FAFBF8;
-  --tinta: #171C1A;
-  --tinta-2: #3C443F;
-  --silk: #69716C;
-  --linha: #CDD2CA;
-  --sinal: #149357;
-  --pico: #C98A04;
-  --clip: #CC4537;
-  --led-off: rgba(233, 240, 233, 0.13);
+  --aluminio: #0A0F0D;
+  --painel: #101713;
+  --tinta: #E9F2EC;
+  --tinta-2: #B9C6BE;
+  --silk: #7C8A81;
+  --linha: #1F2A24;
+  --sinal: #2BD97F;
+  --pico: #E0A21B;
+  --clip: #E25A4A;
+  --led-off: rgba(43, 217, 127, 0.10);
+  --fundo-2: #0D1411;
+  --halo: rgba(43, 217, 127, 0.14);
   --font-display: "Big Shoulders Display", sans-serif;
   --font-body: "Archivo", sans-serif;
   --font-mono: "IBM Plex Mono", monospace;
@@ -35,11 +44,30 @@ body {
   font-size: 14px;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+  /* atmosfera noturna: halos fosforosos discretos (~4%) sobre o verde-noite
+     (eco da .landing, mais contida — é mesa de trabalho, não vitrine) */
+  background-image:
+    radial-gradient(60% 50% at 82% 6%, rgba(43, 217, 127, 0.04), transparent 70%),
+    radial-gradient(50% 60% at 6% 92%, rgba(43, 217, 127, 0.035), transparent 72%);
+  background-attachment: fixed;
 }
 #root { height: 100%; }
 
+/* scrollbars escuras — a nativa clara rasga o tema noturno */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(43, 217, 127, 0.30) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(43, 217, 127, 0.24);
+  border-radius: 5px;
+  border: 2px solid var(--aluminio);
+}
+
 :focus-visible {
-  outline: 2px solid var(--tinta);
+  outline: 2px solid var(--sinal);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -65,15 +93,18 @@ body {
 }
 
 /* ---------- Sidebar (channel strip) ---------- */
+/* re-mapeada à mão: --tinta agora é neve (texto), então a SUPERFÍCIE da
+   sidebar usa #050807 — mais profunda que o chassi --aluminio (#0A0F0D). */
 .sidebar {
-  background: var(--tinta);
-  color: #E9EDE9;
+  background: #050807;
+  color: var(--tinta);
   display: flex;
   flex-direction: column;
   padding: 22px 14px 16px 14px;
   gap: 3px;
   position: relative;
   z-index: 30;
+  border-right: 1px solid var(--linha);
 }
 .brand {
   padding: 0 12px 18px 12px;
@@ -88,14 +119,14 @@ body {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   line-height: 0.95;
-  color: #F2F6F0;
+  color: var(--tinta);
 }
 .brand-sub {
   font-family: var(--font-mono);
   font-size: 9.5px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #8E9A92;
+  color: var(--silk);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -103,7 +134,7 @@ body {
 .brand-led {
   width: 6px; height: 6px; border-radius: 50%;
   background: var(--sinal);
-  box-shadow: 0 0 6px 1px rgba(20, 147, 87, 0.7);
+  box-shadow: 0 0 6px 1px var(--halo);
 }
 .nav-item {
   display: flex;
@@ -111,7 +142,7 @@ body {
   gap: 10px;
   padding: 10px 12px;
   border-radius: 7px;
-  color: #AEB8B1;
+  color: var(--tinta-2);
   font-weight: 500;
   font-size: 13.5px;
   cursor: pointer;
@@ -123,8 +154,8 @@ body {
   position: relative;
   transition: background 0.15s, color 0.15s;
 }
-.nav-item:hover { background: rgba(255, 255, 255, 0.06); color: #E9EDE9; }
-.nav-item.ativa { background: rgba(255, 255, 255, 0.09); color: #FFFFFF; }
+.nav-item:hover { background: rgba(43, 217, 127, 0.07); color: var(--tinta); }
+.nav-item.ativa { background: rgba(43, 217, 127, 0.12); color: var(--tinta); }
 .nav-item.ativa::before {
   content: "";
   position: absolute;
@@ -132,19 +163,20 @@ body {
   width: 3px;
   border-radius: 2px;
   background: var(--sinal);
+  box-shadow: 0 0 8px 1px var(--halo);
 }
 .nav-item[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
-.nav-item[aria-disabled="true"]:hover { background: none; color: #AEB8B1; }
+.nav-item[aria-disabled="true"]:hover { background: none; color: var(--tinta-2); }
 .nav-ico { width: 17px; height: 17px; flex: none; opacity: 0.85; }
 .chip-breve {
   margin-left: auto;
   font-family: var(--font-mono);
   font-size: 8.5px;
   letter-spacing: 0.1em;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid var(--linha);
   border-radius: 4px;
   padding: 2px 5px;
-  color: #97A29A;
+  color: var(--silk);
   white-space: nowrap;
 }
 .sidebar-foot {
@@ -153,7 +185,7 @@ body {
   font-family: var(--font-mono);
   font-size: 9.5px;
   letter-spacing: 0.1em;
-  color: #5F6B63;
+  color: var(--silk);
   text-transform: uppercase;
 }
 .nav-apresentacao {
@@ -169,7 +201,7 @@ body {
   color: var(--silk);
   text-align: left;
 }
-.nav-apresentacao:hover { color: #E9EDE9; text-decoration: underline; }
+.nav-apresentacao:hover { color: var(--tinta); text-decoration: underline; }
 
 /* ---------- Main / screens ---------- */
 .main { position: relative; overflow: hidden; }
@@ -189,8 +221,8 @@ body {
   right: 0;
   bottom: 0;
   z-index: 40;
-  background: rgba(23, 28, 26, 0.96);
-  color: #C8D1CA;
+  background: rgba(5, 8, 7, 0.96);
+  color: var(--tinta-2);
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.02em;
@@ -198,9 +230,9 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--linha);
 }
-.aviso strong { color: #F0F4EE; font-weight: 600; }
+.aviso strong { color: var(--tinta); font-weight: 600; }
 .aviso-led { width: 7px; height: 7px; border-radius: 50%; background: var(--pico); flex: none; }
 
 /* ---------- Módulos ---------- */
