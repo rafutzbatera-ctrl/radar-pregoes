@@ -1766,6 +1766,9 @@ a.arq-link:hover { border-color: var(--tinta); box-shadow: 0 4px 12px -6px rgba(
 /* aviso de escopo dos filtros client-side (aplicam só aos carregados) */
 .vivo-filtro-aviso { margin: 2px 0 4px; font-style: italic; }
 
+/* P7: nota da fonte EM MASSA (consulta) — valor oficial instantâneo sem termo */
+.vivo-fonte-aviso { margin: 2px 0 6px; font-size: 11px; }
+
 /* chip "não avaliável" (erro por alvo): espelha .card-noradar mas em vermelho suave */
 .card-naoaval {
   font-family: var(--font-mono); font-style: normal; font-size: 8.5px;

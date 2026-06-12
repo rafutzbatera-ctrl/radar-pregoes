@@ -235,7 +235,7 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
   const pai = { hidden: {}, show: { transition: { staggerChildren: reduzido ? 0 : 0.055, delayChildren: reduzido ? 0 : 0.05 } } };
 
   /* ---------- modo "PNCP ao vivo" (busca na API sem persistir) ---------- */
-  const [vivo, setVivo] = React.useState({ itens: [], total: 0, totalExato: true, pagina: 1, carregando: false, erro: null });
+  const [vivo, setVivo] = React.useState({ itens: [], total: 0, totalExato: true, fonte: "consulta", pagina: 1, carregando: false, erro: null });
   const [importando, setImportando] = React.useState(null); // numero_controle em importação
 
   // filtros atuais empacotados (mesma página para todos os termos no "carregar mais")
@@ -249,7 +249,8 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
     api.descobrir(filtrosVivo(pagina))
       .then((r) => setVivo((v) => ({
         itens: concatenar ? [...v.itens, ...r.itens] : r.itens,
-        total: r.total, totalExato: r.totalExato !== false, pagina, carregando: false, erro: null,
+        total: r.total, totalExato: r.totalExato !== false, fonte: r.fonte || "busca",
+        pagina, carregando: false, erro: null,
       })))
       .catch((e) => setVivo((v) => ({ ...v, carregando: false, erro: e.message || "erro" })));
   }, [filtrosVivo]);
@@ -577,14 +578,18 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
 function ListaVivo({ vivo, entrada, importar, importando, nTermos, aoAbrir, recarregar,
   carregarMais, margemAlvo, avaliar, avaliando, aValiar, segEstimados,
   filtroLocalAtivo, nCarregados }) {
-  const { itens, total, totalExato, carregando, erro } = vivo;
+  const { itens, total, totalExato, fonte, carregando, erro } = vivo;
   // primeira carga (sem itens ainda) mostra skeleton; cargas seguintes mantêm a lista
   if (carregando && itens.length === 0) return <EstadoCarregando entrada={entrada} />;
   if (erro && itens.length === 0) return <EstadoErro entrada={entrada} mensagem={erro} recarregar={recarregar} />;
 
-  // total_exato → "37.811 oportunidades"; senão → "até N (somando M termos)"
+  // fonte EM MASSA (§4.4): valores oficiais já vêm embutidos em cada cartão
+  const bulk = fonte === "consulta";
+  // total_exato → "N oportunidades"; senão → "até N (somando M termos)"
   const contador = totalExato
-    ? `${fmtInt(total)} ${total === 1 ? "oportunidade no PNCP" : "oportunidades no PNCP"}`
+    ? (bulk
+        ? `${fmtInt(total)} ${total === 1 ? "oportunidade no PNCP · valor oficial embutido" : "oportunidades no PNCP · valores oficiais embutidos"}`
+        : `${fmtInt(total)} ${total === 1 ? "oportunidade no PNCP" : "oportunidades no PNCP"}`)
     : `até ${fmtInt(total)} oportunidades (somando ${nTermos} termo${nTermos === 1 ? "" : "s"})`;
 
   return (
@@ -602,6 +607,11 @@ function ListaVivo({ vivo, entrada, importar, importando, nTermos, aoAbrir, reca
               : <React.Fragment>{Ico.check} tudo avaliado</React.Fragment>}
         </button>
       </motion.div>
+      {bulk && (
+        <motion.div variants={entrada} className="silk vivo-fonte-aviso">
+          navegação sem palavra-chave usa a API de consulta — valor oficial instantâneo; digite termos para busca textual
+        </motion.div>
+      )}
       {filtroLocalAtivo && (
         <motion.div variants={entrada} className="silk vivo-filtro-aviso">
           filtros e ordem aplicam aos {fmtInt(nCarregados)} carregados/avaliados

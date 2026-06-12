@@ -311,6 +311,7 @@ export const api = {
     return req("/descobrir" + (s ? `?${s}` : "")).then((r) => ({
       total: r.total,
       totalExato: r.total_exato,
+      fonte: r.fonte,           // "consulta" (bulk, valores oficiais) | "busca" (textual)
       pagina: r.pagina,
       tamanho: r.tamanho,
       itens: (r.itens || []).map(adaptarDescoberto),
