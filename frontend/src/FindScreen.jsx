@@ -611,13 +611,34 @@ function ListaVivo({ vivo, entrada, importar, importando, nTermos, aoAbrir, reca
   React.useEffect(() => {
     const alvo = sentinelaRef.current;
     if (!alvo) return;
-    const obs = new IntersectionObserver((entradas) => {
-      if (!entradas.some((e) => e.isIntersecting)) return;
+    const disparar = () => {
       const s = podeMais.current;
       if (!s.carregando && !s.erro && s.itens.length < s.total) s.carregarMais();
+    };
+    const obs = new IntersectionObserver((entradas) => {
+      if (entradas.some((e) => e.isIntersecting)) disparar();
     }, { rootMargin: "900px" });
     obs.observe(alvo);
-    return () => obs.disconnect();   // desconecta no unmount / saída do ao vivo
+    // FALLBACK por evento de scroll: em embeds/webviews o IntersectionObserver
+    // pode estar morto (verificado: nem o callback inicial da spec dispara —
+    // mesma família do bug de rAF que o protótipo contornava). O listener
+    // throttled faz a MESMA checagem de proximidade via getBoundingClientRect.
+    const scroller = alvo.closest(".screen") || window;
+    let aguardando = false;
+    const aoRolar = () => {
+      if (aguardando) return;
+      aguardando = true;
+      setTimeout(() => {
+        aguardando = false;
+        const r = alvo.getBoundingClientRect();
+        if (r.top < window.innerHeight + 900) disparar();
+      }, 200);
+    };
+    scroller.addEventListener("scroll", aoRolar, { passive: true });
+    return () => {                   // desconecta no unmount / saída do ao vivo
+      obs.disconnect();
+      scroller.removeEventListener("scroll", aoRolar);
+    };
   }, [listaVisivel]);
 
   // primeira carga (sem itens ainda) mostra skeleton; cargas seguintes mantêm a lista
