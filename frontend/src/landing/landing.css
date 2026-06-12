@@ -164,6 +164,18 @@
   gap: 24px;
   padding: 24px clamp(20px, 6vw, 96px);
 }
+/* <1024px: os wrappers do grid desktop (.ld-hero-topo/-id/-acao) são divs
+   crus — sem isto, eyebrow/H1/sub/CTAs ficam COLADOS (o ritmo vinha do gap
+   do hero quando eram filhos diretos dele) */
+@media (max-width: 1023.98px) {
+  .ld-hero-topo,
+  .ld-hero-id,
+  .ld-hero-acao {
+    display: grid;
+    gap: 24px;
+    justify-items: start;
+  }
+}
 .ld-stat {
   margin: 4px 0 0 0;
   display: flex;
@@ -514,6 +526,9 @@
 /* ---------- mobile ≤ 720px ---------- */
 @media (max-width: 720px) {
   .ld-hero { gap: 18px; padding: 24px 20px; }
+  .ld-hero-topo,
+  .ld-hero-id,
+  .ld-hero-acao { gap: 18px; }
   .ld-ato {
     grid-template-columns: 1fr;
     gap: 16px;
