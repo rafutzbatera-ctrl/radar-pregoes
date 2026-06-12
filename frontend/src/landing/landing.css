@@ -190,6 +190,66 @@
   padding: 3px 7px;
 }
 
+/* ---------- MARQUEE (faixa de recursos rolando) ---------- */
+/* Full-bleed: vive fora do .ld-wrap, com hairlines fosforosas e fade nas
+   bordas. O track tem width: max-content e roda em loop contínuo (CSS puro,
+   sem GSAP). O conteúdo é duplicado 2× no JSX; a 2ª cópia é aria-hidden. */
+.ld-marquee {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  padding: 15px 0;
+  border-top: 1px solid rgba(43, 217, 127, 0.2);
+  border-bottom: 1px solid rgba(43, 217, 127, 0.2);
+  /* fade de entrada/saída nas bordas laterais */
+  -webkit-mask-image: linear-gradient(
+    to right, transparent, #000 8%, #000 92%, transparent);
+  mask-image: linear-gradient(
+    to right, transparent, #000 8%, #000 92%, transparent);
+}
+.ld-marquee-track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: ld-marquee 32s linear infinite;
+}
+.ld-marquee-grupo {
+  display: flex;
+  align-items: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: none;
+}
+.ld-marquee-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 14px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cinza);
+  white-space: nowrap;
+}
+.ld-marquee-dot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--fosforo);
+  box-shadow: 0 0 6px 1px rgba(43, 217, 127, 0.6);
+}
+@keyframes ld-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ld-marquee-track { animation: none; }
+}
+
 /* ---------- seções (ritmo vertical) ---------- */
 .ld-como,
 .ld-manifesto,
@@ -199,8 +259,19 @@
 .ld-como { display: grid; gap: clamp(48px, 8vh, 96px); }
 
 /* ---------- COMO FUNCIONA: 3 atos ---------- */
-/* Base/tablet (≤1023px): texto (com número gigante no topo) + mockup empilham
-   numa coluna. O grid de 2 colunas alternadas é só no desktop (≥1024px). */
+/* Base/tablet (≤1023px): os atos empilham em coluna única; dentro de cada um,
+   texto (com número gigante no topo) + mockup empilham. O grid de 3 colunas
+   lado a lado é só no desktop (≥1024px). */
+.ld-atos-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: clamp(48px, 8vh, 96px);
+}
+.ld-como-cta {
+  margin-top: clamp(32px, 6vh, 64px);
+  display: flex;
+  justify-content: center;
+}
 .ld-ato {
   display: grid;
   grid-template-columns: 1fr;
@@ -512,28 +583,22 @@
   }
   .ld-stat-txt { font-size: 16px; }
 
-  /* ---------- COMO FUNCIONA: atos alternados ---------- */
-  /* padrão: texto à esquerda, mockup à direita */
+  /* ---------- COMO FUNCIONA: 3 colunas lado a lado ---------- */
+  /* Os atos 01/02/03 viram 3 colunas iguais. Dentro de cada coluna o conteúdo
+     empilha: número gigante → título → texto → mockup (largura da coluna). A
+     alternância texto↔mockup e o espelho do ato 02 morrem aqui. */
+  .ld-atos-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(32px, 4vw, 64px);
+    align-items: start;
+  }
   .ld-ato {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 560px);
-    align-items: center;
-    column-gap: clamp(48px, 6vw, 110px);
+    grid-template-columns: 1fr;
+    align-content: start;
+    gap: clamp(16px, 2vw, 28px);
   }
-  .ld-ato-num { font-size: clamp(96px, 9vw, 150px); margin-bottom: 4px; }
-  .ld-ato-mock .ld-mock { max-width: 560px; margin-left: auto; }
-
-  /* ato do meio (02 ANALISAR) espelha: mockup à esquerda, texto à direita.
-     Os .ld-ato são os filhos div do .ld-wrap; o h2 é tag <h2>, então entre os
-     <div> os atos são o 1º/2º/3º — o do meio é :nth-of-type(2). */
-  .ld-como .ld-wrap > div.ld-ato:nth-of-type(2) {
-    grid-template-columns: minmax(0, 560px) minmax(0, 1fr);
-  }
-  .ld-como .ld-wrap > div.ld-ato:nth-of-type(2) .ld-ato-corpo { order: 2; }
-  .ld-como .ld-wrap > div.ld-ato:nth-of-type(2) .ld-ato-mock { order: 1; }
-  .ld-como .ld-wrap > div.ld-ato:nth-of-type(2) .ld-ato-mock .ld-mock {
-    margin-left: 0;
-    margin-right: auto;
-  }
+  .ld-ato-num { font-size: clamp(96px, 7vw, 120px); margin-bottom: 4px; }
+  .ld-ato-mock .ld-mock { max-width: 100%; margin: 0; }
 
   /* ---------- MANIFESTO: 2 colunas (frase | corpo) ---------- */
   .ld-manifesto .ld-wrap { display: grid; gap: clamp(56px, 9vh, 110px); }

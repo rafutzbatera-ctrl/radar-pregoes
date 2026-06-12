@@ -238,49 +238,70 @@ export default function LandingPage({ aoEntrar }) {
         )}
       </section>
 
+      {/* ---------- MARQUEE (faixa de recursos) ---------- */}
+      {/* Faixa fina full-bleed entre hero e "como funciona". CSS puro (sem GSAP):
+          o track duplicado 2× rola translateX 0→-50% em loop contínuo. Conteúdo
+          decorativo/redundante → role="presentation"; cópia duplicada aria-hidden.
+          reduced-motion: animação parada (linha estática cortada pelo overflow). */}
+      <div className="ld-marquee" role="presentation">
+        <div className="ld-marquee-track">
+          <MarqueeItens />
+          <MarqueeItens dup />
+        </div>
+      </div>
+
       {/* ---------- COMO FUNCIONA ---------- */}
       {/* Inner (.ld-wrap) centraliza o conteúdo num max-width largo no desktop,
-          mantendo o padding clamp da seção nas bordas. Cada .ld-ato vira grid
-          de 2 colunas alternadas em ≥1024px (texto ↔ mockup). */}
+          mantendo o padding clamp da seção nas bordas. Em ≥1024px os 3 atos
+          ficam lado a lado num grid de 3 colunas iguais (.ld-atos-grid); abaixo
+          disso empilham em coluna única como sempre. */}
       <section className="ld-como" id="como-funciona">
         <div className="ld-wrap">
           <h2 className="ld-h2">COMO FUNCIONA</h2>
 
-          <div className="ld-ato">
-            <div className="ld-ato-corpo">
-              <span className="ld-ato-num">01</span>
-              <h3 className="ld-ato-titulo">DESCOBRIR</h3>
-              <p className="ld-ato-texto">
-                Varra o Brasil por palavra-chave ou navegue tudo aberto. Filtro de
-                compra de verdade: sem credenciamento, sem leilão, sem ruído.
-              </p>
+          <div className="ld-atos-grid">
+            <div className="ld-ato">
+              <div className="ld-ato-corpo">
+                <span className="ld-ato-num">01</span>
+                <h3 className="ld-ato-titulo">DESCOBRIR</h3>
+                <p className="ld-ato-texto">
+                  Varra o Brasil por palavra-chave ou navegue tudo aberto. Filtro de
+                  compra de verdade: sem credenciamento, sem leilão, sem ruído.
+                </p>
+              </div>
+              <div className="ld-ato-mock"><MockDescobrir /></div>
             </div>
-            <div className="ld-ato-mock"><MockDescobrir /></div>
+
+            <div className="ld-ato">
+              <div className="ld-ato-corpo">
+                <span className="ld-ato-num">02</span>
+                <h3 className="ld-ato-titulo">ANALISAR</h3>
+                <p className="ld-ato-texto">
+                  Itens cruzados com o seu catálogo, margem no preço esperado de
+                  disputa (não no teto) e veredito honesto: Vale, Talvez ou Não vale
+                  — com a conta sempre à mostra.
+                </p>
+              </div>
+              <div className="ld-ato-mock"><MockAnalisar /></div>
+            </div>
+
+            <div className="ld-ato">
+              <div className="ld-ato-corpo">
+                <span className="ld-ato-num">03</span>
+                <h3 className="ld-ato-titulo">DISPUTAR</h3>
+                <p className="ld-ato-texto">
+                  Checklist de habilitação extraído do edital com citação verificada
+                  página por página, e o funil da disputa até o resultado.
+                </p>
+              </div>
+              <div className="ld-ato-mock"><MockDisputar /></div>
+            </div>
           </div>
 
-          <div className="ld-ato">
-            <div className="ld-ato-corpo">
-              <span className="ld-ato-num">02</span>
-              <h3 className="ld-ato-titulo">ANALISAR</h3>
-              <p className="ld-ato-texto">
-                Itens cruzados com o seu catálogo, margem no preço esperado de
-                disputa (não no teto) e veredito honesto: Vale, Talvez ou Não vale
-                — com a conta sempre à mostra.
-              </p>
-            </div>
-            <div className="ld-ato-mock"><MockAnalisar /></div>
-          </div>
-
-          <div className="ld-ato">
-            <div className="ld-ato-corpo">
-              <span className="ld-ato-num">03</span>
-              <h3 className="ld-ato-titulo">DISPUTAR</h3>
-              <p className="ld-ato-texto">
-                Checklist de habilitação extraído do edital com citação verificada
-                página por página, e o funil da disputa até o resultado.
-              </p>
-            </div>
-            <div className="ld-ato-mock"><MockDisputar /></div>
+          <div className="ld-como-cta">
+            <button type="button" className="ld-cta" onClick={aoEntrar}>
+              Entrar no radar →
+            </button>
           </div>
         </div>
       </section>
@@ -345,6 +366,37 @@ export default function LandingPage({ aoEntrar }) {
         </div>
       </section>
     </div>
+  );
+}
+
+/* ====================================================================== */
+/* Marquee: itens de recurso em mono caixa-alta, separados por LED-dot.    */
+/* Renderizado 2× dentro do track (a 2ª cópia aria-hidden) para o loop     */
+/* translateX 0→-50% emendar sem salto.                                    */
+/* ====================================================================== */
+const MARQUEE_ITENS = [
+  "FONTE OFICIAL PNCP",
+  "BUSCA AO VIVO",
+  "BRASIL INTEIRO",
+  "MARGEM NO PREÇO ESPERADO",
+  "CITAÇÃO VERIFICADA",
+  "VEREDITO HONESTO",
+  "SÓ COMPRA DE BENS",
+  "FUNIL DE DISPUTA",
+  "PRONTIDÃO NF-E",
+  "CUSTO É SEU DADO",
+];
+
+function MarqueeItens({ dup = false }) {
+  return (
+    <ul className="ld-marquee-grupo" aria-hidden={dup ? "true" : undefined}>
+      {MARQUEE_ITENS.map((t) => (
+        <li className="ld-marquee-item" key={t}>
+          <span className="ld-marquee-dot" />
+          <span className="ld-marquee-txt">{t}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
