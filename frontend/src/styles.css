@@ -2311,6 +2311,98 @@ a.arq-link:hover { border-color: var(--silk); box-shadow: 0 4px 12px -6px rgba(0
   max-width: 70ch;
 }
 
+/* ---- Fase 2: toggle "Resumir com IA local" (opt-in) ---- */
+.rag-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  cursor: pointer;
+  user-select: none;
+}
+.rag-toggle input {
+  margin: 2px 0 0 0;
+  width: 15px;
+  height: 15px;
+  flex: none;
+  accent-color: var(--sinal);
+  cursor: pointer;
+}
+.rag-toggle input:disabled { cursor: not-allowed; }
+.rag-toggle-corpo { display: flex; flex-direction: column; gap: 1px; }
+.rag-toggle-rotulo {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tinta);
+  line-height: 1.4;
+}
+.rag-toggle-legenda { font-size: 11.5px; line-height: 1.4; }
+
+/* loading dedicado da síntese (espera maior que a busca extrativa) */
+.rag-sintetizando { color: var(--sinal); }
+
+/* ---- Fase 2: bloco de resumo em prosa (IA local) ---- */
+.rag-resumo {
+  border: 1px solid rgba(43, 217, 127, 0.45);   /* borda fósforo sutil */
+  background: rgba(43, 217, 127, 0.06);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rag-resumo-cab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sinal);
+}
+.rag-resumo-cab svg { flex: none; width: 15px; height: 15px; }
+.rag-resumo-texto {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--tinta);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* indisponível: neutro (não-fundamentado) e erro (IA local fora) */
+.rag-resumo-neutro {
+  border-color: var(--linha);
+  background: var(--fundo-2);
+}
+.rag-resumo-erro {
+  border-color: rgba(224, 162, 27, 0.35);
+  background: rgba(224, 162, 27, 0.08);
+}
+.rag-resumo-neutro-texto {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--tinta-2);
+}
+
+/* realce leve nos trechos efetivamente citados pelo resumo */
+.rag-trecho-citado {
+  border-color: rgba(43, 217, 127, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(43, 217, 127, 0.25);
+  position: relative;
+}
+.rag-trecho-citado-tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--sinal);
+  background: rgba(43, 217, 127, 0.12);
+  border: 1px solid rgba(43, 217, 127, 0.35);
+  border-radius: 6px;
+  padding: 1px 7px;
+  margin-bottom: 8px;
+}
+
 @media (max-width: 640px) {
   .rag-form .rag-btn { width: 100%; justify-content: center; }
 }

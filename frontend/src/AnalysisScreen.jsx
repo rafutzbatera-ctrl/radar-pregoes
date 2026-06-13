@@ -636,8 +636,14 @@ function PerguntarTab({ pregao }) {
 
   const [pergunta, setPergunta] = React.useState("");
   const [perguntando, setPerguntando] = React.useState(false);
-  const [resposta, setResposta] = React.useState(null);   // {disponivel, motivo?, trechos?, pergunta}
+  const [resposta, setResposta] = React.useState(null);   // {disponivel, motivo?, trechos?, sintese?, pergunta}
   const [erroPergunta, setErroPergunta] = React.useState(null);
+  // Fase 2 (opt-in): resumir os trechos em prosa com o Claude CLI local. OFF por
+  // padrão — quando ligado a espera é maior (CLI lento). `sintetizandoAtivo`
+  // congela o estado do toggle DURANTE a requisição para o loading não trocar
+  // de texto se o usuário mexer no checkbox no meio da espera.
+  const [sintetizar, setSintetizar] = React.useState(false);
+  const [sintetizandoAtivo, setSintetizandoAtivo] = React.useState(false);
 
   const carregarStatus = React.useCallback(() => {
     setStatus(null);
@@ -672,10 +678,12 @@ function PerguntarTab({ pregao }) {
     const q = (texto != null ? texto : pergunta).trim();
     if (!q || perguntando) return;
     if (texto != null) setPergunta(texto);
+    const comSintese = sintetizar;
+    setSintetizandoAtivo(comSintese);
     setPerguntando(true);
     setErroPergunta(null);
     setResposta(null);
-    api.ragPerguntar(pregao.id, q)
+    api.ragPerguntar(pregao.id, q, undefined, comSintese)
       .then((d) => {
         setResposta(d || { disponivel: false });
         // se o backend diz que nada está indexado, volta ao passo de indexar
@@ -775,9 +783,26 @@ function PerguntarTab({ pregao }) {
                 disabled={perguntando || !pergunta.trim()}
                 onClick={() => enviar()}
               >
-                {Ico.busca} {perguntando ? "Buscando…" : "Perguntar"}
+                {Ico.busca} {perguntando ? (sintetizandoAtivo ? "Resumindo…" : "Buscando…") : "Perguntar"}
               </button>
             </div>
+
+            {/* Fase 2 (opt-in): resumir os trechos em prosa com a IA local */}
+            <label className="rag-toggle">
+              <input
+                type="checkbox"
+                checked={sintetizar}
+                disabled={perguntando}
+                onChange={(e) => setSintetizar(e.target.checked)}
+              />
+              <span className="rag-toggle-corpo">
+                <span className="rag-toggle-rotulo">Resumir com IA local</span>
+                <span className="rag-toggle-legenda silk">
+                  roda o Claude local, sem custo de API — mais lento
+                </span>
+              </span>
+            </label>
+
             <div className="rag-exemplos">
               <span className="silk rag-exemplos-rotulo">Exemplos:</span>
               {RAG_EXEMPLOS.map((ex) => (
@@ -787,6 +812,14 @@ function PerguntarTab({ pregao }) {
                 </button>
               ))}
             </div>
+
+            {/* loading dedicado quando a síntese está ligada (espera maior) */}
+            {perguntando && sintetizandoAtivo && (
+              <div className="rag-indexando rag-sintetizando">
+                <span className="rag-spinner" aria-hidden="true"></span>
+                <span>Resumindo com IA local… pode levar um tempo.</span>
+              </div>
+            )}
           </div>
 
           {erroPergunta && (
@@ -799,7 +832,8 @@ function PerguntarTab({ pregao }) {
 
       <p className="rag-rodape silk">
         Respostas extrativas — trechos verbatim do edital, com página e
-        similaridade. Nada é inventado; confira sempre no PDF oficial.
+        similaridade. Quando ligado, o resumo é gerado SÓ a partir dos trechos
+        acima, nada é inventado. Confira sempre no PDF oficial.
       </p>
     </div>
   );
@@ -852,15 +886,31 @@ function RagResposta({ resposta, indexar, indexando }) {
   // o topo aqui para não depender da ordem)
   const topo = trechos.reduce((m, t) => (t.score != null && (m == null || t.score > m) ? t.score : m), null);
 
+  // Fase 2 (opt-in): bloco de síntese em prosa. Pode vir disponível (prosa
+  // fundamentada) OU indisponível (motivo neutro). Em ambos os casos os trechos
+  // verbatim seguem renderizados abaixo — a fonte/citação nunca some.
+  const sintese = resposta.sintese || null;
+  const citados = sintese && sintese.sintese_disponivel
+    ? new Set((sintese.trechos_citados || []).filter((n) => Number.isInteger(n)))
+    : null;
+
   return (
     <div className="rag-respostas">
+      {sintese && <RagResumo sintese={sintese} />}
+
       <div className="rag-respostas-cab">
         Trechos do edital que respondem (a resposta é o texto literal do edital):
       </div>
       {trechos.map((t, i) => {
         const destaque = topo != null && t.score === topo;
+        // índice 1-based para casar com trechos_citados da síntese
+        const citado = citados ? citados.has(i + 1) : false;
+        const cls = "rag-trecho mod"
+          + (destaque ? " rag-trecho-topo" : "")
+          + (citado ? " rag-trecho-citado" : "");
         return (
-          <div key={i} className={"rag-trecho mod" + (destaque ? " rag-trecho-topo" : "")}>
+          <div key={i} className={cls}>
+            {citado && <span className="rag-trecho-citado-tag">citado no resumo</span>}
             <p className="rag-trecho-texto">{t.texto}</p>
             <div className="rag-trecho-rodape">
               {t.pagina != null && <span className="rag-chip">pág. {t.pagina}</span>}
@@ -872,6 +922,42 @@ function RagResposta({ resposta, indexar, indexando }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/* ---------- Fase 2: bloco de resumo em prosa (IA local) ----------
+   Honestidade: o resumo é gerado SÓ a partir dos trechos abaixo. Quando o
+   backend não consegue fundamentar (nao_encontrado/nao_fundamentado) ou a IA
+   local não está acessível (erro_sintese), mostra um aviso neutro e os trechos
+   extrativos seguem visíveis (degradação graciosa). */
+function RagResumo({ sintese }) {
+  if (sintese.sintese_disponivel) {
+    const citados = (sintese.trechos_citados || []).filter((n) => Number.isInteger(n));
+    return (
+      <div className="rag-resumo">
+        <div className="rag-resumo-cab">
+          {Ico.raio}
+          <span>
+            Resumo — IA local
+            {citados.length > 0
+              ? ` (fundamentado nos trechos ${citados.join(", ")})`
+              : " (fundamentado nos trechos abaixo)"}
+          </span>
+        </div>
+        <p className="rag-resumo-texto">{sintese.resposta}</p>
+      </div>
+    );
+  }
+
+  // indisponível: mensagem neutra conforme o motivo (sempre seguida dos trechos)
+  const erro = sintese.motivo === "erro_sintese";
+  const msg = erro
+    ? "Resumo indisponível (IA local não acessível agora). Mostrando os trechos."
+    : "A IA local não encontrou uma resposta fundamentada nos trechos. Veja os trechos recuperados abaixo.";
+  return (
+    <div className={"rag-resumo rag-resumo-neutro" + (erro ? " rag-resumo-erro" : "")}>
+      <p className="rag-resumo-neutro-texto">{msg}</p>
     </div>
   );
 }

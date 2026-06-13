@@ -288,11 +288,22 @@ export const api = {
     req(`/pregoes/${pregaoId}/rag/indexar`, { method: "POST", timeoutMs: 120000 }),
   // perguntar → {disponivel, motivo?, pergunta, trechos:[{texto, arquivo_id,
   // arquivo_titulo, pagina, offset_inicio, offset_fim, score}], fonte?}.
-  ragPerguntar: (pregaoId, pergunta, k) =>
-    req(`/pregoes/${pregaoId}/rag/perguntar`, {
+  // Fase 2 (opt-in): com sintetizar=true e havendo trechos, a resposta ganha
+  // um bloco `sintese` (prosa fundamentada NOS trechos): {sintese_disponivel,
+  // resposta?, trechos_citados?:[int 1-based], modo?, fonte?} OU, sem fundamento,
+  // {sintese_disponivel:false, motivo:"nao_encontrado"|"nao_fundamentado"|"erro_sintese"}.
+  // A síntese roda o Claude CLI local (LENTO) → timeout generoso só quando ligada.
+  ragPerguntar: (pregaoId, pergunta, k, sintetizar) => {
+    const body = { pergunta };
+    if (k != null) body.k = k;
+    if (sintetizar) body.sintetizar = true;
+    return req(`/pregoes/${pregaoId}/rag/perguntar`, {
       method: "POST",
-      body: JSON.stringify(k != null ? { pergunta, k } : { pergunta }),
-    }),
+      body: JSON.stringify(body),
+      // CLI local pode levar dezenas de segundos; sem síntese mantém o curto.
+      timeoutMs: sintetizar ? 180000 : undefined,
+    });
+  },
 
   // URLs de download direto (o navegador baixa via <a> / window.open; não passam
   // pelo req()/fetch porque a resposta é binária com content-disposition).
