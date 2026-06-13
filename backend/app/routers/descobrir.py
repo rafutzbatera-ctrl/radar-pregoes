@@ -48,11 +48,10 @@ MAX_UFS_BUSCA = 4           # mesmo teto do bulk
 MAX_ESFERAS_BUSCA = 3       # as 4 = todas = sem filtro
 MAX_CHAMADAS_BUSCA = 25     # teto de chamadas por página (5 termos × 5 modalidades)
 # "só compra de bens" (so_bens): o ruído de serviço/concessão dentro das
-# modalidades de compra é ~78% (corpus rotulado). Quando o classifier afina a
-# fonte EM MASSA, buscamos a consulta com página maior p/ compensar o
-# afinamento — a API de Consulta (§4.4) aceita tamanhoPagina maior que a busca
-# textual (que satura em 10). 100 é o teto seguro adotado.
-TAMANHO_BULK_SO_BENS = 100
+# modalidades de compra é ~78% (corpus rotulado). A API de Consulta (§4.4) TRAVA
+# tamanhoPagina em 50 (60+ → HTTP 400, verificado 13/06/2026 — NÃO subir), então
+# não há bump de página; quem compensa o afinamento é o fan-out por modalidade
+# (5 modalidades de compra × 50 = 250 brutos/página → ~55 sobrevivem ao filtro).
 
 
 def _normalizar(texto: str) -> str:
@@ -190,9 +189,9 @@ def descobrir(
       serviço/concessão que vazam dentro das modalidades de compra
       (credenciamento, prestação de serviços, SRP de serviço, concessão de uso
       etc.). NÃO substitui a restrição de modalidades que o front já manda; é
-      complementar. Filtrando, `total_exato=false`. Na fonte EM MASSA buscamos
-      a consulta com página maior (TAMANHO_BULK_SO_BENS) p/ compensar o
-      afinamento (o ruído é ~78%).
+      complementar. Filtrando, `total_exato=false`. O afinamento (~78% de
+      ruído) é compensado pelo fan-out por modalidade de compra, não por
+      página maior (a API de Consulta trava tamanhoPagina em 50).
     - `total_exato`: true ⇔ uma única consulta E sem exclusão E sem so_bens
       (caso contrário a soma dos totais pode ter sobreposição ou o pós-filtro
       reduzir; a UI sinaliza "até N").
@@ -331,13 +330,12 @@ def _hits_bulk(modalidades: str, ufs: str, pagina: int, so_bens: bool = False):
     limites server-side (5 modalidades, 4 UFs) ignoramos o filtro e deixamos o
     pós-filtro para o client (a UI já filtra por modalidade/UF localmente).
 
-    `so_bens`: o pós-filtro aquisição-aware corta ~78% (ruído), então buscamos
-    a consulta com página maior (TAMANHO_BULK_SO_BENS) para chegar mais hits ao
-    classifier — a API de Consulta aceita tamanhoPagina maior que a busca
-    textual (que satura em 10).
+    `so_bens`: o pós-filtro aquisição-aware corta ~78% (ruído); a página fica em
+    TAMANHO (50, teto da API de Consulta) e quem compensa o afinamento é o
+    fan-out por modalidade de compra (5 × 50 = 250 brutos/página).
     """
     data_final = (date.today() + timedelta(days=DIAS_JANELA_BULK)).strftime("%Y%m%d")
-    tamanho = TAMANHO_BULK_SO_BENS if so_bens else TAMANHO
+    tamanho = TAMANHO
 
     mods = [m for m in modalidades.split(",") if m] if modalidades else []
     if len(mods) > MAX_MODALIDADES_BULK:

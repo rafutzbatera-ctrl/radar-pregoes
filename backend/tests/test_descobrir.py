@@ -275,7 +275,7 @@ def test_descobrir_esfera_invalida_422(client, cliente_fake, monkeypatch):
 
 class ClienteBulkCapturador:
     """Fake da fonte EM MASSA (§4.4): devolve registros controlados e registra
-    o tamanhoPagina de cada consulta (para checar o bump do so_bens)."""
+    o tamanhoPagina de cada consulta (a API trava em 50 — sem bump)."""
 
     def __init__(self, registros):
         self.registros = registros
@@ -316,12 +316,13 @@ def test_so_bens_derruba_servico_concessao_na_fonte_bulk(client, monkeypatch):
     assert corpo["total_exato"] is False  # pós-filtro → não exato
 
 
-def test_so_bens_aumenta_tamanho_pagina_do_bulk(client, monkeypatch):
+def test_so_bens_mantem_tamanho_pagina_no_teto_da_api(client, monkeypatch):
+    # a API de Consulta trava tamanhoPagina em 50 (60+ → 400, verificado
+    # 13/06/2026): so_bens NÃO sobe a página; quem compensa é o fan-out
     cli = ClienteBulkCapturador([_reg("BEM", "Aquisição de cadeiras")])
     _patch_pncp(monkeypatch, cli)
     client.get("/descobrir?so_bens=true")
-    assert all(c["tamanho"] == 100 for c in cli.consultas)   # bump p/ compensar afinamento
-    # sem so_bens segue no tamanho padrão
+    assert all(c["tamanho"] == 50 for c in cli.consultas)
     cli.consultas.clear()
     client.get("/descobrir")
     assert all(c["tamanho"] == 50 for c in cli.consultas)

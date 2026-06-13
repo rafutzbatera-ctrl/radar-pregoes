@@ -65,10 +65,13 @@ SERVICO = [
     "assessoramento",
     "empresa especializada de engenharia",
     "empresa de engenharia",
-    "obras de",
+    "obras",
     "obra -",
     "construcao",
     "reforma",
+    "implantacao",
+    "execucao de",
+    "manutencao",
     "projeto executivo",
     "projeto basico",
     "projeto de",
@@ -96,6 +99,11 @@ SERVICO = [
     "exames laboratoriais",
     "instrutor de",
 ]
+# Nota (13/06/2026): "manutencao", "obras", "implantacao", "execucao de" são
+# amplos DE PROPÓSITO — só derrubam quando NÃO há override de bens, então
+# "aquisição de peças para manutenção" / "...para obras" seguem MANTIDOS via
+# "aquisic". Apertam o vazamento de serviço puro (manutenção de balança, obras
+# de contenção, implantação de campo, execução de melhorias) sem matar compra.
 
 # Bens: override que protege a precisão sagrada (não matar compra de bens).
 BENS = [
