@@ -34,7 +34,7 @@ class ClientePNCPFake:
     def __init__(self):
         self.chamadas = {
             "buscar": 0, "itens": 0, "arquivos": 0, "baixar": 0,
-            "consulta": 0, "detalhe": 0,
+            "consulta": 0, "detalhe": 0, "historico": 0,
         }
         # captura dos kwargs de cada chamada a buscar (para testes de repasse)
         self.buscas = []
@@ -76,6 +76,11 @@ class ClientePNCPFake:
     def arquivos(self, cnpj, ano, seq, usar_cache=True):
         self.chamadas["arquivos"] += 1
         return carregar_fixture("arquivos_01613770000172_2026_67.json")
+
+    def historico(self, cnpj, ano, seq, usar_cache=True):
+        self.chamadas["historico"] += 1
+        # fixture pequena: 2 marcos + 3 entradas de "sincroniza" (ruído)
+        return carregar_fixture("historico_amostra.json")
 
     def baixar_arquivo(self, url, destino_dir: Path):
         self.chamadas["baixar"] += 1

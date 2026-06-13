@@ -1,13 +1,17 @@
+import csv
+import io
 import json
 import sqlite3
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from .. import pncp
 from ..deps import get_db
-from ..services import analise, capag, fiscal, sincronizacao
+from ..services import (analise, capag, fiscal, historico, relatorio,
+                        sincronizacao)
 
 router = APIRouter(prefix="/pregoes", tags=["pregoes"])
 
@@ -164,10 +168,11 @@ def sincronizar_itens(pregao_id: int, con: sqlite3.Connection = Depends(get_db))
         raise HTTPException(404, str(exc))
 
 
-@router.get("/{pregao_id}/itens")
-def itens(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
-    if con.execute("SELECT 1 FROM pregoes WHERE id=?", (pregao_id,)).fetchone() is None:
-        raise HTTPException(404, "Pregão não encontrado")
+def _itens_calculados(con: sqlite3.Connection, pregao_id: int) -> list[dict]:
+    """Itens do pregão com a conta montada (custo efetivo, preço esperado,
+    margem, lucro, simulação e pisos). Fonte ÚNICA reusada por GET /itens, pelo
+    export (CSV/XLSX) e pelo relatório PDF — a planilha/PDF levam a MESMA conta
+    da tabela, não um recálculo paralelo."""
     # margem alvo da config (P3) — só guia a SIMULAÇÃO/pisos, nunca o veredito
     cfg = con.execute(
         "SELECT valor FROM config WHERE chave='margem_alvo'").fetchone()
@@ -223,6 +228,136 @@ def itens(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
             d["empate"] = None
         saida.append(d)
     return saida
+
+
+@router.get("/{pregao_id}/itens")
+def itens(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
+    if con.execute("SELECT 1 FROM pregoes WHERE id=?", (pregao_id,)).fetchone() is None:
+        raise HTTPException(404, "Pregão não encontrado")
+    return _itens_calculados(con, pregao_id)
+
+
+# colunas do export (Recurso 2): cabeçalho legível + extrator do item calculado.
+# A planilha leva os dados CRUS do PNCP + a NOSSA conta (custo/preço/margem/lucro).
+_EXPORT_COLUNAS: list[tuple[str, str]] = [
+    ("número", "numero"),
+    ("descrição", "descricao"),
+    ("qtd", "qtd"),
+    ("unidade", "unidade"),
+    ("valor_unit_estimado", "valor_unit_estimado"),
+    ("valor_total", "valor_total"),
+    ("material_ou_servico", "materialOuServico"),  # nome legível mapeado abaixo
+    ("beneficio", "beneficio"),
+    ("criterio", "criterio"),
+    ("ncm", "ncm_pncp"),
+    ("custo_efetivo", "custo_efetivo"),
+    ("preco_esperado", "preco_esperado"),
+    ("margem_pct", "margem_pct"),
+    ("lucro", "lucro"),
+]
+
+
+def _valor_export(d: dict, chave: str):
+    """Extrai o valor de uma coluna do export a partir do item calculado.
+    Sigiloso esconde os valores oficiais; margem_pct = margem×100 (2 casas)."""
+    sig = d.get("sigiloso")
+    if chave == "materialOuServico":
+        # a coluna de material/serviço não está em itens_pregao; só o NCM e a
+        # descrição vêm do PNCP — deixamos o material vazio quando não há.
+        return d.get("material_ou_servico") or ""
+    if chave in ("valor_unit_estimado", "valor_total") and sig:
+        return "sigiloso"
+    if chave == "margem_pct":
+        m = d.get("margem")
+        return round(m * 100, 2) if m is not None else None
+    return d.get(chave)
+
+
+@router.get("/{pregao_id}/itens/export")
+def exportar_itens(pregao_id: int, formato: str = "csv",
+                   con: sqlite3.Connection = Depends(get_db)):
+    """Exporta os itens do pregão em CSV ou XLSX (Recurso 2).
+
+    Reusa _itens_calculados — a planilha leva os dados crus do PNCP MAIS a nossa
+    conta (custo efetivo, preço esperado, margem, lucro). formato inválido → 422.
+    """
+    p = con.execute("SELECT cnpj, ano, seq FROM pregoes WHERE id=?",
+                    (pregao_id,)).fetchone()
+    if p is None:
+        raise HTTPException(404, "Pregão não encontrado")
+    if formato not in ("csv", "xlsx"):
+        raise HTTPException(422, "formato deve ser 'csv' ou 'xlsx'")
+
+    itens_calc = _itens_calculados(con, pregao_id)
+    base = f"itens_{p['cnpj']}_{p['ano']}_{p['seq']}"
+    cabecalho = [c[0] for c in _EXPORT_COLUNAS]
+
+    if formato == "csv":
+        buf = io.StringIO()
+        # ; é o separador que o Excel-pt-BR abre direto; utf-8-sig dá o BOM
+        w = csv.writer(buf, delimiter=";", lineterminator="\r\n")
+        w.writerow(cabecalho)
+        for d in itens_calc:
+            w.writerow([_valor_export(d, chave) for _rot, chave in _EXPORT_COLUNAS])
+        dados = buf.getvalue().encode("utf-8-sig")
+        return StreamingResponse(
+            io.BytesIO(dados), media_type="text/csv; charset=utf-8",
+            headers={"content-disposition": f'attachment; filename="{base}.csv"'},
+        )
+
+    # xlsx via openpyxl (dependência já presente do Stream A)
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Itens"
+    ws.append(cabecalho)
+    for d in itens_calc:
+        ws.append([_valor_export(d, chave) for _rot, chave in _EXPORT_COLUNAS])
+    bio = io.BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return StreamingResponse(
+        bio,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"content-disposition": f'attachment; filename="{base}.xlsx"'},
+    )
+
+
+@router.get("/{pregao_id}/historico")
+def historico_pregao(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
+    """Histórico do pregão (PNCP) — só os MARCOS, sem o ruído de sync (Recurso 4a).
+
+    Lazy: chama o PNCP ao vivo (pista interativa, cache 6h) e filtra o ruído de
+    sincronização automática num helper testável. Vazio → {"eventos": []}.
+    """
+    p = con.execute("SELECT cnpj, ano, seq FROM pregoes WHERE id=?",
+                    (pregao_id,)).fetchone()
+    if p is None:
+        raise HTTPException(404, "Pregão não encontrado")
+    try:
+        cru = pncp.cliente().historico(p["cnpj"], p["ano"], p["seq"])
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+    return {"eventos": historico.filtrar_eventos(cru)}
+
+
+@router.get("/{pregao_id}/relatorio.pdf")
+def relatorio_pregao(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
+    """Relatório PDF do pregão (Recurso 3): cabeçalho, descrição, veredito +
+    números, CAPAG, tabela de itens e os 2 avisos fixos §9. StreamingResponse."""
+    p = con.execute("SELECT * FROM pregoes WHERE id=?", (pregao_id,)).fetchone()
+    if p is None:
+        raise HTTPException(404, "Pregão não encontrado")
+    agregados = _resumo_pregao(con, p)
+    itens_calc = _itens_calculados(con, pregao_id)
+    esfera = p["esfera"] if "esfera" in p.keys() else None
+    capag_dados = capag.capag_do_pregao(con, p["cnpj"], p["uf"], p["municipio"], esfera)
+    pdf_bytes = relatorio.montar_pdf(p, itens_calc, capag_dados, agregados)
+    base = f"relatorio_{p['cnpj']}_{p['ano']}_{p['seq']}"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes), media_type="application/pdf",
+        headers={"content-disposition": f'attachment; filename="{base}.pdf"'},
+    )
 
 
 @router.get("/{pregao_id}/arquivos")

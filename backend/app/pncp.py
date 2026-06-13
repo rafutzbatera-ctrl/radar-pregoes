@@ -237,6 +237,23 @@ class ClientePNCP:
             url, {"pagina": 1, "tamanhoPagina": 20}, usar_cache, pista="interativa"
         ) or []
 
+    def historico(self, cnpj: str, ano: int, seq: int,
+                  usar_cache: bool = True) -> list:
+        """Histórico de manutenção do pregão (eventos do PNCP).
+
+        `GET /pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/historico` → lista crua de
+        eventos (`logManutencaoDataInclusao, tipoLogManutencaoNome,
+        categoriaLogManutencaoNome, usuarioNome, justificativa, documentoTitulo`).
+
+        Pista INTERATIVA (0,3s): 1 chamada por ação do usuário (abrir a aba).
+        O FILTRO de ruído de sincronização NÃO mora aqui (cliente devolve cru) —
+        é feito num helper testável (services/historico.py). Retorna a lista crua.
+        """
+        url = f"{BASE_API}/orgaos/{cnpj}/compras/{ano}/{seq}/historico"
+        return self._get_json(
+            url, {"pagina": 1, "tamanhoPagina": 500}, usar_cache, pista="interativa"
+        ) or []
+
     def baixar_arquivo(self, url: str, destino_dir: Path) -> Path:
         """Baixa o binário de um arquivo, respeitando o nome do content-disposition.
 
