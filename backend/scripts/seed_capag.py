@@ -16,6 +16,7 @@ NÃO baixa nada no request do app — só este script popula. Uso:
 import io
 import sys
 import time
+import unicodedata
 from pathlib import Path
 
 import httpx
@@ -60,11 +61,22 @@ COLS = {
 
 
 def _log(*a):
+    # console Windows é cp1252 e não encoda "→"/acentos; força UTF-8 tolerante
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
     print(*a, flush=True)
 
 
 def _normalizar_cabecalho(s) -> str:
-    return str(s or "").strip().lower()
+    # minúsculas + SEM acento (as chaves de COLS são sem acento; o XLSX tem
+    # "Código Município Completo" / "Nome_Município" acentuados)
+    bruto = str(s or "").strip().lower()
+    return "".join(
+        c for c in unicodedata.normalize("NFD", bruto)
+        if unicodedata.category(c) != "Mn"
+    )
 
 
 def _http() -> httpx.Client:
@@ -82,7 +94,9 @@ def resolver_xlsx(cli: httpx.Client, dataset_id: str) -> str | None:
     r = cli.get(CKAN, params={"id": dataset_id})
     r.raise_for_status()
     res = (r.json().get("result") or {}).get("resources") or []
-    xlsx = [x for x in res if str(x.get("url", "")).lower().endswith(".xlsx")]
+    xlsx = [x for x in res
+            if str(x.get("url", "")).lower().endswith(".xlsx")
+            or str(x.get("format", "")).lower() == "xlsx"]
     if not xlsx:
         _log(f"    ! nenhum .xlsx em '{dataset_id}'")
         return None
@@ -151,18 +165,28 @@ def parsear_xlsx(con, conteudo: bytes, esfera: str) -> int:
     ws = wb[aba]
 
     linhas = ws.iter_rows(values_only=True)
-    try:
-        cabecalho = next(linhas)
-    except StopIteration:
-        return 0
-    # índice de cada coluna conhecida
+    # o XLSX do Tesouro tem 1-2 linhas de banner ANTES do cabeçalho real (na
+    # aba "Prévia da CAPAG" o cabeçalho está na linha 3) — varremos as primeiras
+    # linhas até achar a que mapeia cod_ibge + CAPAG. `next` deixa o iterador
+    # posicionado logo após o cabeçalho, então o loop de dados começa certo.
     idx = {}
-    for i, nome in enumerate(cabecalho):
-        chave = COLS.get(_normalizar_cabecalho(nome))
-        if chave and chave not in idx:
-            idx[chave] = i
-    if "cod_ibge" not in idx or "nota" not in idx:
-        _log(f"    ! cabeçalho sem cod_ibge/CAPAG (cols: {list(idx)}) — pulando")
+    achou = False
+    for _ in range(15):
+        try:
+            cabecalho = next(linhas)
+        except StopIteration:
+            break
+        cand = {}
+        for i, nome in enumerate(cabecalho):
+            chave = COLS.get(_normalizar_cabecalho(nome))
+            if chave and chave not in cand:
+                cand[chave] = i
+        if "cod_ibge" in cand and "nota" in cand:
+            idx = cand
+            achou = True
+            break
+    if not achou:
+        _log("    ! cabeçalho (cod_ibge/CAPAG) não achado nas primeiras linhas — pulando")
         wb.close()
         return 0
 
