@@ -20,7 +20,7 @@ from pydantic import BaseModel
 
 from .. import pncp
 from ..deps import get_db
-from ..services import avaliacao, descoberta
+from ..services import avaliacao, classificador, descoberta
 from .pregoes import _resumo_pregao
 
 router = APIRouter(prefix="/descobrir", tags=["descobrir"])
@@ -47,6 +47,12 @@ MAX_MODALIDADES_BUSCA = 5   # cobre o "só compra de bens" (4,5,6,7,8)
 MAX_UFS_BUSCA = 4           # mesmo teto do bulk
 MAX_ESFERAS_BUSCA = 3       # as 4 = todas = sem filtro
 MAX_CHAMADAS_BUSCA = 25     # teto de chamadas por página (5 termos × 5 modalidades)
+# "só compra de bens" (so_bens): o ruído de serviço/concessão dentro das
+# modalidades de compra é ~78% (corpus rotulado). Quando o classifier afina a
+# fonte EM MASSA, buscamos a consulta com página maior p/ compensar o
+# afinamento — a API de Consulta (§4.4) aceita tamanhoPagina maior que a busca
+# textual (que satura em 10). 100 é o teto seguro adotado.
+TAMANHO_BULK_SO_BENS = 100
 
 
 def _normalizar(texto: str) -> str:
@@ -157,6 +163,7 @@ def descobrir(
     ordenacao: Literal["-data", "data", "relevancia"] = "-data",
     modalidades: str = "",
     esferas: str = "",
+    so_bens: bool = False,
     pagina: int = Query(1, ge=1),
     con: sqlite3.Connection = Depends(get_db),
 ):
@@ -178,8 +185,17 @@ def descobrir(
       contenha qualquer termo (normalizado: caixa baixa + acentos removidos);
       aplica-se às duas fontes como pós-filtro (aí `total_exato=false`).
     - `status`: só recebendo_proposta|encerradas filtram; todos = sem filtro.
-    - `total_exato`: true ⇔ uma única consulta E sem exclusão (caso contrário a
-      soma dos totais pode ter sobreposição; a UI sinaliza "até N").
+    - `so_bens`: pós-filtra os hits (as DUAS fontes) por
+      `classificador.e_compra_de_bens(title + " " + description)` — derruba
+      serviço/concessão que vazam dentro das modalidades de compra
+      (credenciamento, prestação de serviços, SRP de serviço, concessão de uso
+      etc.). NÃO substitui a restrição de modalidades que o front já manda; é
+      complementar. Filtrando, `total_exato=false`. Na fonte EM MASSA buscamos
+      a consulta com página maior (TAMANHO_BULK_SO_BENS) p/ compensar o
+      afinamento (o ruído é ~78%).
+    - `total_exato`: true ⇔ uma única consulta E sem exclusão E sem so_bens
+      (caso contrário a soma dos totais pode ter sobreposição ou o pós-filtro
+      reduzir; a UI sinaliza "até N").
     """
     if len(q) > MAX_TERMOS:
         raise HTTPException(422, f"máx. {MAX_TERMOS} termos de busca")
@@ -201,7 +217,9 @@ def descobrir(
     )
 
     if usar_bulk:
-        hits_ordem, total, total_exato, fonte = _hits_bulk(modalidades, ufs, pagina)
+        hits_ordem, total, total_exato, fonte = _hits_bulk(
+            modalidades, ufs, pagina, so_bens,
+        )
     else:
         hits_ordem, total, total_exato, fonte = _hits_busca(
             termos, ufs, status, tipos_documento, ordenacao,
@@ -216,6 +234,12 @@ def descobrir(
             ))))
             if any(termo in palheiro for termo in excl):
                 continue
+        # so_bens: pós-filtro aquisição-aware sobre o texto do objeto (título +
+        # descrição). Vale para as DUAS fontes (bulk e textual).
+        if so_bens:
+            objeto = " ".join(filter(None, (hit.get("title"), hit.get("description"))))
+            if not classificador.e_compra_de_bens(objeto):
+                continue
         nc = hit.get("numero_controle_pncp")
         local = con.execute(
             "SELECT id FROM pregoes WHERE numero_controle=?", (nc,)
@@ -223,9 +247,9 @@ def descobrir(
         itens.append(_adaptar(hit, local is not None, local["id"] if local else None))
 
     return {
-        # exclusão presente → o total bruto pode superestimar (filtro client-side)
+        # exclusão ou so_bens → o total bruto superestima (pós-filtro client-side)
         "total": total,
-        "total_exato": total_exato and not excl,
+        "total_exato": total_exato and not excl and not so_bens,
         "pagina": pagina,
         "tamanho": TAMANHO,
         "fonte": fonte,
@@ -300,14 +324,20 @@ def _hits_busca(termos, ufs, status, tipos_documento, ordenacao,
     return hits, total, len(termos) <= 1 and not descartou, "busca"
 
 
-def _hits_bulk(modalidades: str, ufs: str, pagina: int):
+def _hits_bulk(modalidades: str, ufs: str, pagina: int, so_bens: bool = False):
     """Fonte em massa (§4.4): valor oficial embutido em cada registro.
 
     Fan-out controlado: 1 chamada por modalidade × UF selecionada. Acima dos
     limites server-side (5 modalidades, 4 UFs) ignoramos o filtro e deixamos o
     pós-filtro para o client (a UI já filtra por modalidade/UF localmente).
+
+    `so_bens`: o pós-filtro aquisição-aware corta ~78% (ruído), então buscamos
+    a consulta com página maior (TAMANHO_BULK_SO_BENS) para chegar mais hits ao
+    classifier — a API de Consulta aceita tamanhoPagina maior que a busca
+    textual (que satura em 10).
     """
     data_final = (date.today() + timedelta(days=DIAS_JANELA_BULK)).strftime("%Y%m%d")
+    tamanho = TAMANHO_BULK_SO_BENS if so_bens else TAMANHO
 
     mods = [m for m in modalidades.split(",") if m] if modalidades else []
     if len(mods) > MAX_MODALIDADES_BULK:
@@ -323,7 +353,7 @@ def _hits_bulk(modalidades: str, ufs: str, pagina: int):
         try:
             return pncp.cliente().consulta_propostas(
                 data_final=data_final, modalidade=mod, uf=uf,
-                pagina=pagina, tamanho=TAMANHO,
+                pagina=pagina, tamanho=tamanho,
             )
         except RuntimeError as exc:  # PNCP fora do ar após os retries
             raise HTTPException(503, str(exc))

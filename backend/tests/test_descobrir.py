@@ -269,3 +269,80 @@ def test_descobrir_modalidade_invalida_422(client, cliente_fake, monkeypatch):
 def test_descobrir_esfera_invalida_422(client, cliente_fake, monkeypatch):
     _patch_pncp(monkeypatch, cliente_fake)
     assert client.get("/descobrir?esferas=X").status_code == 422
+
+
+# --------- so_bens: pós-filtro aquisição-aware (classificador) ---------
+
+class ClienteBulkCapturador:
+    """Fake da fonte EM MASSA (§4.4): devolve registros controlados e registra
+    o tamanhoPagina de cada consulta (para checar o bump do so_bens)."""
+
+    def __init__(self, registros):
+        self.registros = registros
+        self.consultas = []
+
+    def consulta_propostas(self, data_final, modalidade="", uf="", pagina=1,
+                           tamanho=50, usar_cache=True):
+        self.consultas.append({"tamanho": tamanho, "modalidade": modalidade, "uf": uf})
+        return {"data": self.registros, "totalRegistros": len(self.registros)}
+
+
+def _reg(nc, objeto, numero="1"):
+    return {
+        "numeroControlePNCP": nc,
+        "objetoCompra": objeto,
+        "orgaoEntidade": {"cnpj": "00000000000000", "razaoSocial": "Órgão X"},
+        "unidadeOrgao": {"ufSigla": "SP", "municipioNome": "São Paulo"},
+        "tipoInstrumentoConvocatorioNome": "Edital",
+        "numeroCompra": numero, "anoCompra": 2026, "sequencialCompra": 1,
+        "modalidadeNome": "Pregão Eletrônico",
+        "valorTotalEstimado": 1000.0,
+    }
+
+
+def test_so_bens_derruba_servico_concessao_na_fonte_bulk(client, monkeypatch):
+    # 3 registros: 1 bem (aquisição), 1 serviço (prestação), 1 concessão (credenciamento)
+    cli = ClienteBulkCapturador([
+        _reg("BEM", "Aquisição de notebooks para a Secretaria de Educação"),
+        _reg("SERV", "Prestação de serviços de limpeza e conservação do prédio"),
+        _reg("CONC", "Credenciamento de instituições financeiras"),
+    ])
+    _patch_pncp(monkeypatch, cli)
+    r = client.get("/descobrir?so_bens=true")
+    corpo = r.json()
+    assert corpo["fonte"] == "consulta"
+    ncs = [i["numero_controle"] for i in corpo["itens"]]
+    assert ncs == ["BEM"]                 # serviço e concessão derrubados
+    assert corpo["total_exato"] is False  # pós-filtro → não exato
+
+
+def test_so_bens_aumenta_tamanho_pagina_do_bulk(client, monkeypatch):
+    cli = ClienteBulkCapturador([_reg("BEM", "Aquisição de cadeiras")])
+    _patch_pncp(monkeypatch, cli)
+    client.get("/descobrir?so_bens=true")
+    assert all(c["tamanho"] == 100 for c in cli.consultas)   # bump p/ compensar afinamento
+    # sem so_bens segue no tamanho padrão
+    cli.consultas.clear()
+    client.get("/descobrir")
+    assert all(c["tamanho"] == 50 for c in cli.consultas)
+
+
+def test_so_bens_off_nao_filtra(client, monkeypatch):
+    cli = ClienteBulkCapturador([
+        _reg("BEM", "Aquisição de notebooks"),
+        _reg("SERV", "Prestação de serviços de vigilância"),
+    ])
+    _patch_pncp(monkeypatch, cli)
+    ncs = [i["numero_controle"] for i in client.get("/descobrir").json()["itens"]]
+    assert set(ncs) == {"BEM", "SERV"}      # sem so_bens, nada é cortado
+
+
+def test_so_bens_filtra_tambem_na_busca_textual(client, monkeypatch):
+    # na fonte textual o pós-filtro usa title + description do hit
+    cli = ClienteCapturador(por_termo={"x": [
+        _hit("BEM", title="Aquisição de microfones", description="equipamento de áudio"),
+        _hit("SERV", title="Prestação de serviços de consultoria", description="gestão"),
+    ]}, total_por_termo=2)
+    _patch_pncp(monkeypatch, cli)
+    ncs = [i["numero_controle"] for i in client.get("/descobrir?q=x&so_bens=true").json()["itens"]]
+    assert ncs == ["BEM"]
