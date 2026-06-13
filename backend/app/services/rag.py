@@ -35,7 +35,8 @@ log = logging.getLogger("radar.rag")
 # fronteira de cláusula numerada no início de linha (ex.: "1 ", "1.2 ", "10.3) ")
 _RE_CLAUSULA = re.compile(r"^\s*\d+(\.\d+)*[\.\)]?\s")
 # mínimo de caracteres ÚTEIS (sem espaços) para um chunk valer a pena
-_MIN_UTEIS = 40
+# (configurável via RADAR_RAG_CHUNK_MIN; default 40)
+_MIN_UTEIS = settings.RAG_CHUNK_MIN
 
 
 def _texto_util(s: str) -> int:

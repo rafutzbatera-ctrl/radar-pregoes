@@ -36,7 +36,7 @@ MATCH_THRESHOLD = 0.90
 RAG_THRESHOLD = float(os.getenv("RADAR_RAG_THRESHOLD", "0.80"))
 RAG_TOP_K = int(os.getenv("RADAR_RAG_TOP_K", "5"))
 RAG_CHUNK_MAX = int(os.getenv("RADAR_RAG_CHUNK_MAX", "900"))      # teto de chars/chunk
-RAG_CHUNK_MIN = int(os.getenv("RADAR_RAG_CHUNK_MIN", "200"))      # alvo mínimo antes de fechar
+RAG_CHUNK_MIN = int(os.getenv("RADAR_RAG_CHUNK_MIN", "40"))       # mín. de chars ÚTEIS p/ manter o chunk
 RAG_CHUNK_OVERLAP = int(os.getenv("RADAR_RAG_CHUNK_OVERLAP", "120"))  # sobreposição entre chunks
 
 # regras do veredito (CLAUDE.md §6.2) — sobreponíveis via tabela config

@@ -97,6 +97,35 @@ def test_chunk_citacao_aponta_trecho_real():
         assert habilitacao.verificar_citacao(ch["texto"], PAGINAS) is True
 
 
+def test_chunkar_pagina_longa_split_com_overlap_preserva_verbatim():
+    """Caminho de maior risco do verbatim: página > RAG_CHUNK_MAX vira ≥2 chunks
+    com overlap. Cada chunk continua sendo fatia EXATA da página, os offsets são
+    monótonos e chunks consecutivos se sobrepõem (o início recua p/ a cauda do
+    anterior). Cobre a regressão que o revisor apontou (sem teste do split)."""
+    from app import settings
+
+    # 8 cláusulas numeradas de ~220 chars → ~1.8k chars >> RAG_CHUNK_MAX (900)
+    clausulas = [
+        f"{i}. CLAUSULA {i} - " + ("texto da clausula numero %d " % i) * 8
+        for i in range(1, 9)
+    ]
+    pagina = "\n\n".join(clausulas) + "\n"
+    chunks = rag._chunkar([pagina])
+
+    assert len(chunks) >= 2, "página longa deveria gerar múltiplos chunks"
+    for ch in chunks:
+        # INVARIANTE verbatim mesmo no split: texto == pagina[inicio:fim]
+        assert ch["texto"] == pagina[ch["offset_inicio"]:ch["offset_fim"]]
+        assert ch["pagina"] == 1
+        assert 0 <= ch["offset_inicio"] < ch["offset_fim"] <= len(pagina)
+        assert habilitacao.verificar_citacao(ch["texto"], [pagina]) is True
+    # offsets de início crescentes e overlap entre chunks consecutivos
+    for ant, prox in zip(chunks, chunks[1:]):
+        assert prox["offset_inicio"] < prox["offset_fim"]
+        assert prox["offset_inicio"] > ant["offset_inicio"]          # avança
+        assert prox["offset_inicio"] < ant["offset_fim"]             # mas sobrepõe
+
+
 # --------- recuperação extrativa ---------
 
 def test_indexar_e_perguntar_recupera_chunk_no_topo(con):
