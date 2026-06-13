@@ -166,6 +166,25 @@ def test_montar_pdf_retorna_bytes_pdf():
     assert pdf[:4] == b"%PDF"
 
 
+def test_montar_pdf_descricao_longa_nao_quebra():
+    """Regressão (13/06/2026): descrição de item > 62 chars era truncada com
+    '…' (U+2026), fora do latin-1 da fonte core → FPDFUnicodeEncodingException
+    (500 ao vivo). A truncagem agora usa '...' ASCII. Item real do PNCP."""
+    pregao = {"cnpj": CNPJ, "ano": 2026, "seq": 67, "titulo": "Pregão x",
+              "municipio": "Imbaú", "uf": "PR"}
+    itens = [{
+        "numero": 1,
+        "descricao": "AQUISIÇÃO DE TONER PARA IMPRESSORAS QUE ATENDEM A "
+                     "SECRETARIA MUNICIPAL DE EDUCAÇÃO, ESCOLAS MUNICIPAIS DO "
+                     "ENSINO FUNDAMENTAL E DO ENSINO INFANTIL",
+        "qtd": 12, "valor_unit_estimado": 471.15, "valor_total": 5653.8,
+        "custo_efetivo": None, "margem": None, "lucro": None, "sigiloso": 0,
+    }]
+    pdf = montar_pdf(pregao, itens, {"disponivel": False, "motivo": "nao_avaliado"},
+                     {"veredito": None})
+    assert pdf[:4] == b"%PDF"
+
+
 def test_endpoint_relatorio_pdf(client, con):
     pid = _criar_pregao(con, numero_controle="NC-PDF")
     _inserir_itens(con, pid)

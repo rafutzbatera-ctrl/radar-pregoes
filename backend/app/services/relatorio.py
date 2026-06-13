@@ -66,8 +66,10 @@ def _ou_traco(v) -> str:
 
 
 def _trunc(s: str, n: int) -> str:
+    # reticências ASCII ("...") — "…" (U+2026) não cabe em latin-1 da fonte core
+    # e, sendo concatenado DEPOIS do _l1, escaparia do saneamento (quebra o PDF)
     s = _l1(s)
-    return s if len(s) <= n else s[: n - 1] + "…"
+    return s if len(s) <= n else s[: max(0, n - 3)] + "..."
 
 
 class _PDF(FPDF):

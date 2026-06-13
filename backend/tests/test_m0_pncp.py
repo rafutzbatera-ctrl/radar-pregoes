@@ -70,7 +70,10 @@ def test_cache_vencido_serve_quando_pncp_cai(tmp_path, monkeypatch):
         return httpx.Response(500)
 
     cli = _cliente_com_transport(tmp_path, handler)
-    cli.cache_ttl = 0                      # tudo vence na hora
+    # ttl = -1 (não 0): com 0, time.time()-mtime < 0 às vezes dá True por
+    # precisão de mtime no Windows (arquivo "no futuro" por ms) → serviria
+    # cache fresco e pularia a API (teste flaky). -1 garante vencido sempre.
+    cli.cache_ttl = -1
     ok = cli.buscar("áudio")               # 1ª: sucesso, grava o cache
     assert ok["total"] == 1
     resp = cli.buscar("áudio")             # 2ª: cache vencido + API caída → stale
