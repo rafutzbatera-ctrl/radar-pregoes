@@ -195,6 +195,39 @@ MIGRACOES = [
     """
     ALTER TABLE itens_pregao ADD COLUMN material_ou_servico TEXT;
     """,
+    # v9 — RAG leve, extrativo e citation-grounded (Fase 1). Q&A sobre os
+    # documentos de UM edital por vez, isolado por pregao_id (rag_chunks só é
+    # consultado dentro do escopo de um pregão — single-user, um edital em foco).
+    # Cada chunk guarda offsets de caractere na página original + o texto VERBATIM
+    # (pagina[offset_inicio:offset_fim]) para que toda resposta seja extrativa e
+    # rastreável ao trecho real (princípios 1 e 2: nunca inventa, citação real).
+    # `vetor` = embedding e5 (float32) gravado como BLOB via np.tobytes(); a
+    # recuperação reconstrói a matriz com np.frombuffer e faz cosseno (produto
+    # interno, vetores já normalizados) em numpy. rag_status = controle de
+    # ingestão por pregão (quando, quantos chunks/páginas, qual modelo).
+    """
+    CREATE TABLE rag_chunks(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pregao_id INTEGER NOT NULL REFERENCES pregoes(id),
+        arquivo_id INTEGER REFERENCES arquivos(id),
+        pagina INTEGER,
+        ordem INTEGER,
+        offset_inicio INTEGER,
+        offset_fim INTEGER,
+        texto TEXT,
+        vetor BLOB,
+        criado_em TEXT DEFAULT (datetime('now')),
+        UNIQUE(pregao_id, arquivo_id, pagina, ordem)
+    );
+    CREATE INDEX idx_rag_chunks_pregao ON rag_chunks(pregao_id);
+    CREATE TABLE rag_status(
+        pregao_id INTEGER PRIMARY KEY REFERENCES pregoes(id),
+        ingerido_em TEXT,
+        n_chunks INTEGER,
+        n_paginas INTEGER,
+        modelo TEXT
+    );
+    """,
 ]
 
 

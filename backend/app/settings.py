@@ -28,6 +28,17 @@ USER_AGENT = "RadarPregoes/0.1 (uso pessoal)"
 MATCH_MODELO = "intfloat/multilingual-e5-small"
 MATCH_THRESHOLD = 0.90
 
+# RAG leve extrativo (Fase 1) — Q&A sobre os documentos de UM edital por vez.
+# Reusa o mesmo e5 do matching (MATCH_MODELO); threshold SEPARADO do 0.90 do
+# matching: aqui 0.80 (decisão do dono). Abaixo do threshold a resposta é
+# "não encontrado" — nunca inventa (princípio 1). Chunking em chars sobre o
+# texto cru da página (verbatim), com fronteiras de parágrafo/cláusula.
+RAG_THRESHOLD = float(os.getenv("RADAR_RAG_THRESHOLD", "0.80"))
+RAG_TOP_K = int(os.getenv("RADAR_RAG_TOP_K", "5"))
+RAG_CHUNK_MAX = int(os.getenv("RADAR_RAG_CHUNK_MAX", "900"))      # teto de chars/chunk
+RAG_CHUNK_MIN = int(os.getenv("RADAR_RAG_CHUNK_MIN", "200"))      # alvo mínimo antes de fechar
+RAG_CHUNK_OVERLAP = int(os.getenv("RADAR_RAG_CHUNK_OVERLAP", "120"))  # sobreposição entre chunks
+
 # regras do veredito (CLAUDE.md §6.2) — sobreponíveis via tabela config
 VEREDITO_PADRAO = {
     "vale_margem_min": 0.20,
