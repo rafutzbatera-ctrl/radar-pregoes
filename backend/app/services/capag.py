@@ -7,7 +7,16 @@ este serviço só LÊ — nunca baixa nada no request.
 
 Princípio nº 1 do projeto (CLAUDE.md §2): NUNCA inventar. Ente federal ou sem
 dado no Tesouro NÃO recebe nota chutada — devolve {disponivel: False} com o
-motivo ("federal" | "sem_dados"). A CAPAG só avalia municípios e estados.
+motivo ("federal" | "nao_avaliado"). A CAPAG só avalia municípios e estados.
+
+ESFERA-AWARE (corrigido 13/06/2026): a CAPAG vale só para municípios/estados;
+federal = pagamento pela União (risco baixo), NÃO recebe nota. A LOCALIZAÇÃO
+NÃO pode determinar a nota — a ESFERA do órgão manda. O bug anterior usava o
+fallback por município+UF para QUALQUER CNPJ desconhecido: um órgão FEDERAL
+sediado em São Paulo (ex.: IFSP) herdava a CAPAG do MUNICÍPIO de São Paulo
+(erro do Zionn). Agora o fallback por município só roda quando a esfera do PNCP
+confirma M/E; esfera F nunca procura nota; esfera desconhecida (None) não faz
+fallback (evita misatribuir).
 """
 import re
 import sqlite3
@@ -88,22 +97,48 @@ def _montar_disponivel(nota_row: sqlite3.Row, ente: str | None,
     }
 
 
+def _normalizar_esfera(esfera: str | None) -> str | None:
+    """Esfera do PNCP → letra única maiúscula (F|E|M|D) ou None se vazia."""
+    if not esfera:
+        return None
+    letra = esfera.strip().upper()[:1]
+    return letra or None
+
+
 def capag_do_pregao(con: sqlite3.Connection, cnpj: str | None,
-                    uf: str | None, municipio: str | None) -> dict:
-    """Resolve a CAPAG do ente comprador do pregão.
+                    uf: str | None, municipio: str | None,
+                    esfera: str | None = None) -> dict:
+    """Resolve a CAPAG do ente comprador do pregão (ESFERA-AWARE).
 
-    Pipeline:
-      1. capag_entes por CNPJ (só dígitos) → cod_ibge + esfera.
-         - esfera M/E → capag_notas por cod_ibge → nota disponível.
-      2. Fallback (sem casar por CNPJ, ou esfera fora de {M,E}): casar por
-         (município normalizado + UF) em capag_notas.
-      3. Sem nenhuma nota:
-         - CNPJ não consta em capag_entes (e há entes carregados) → provável
-           federal (federais não aparecem no /entes) → motivo "federal".
-         - senão → motivo "sem_dados".
+    A ESFERA do órgão (do PNCP, não a localização) decide se há CAPAG:
 
-    Nunca inventa nota (princípio nº 1).
+      0. esfera == "F" → federal: pagamento pela União (risco baixo). NÃO
+         procura nota nenhuma → {disponivel: False, motivo: "federal"}.
+      1. Casamento direto por CNPJ em capag_entes (esfera M/E) → nota por
+         cod_ibge → disponível. Vale SEMPRE que casar, independente da esfera
+         informada — o CNPJ ser um ente já prova que é municipal/estadual.
+      2. Fallback por (município normalizado + UF) SOMENTE se esfera ∈ {M, E}:
+         a esfera confirma que é municipal/estadual; o CNPJ do comprador é um
+         sub-órgão (fundo/secretaria) do mesmo município. Esfera None/desconhecida
+         NÃO faz fallback (evita misatribuir — bug do órgão federal em SP).
+      3. Sem nada → {disponivel: False, motivo: "nao_avaliado"}.
+
+    Nunca inventa nota (princípio nº 1). NÃO afirma "federal" por ausência de
+    CNPJ em capag_entes (isso rotulava errado fundos/secretarias municipais);
+    só afirma federal quando a esfera do PNCP diz F.
     """
+    esf = _normalizar_esfera(esfera)
+
+    # 0. federal: União paga (risco baixo). Não procura nota nenhuma.
+    if esf == "F":
+        return {
+            "disponivel": False,
+            "motivo": "federal",
+            "fonte": FONTE,
+            "uf": uf,
+            "ente": None,
+        }
+
     cnpj_d = so_digitos(cnpj)
     ente_row = None
     if cnpj_d:
@@ -112,7 +147,9 @@ def capag_do_pregao(con: sqlite3.Connection, cnpj: str | None,
             (cnpj_d,),
         ).fetchone()
 
-    # 1. casamento direto por CNPJ → cod_ibge (esfera municipal/estadual)
+    # 1. casamento direto por CNPJ → cod_ibge. O CNPJ casar em capag_entes já
+    #    prova esfera M/E (o /entes só traz municípios e estados) — vale mesmo
+    #    se a esfera informada vier None/desconhecida.
     if ente_row is not None and (ente_row["esfera"] in ("M", "E")):
         nota_row = con.execute(
             "SELECT * FROM capag_notas WHERE cod_ibge=?", (ente_row["cod_ibge"],)
@@ -120,9 +157,11 @@ def capag_do_pregao(con: sqlite3.Connection, cnpj: str | None,
         if nota_row is not None:
             return _montar_disponivel(nota_row, ente_row["ente"], ente_row["esfera"])
 
-    # 2. fallback por (município normalizado + UF) — cobre CNPJ que não casa em
-    #    capag_entes mas é claramente municipal (ente existe, base só do XLSX).
-    if municipio and uf:
+    # 2. fallback por (município normalizado + UF) — SÓ se a esfera do PNCP
+    #    confirma municipal/estadual. Aí é seguro: o comprador é um sub-órgão
+    #    (fundo/secretaria) do mesmo município/estado. Sem esfera M/E, NÃO faz
+    #    fallback (um órgão federal sediado num município não herda a nota dele).
+    if esf in ("M", "E") and municipio and uf:
         mun_norm = _normalizar_nome(municipio)
         uf_up = uf.strip().upper()
         candidatos = con.execute(
@@ -132,24 +171,12 @@ def capag_do_pregao(con: sqlite3.Connection, cnpj: str | None,
             if _normalizar_nome(c["municipio"]) == mun_norm:
                 return _montar_disponivel(c, c["municipio"], c["esfera"])
 
-    # 3. sem nota: distinguir federal de sem_dados.
-    #    Federais NÃO aparecem em capag_entes (CLAUDE.md: o /entes só traz M/E).
-    #    Se há entes carregados e este CNPJ não está lá, é provável federal.
-    tem_entes = con.execute(
-        "SELECT 1 FROM capag_entes LIMIT 1"
-    ).fetchone() is not None
-    if cnpj_d and tem_entes and ente_row is None:
-        return {
-            "disponivel": False,
-            "motivo": "federal",
-            "fonte": FONTE,
-            "uf": uf,
-            "ente": None,
-        }
-
+    # 3. sem nota: não avaliado. NÃO inferimos "federal" por ausência de CNPJ
+    #    em capag_entes (rotulava errado fundos/secretarias municipais com CNPJ
+    #    próprio). Só dizemos "federal" quando a esfera do PNCP diz F (caso 0).
     return {
         "disponivel": False,
-        "motivo": "sem_dados",
+        "motivo": "nao_avaliado",
         "fonte": FONTE,
         "uf": uf,
         "ente": None,

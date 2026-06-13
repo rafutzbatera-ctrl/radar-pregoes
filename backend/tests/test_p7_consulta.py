@@ -102,6 +102,10 @@ def test_consulta_hit_cru_completo_para_importar(client, cliente_fake, monkeypat
     assert hit["unidade_nome"]
     # amparoLegal é objeto {nome, descricao} → texto extraído
     assert hit["fundamentacao_legal"] and "Credenciamento" in hit["fundamentacao_legal"]
+    # esfera do órgão (§4.4 orgaoEntidade.esferaId) presente no cartão E no hit
+    # cru → persistir_hit grava em pregoes.esfera (CAPAG esfera-aware)
+    assert item["esfera_orgao"] == "M"
+    assert hit["esfera_orgao"] == "M"
 
 
 def test_importar_registro_da_consulta_cria_pregao_com_valor(client, con,
@@ -118,6 +122,10 @@ def test_importar_registro_da_consulta_cria_pregao_com_valor(client, con,
     assert pregao["numero_controle"] == "46634606000180-1-000028/2024"
     assert pregao["valor_global"] == 100.0         # ← valor oficial persistido
     assert pregao["busca_id"] is None
+    # esfera do órgão persistida (CAPAG esfera-aware): o registro é municipal
+    assert con.execute(
+        "SELECT esfera FROM pregoes WHERE id=?", (pregao["id"],)
+    ).fetchone()["esfera"] == "M"
     assert pregao["link_pncp"].startswith("https://pncp.gov.br/app/editais/")
     # idempotente
     r2 = client.post("/descobrir/importar", json={

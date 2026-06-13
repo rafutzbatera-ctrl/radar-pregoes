@@ -125,6 +125,10 @@ def _mapear_consulta(reg: dict) -> dict:
         "valor_global": reg.get("valorTotalEstimado"),
         "unidade_nome": unidade.get("nomeUnidade"),
         "fundamentacao_legal": _amparo_texto(reg.get("amparoLegal")),
+        # esfera do órgão (§4.4): "F" Federal | "E" Estadual | "M" Municipal |
+        # "D" Distrital. Decide a CAPAG (esfera-aware): federal não herda nota
+        # do município. A busca textual (§4.1) não traz esfera → fica None lá.
+        "esfera_orgao": orgao.get("esferaId"),
     }
 
 
@@ -144,6 +148,9 @@ def _adaptar(hit: dict, ja_no_radar: bool, pregao_id: int | None) -> dict:
         "cnpj": hit.get("orgao_cnpj"),
         "ano": hit.get("ano"),
         "seq": hit.get("numero_sequencial"),
+        # esfera do órgão (só vem da fonte "consulta" §4.4; None na busca §4.1).
+        # O `hit` cru abaixo também a preserva → persistir_hit grava em pregoes.esfera.
+        "esfera_orgao": hit.get("esfera_orgao"),
         "ja_no_radar": ja_no_radar,
         "pregao_id": pregao_id,
         # JSON cru: o front guarda e devolve no /descobrir/importar (persistir_hit

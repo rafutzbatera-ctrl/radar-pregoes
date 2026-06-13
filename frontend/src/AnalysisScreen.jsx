@@ -656,12 +656,12 @@ function CapagTab({ pregao }) {
           <span className="silk">CAPAG — capacidade de pagamento do comprador</span>
         </div>
         <div className="capag-card mod capag-federal">
-          <div className="capag-federal-tit">Federal — pagamento pela União (risco baixo)</div>
+          <div className="capag-federal-tit">Órgão federal — pagamento pela União (risco baixo)</div>
           <p className="capag-federal-txt">
-            A CAPAG (Capacidade de Pagamento, do Tesouro Nacional) só avalia
-            municípios e estados. Entes federais (União, autarquias, institutos
-            e universidades federais) não recebem nota — o pagamento corre pela
-            União, de risco historicamente baixo.
+            A CAPAG do Tesouro avalia apenas municípios e estados. Entes
+            federais (União, autarquias, institutos e universidades federais)
+            não recebem nota — o pagamento corre pela União, de risco
+            historicamente baixo.
           </p>
           <span className="capag-fonte silk">{Ico.escudo} {d.fonte || "Tesouro Nacional / SICONFI"}</span>
         </div>
@@ -677,10 +677,11 @@ function CapagTab({ pregao }) {
           <span className="silk">CAPAG — capacidade de pagamento do comprador</span>
         </div>
         <div className="capag-card mod capag-vazio">
-          <div className="capag-vazio-tit silk">CAPAG não disponível para este ente</div>
+          <div className="capag-vazio-tit silk">CAPAG não disponível para este órgão</div>
           <p className="capag-vazio-txt silk">
-            O Tesouro Nacional não publicou nota CAPAG para este comprador.
-            Nada foi estimado — sem dado, sem nota.
+            A CAPAG (Tesouro Nacional) avalia prefeituras e governos estaduais
+            por CNPJ; sub-órgãos com CNPJ próprio podem não ter nota. Nada foi
+            estimado — sem dado, sem nota.
           </p>
           <span className="capag-fonte silk">{d.fonte || "Tesouro Nacional / SICONFI"}</span>
         </div>

@@ -1,10 +1,13 @@
-"""CAPAG — risco de pagamento do comprador (Tesouro/SICONFI).
+"""CAPAG — risco de pagamento do comprador (Tesouro/SICONFI), ESFERA-AWARE.
 
 Fixture pequena montada direto no `con` (NÃO baixa o XLSX de ~22MB). Asserções:
-- município SP → disponível True, nota B, indicador[0] = 32.75% nota A;
-- federal (CNPJ fora de capag_entes, há entes carregados) → False motivo federal;
-- CNPJ desconhecido sem entes → sem_dados;
-- endpoint GET /pregoes/{id}/capag (client + con).
+- município SP por CNPJ-ente → disponível True, nota B, indicador[0] = 32.75% nota A;
+- esfera "F" (federal) → False motivo "federal", MESMO que o município informado
+  exista na base (prova que NÃO misatribui a nota do município — bug do Zionn);
+- esfera "M" com CNPJ de sub-órgão (não-ente) + município/UF na base → disponível
+  via fallback (herda a nota do município, que a esfera confirma ser municipal);
+- esfera None com CNPJ desconhecido → "nao_avaliado" (sem fallback);
+- endpoint GET /pregoes/{id}/capag passa a esfera persistida (client + con).
 """
 from app.services import capag
 
@@ -46,6 +49,8 @@ def test_so_digitos():
 
 
 def test_municipal_sp_disponivel(con):
+    """CNPJ casa em capag_entes → nota por cod_ibge. Vale mesmo sem esfera
+    informada (o CNPJ ser um ente já prova M/E)."""
     _montar_capag(con)
     r = capag.capag_do_pregao(con, CNPJ_SP, "SP", "São Paulo")
     assert r["disponivel"] is True
@@ -64,43 +69,76 @@ def test_municipal_sp_disponivel(con):
     assert inds[2]["nota"] == "B" and inds[2]["valor_pct"] == 4.86
 
 
-def test_fallback_por_municipio_uf(con):
-    """CNPJ não casa em capag_entes, mas há entes carregados e o município/UF
-    bate em capag_notas → resolve pelo nome normalizado (com acento diferente)."""
+def test_fallback_por_municipio_uf_esfera_municipal(con):
+    """esfera "M" com CNPJ de SUB-ÓRGÃO (não-ente: fundo/secretaria) mas
+    município/UF que existe na base → disponível via fallback (herda a nota do
+    município). A esfera M confirma que é seguro casar pelo nome (com acento
+    diferente)."""
     _montar_capag(con)
-    # CNPJ diferente do cadastrado, mas município/UF do mesmo ente
-    r = capag.capag_do_pregao(con, "99999999000199", "SP", "SAO PAULO")
-    # esse CNPJ não está em capag_entes → cairia em "federal"; mas o fallback
-    # por município+UF deve resolver ANTES (município existe no XLSX).
+    # CNPJ diferente do cadastrado (sub-órgão municipal), mas município/UF do
+    # mesmo ente — e a esfera do PNCP confirma "M".
+    r = capag.capag_do_pregao(con, "99999999000199", "SP", "SAO PAULO",
+                              esfera="M")
     assert r["disponivel"] is True
     assert r["nota"] == "B"
 
 
-def test_federal_sem_capag(con):
-    """Ente federal: CNPJ fora de capag_entes, há entes carregados, sem
-    município que case → motivo 'federal' (nunca inventa nota)."""
+def test_fallback_nao_roda_sem_esfera(con):
+    """MESMO CNPJ/município/UF do teste acima, mas SEM esfera (None) → NÃO faz
+    fallback (evita misatribuir). Cai em 'nao_avaliado'."""
     _montar_capag(con)
-    r = capag.capag_do_pregao(con, "00394445000170", "DF", "Brasília")
+    r = capag.capag_do_pregao(con, "99999999000199", "SP", "SAO PAULO")
+    assert r["disponivel"] is False
+    assert r["motivo"] == "nao_avaliado"
+    assert r.get("nota") is None
+
+
+def test_federal_nao_herda_nota_do_municipio(con):
+    """BUG DO ZIONN: órgão FEDERAL sediado em São Paulo (município que EXISTE na
+    base) NÃO pode herdar a CAPAG do município. esfera "F" → motivo 'federal',
+    nota None, mesmo informando município="São Paulo"."""
+    _montar_capag(con)
+    # IFSP-like: CNPJ federal, localizado em São Paulo/SP (na base!), esfera F.
+    r = capag.capag_do_pregao(con, "10882594000165", "SP", "São Paulo",
+                              esfera="F")
     assert r["disponivel"] is False
     assert r["motivo"] == "federal"
     assert r.get("nota") is None
 
 
-def test_cnpj_desconhecido_sem_entes(con):
-    """Sem nenhum ente carregado (base não populada): qualquer CNPJ →
-    sem_dados (não dá pra inferir federal)."""
+def test_federal_normaliza_esfera(con):
+    """Esfera vem do PNCP variando caixa/forma — normaliza para 'F'."""
+    _montar_capag(con)
+    r = capag.capag_do_pregao(con, "10882594000165", "SP", "São Paulo",
+                              esfera="federal")
+    assert r["disponivel"] is False
+    assert r["motivo"] == "federal"
+
+
+def test_cnpj_desconhecido_sem_esfera_nao_avaliado(con):
+    """CNPJ desconhecido, esfera None → 'nao_avaliado'. NÃO inferimos federal
+    por ausência de CNPJ em capag_entes (rotulava errado sub-órgãos municipais)."""
+    _montar_capag(con)
     r = capag.capag_do_pregao(con, "12345678000199", "MG", "Cidade Nova")
     assert r["disponivel"] is False
-    assert r["motivo"] == "sem_dados"
+    assert r["motivo"] == "nao_avaliado"
+    assert r.get("nota") is None
+
+
+def test_nao_avaliado_sem_entes(con):
+    """Sem nenhum ente carregado (base não populada) e sem esfera → nao_avaliado."""
+    r = capag.capag_do_pregao(con, "12345678000199", "MG", "Cidade Nova")
+    assert r["disponivel"] is False
+    assert r["motivo"] == "nao_avaliado"
 
 
 def test_endpoint_capag(client, con):
-    """GET /pregoes/{id}/capag com um pregão municipal de SP."""
+    """GET /pregoes/{id}/capag com um pregão municipal de SP (casa por CNPJ)."""
     _montar_capag(con)
     con.execute(
-        "INSERT INTO pregoes(cnpj, ano, seq, numero_controle, uf, municipio)"
-        " VALUES (?,?,?,?,?,?)",
-        (CNPJ_SP, 2026, 1, "NC-CAPAG-1", "SP", "São Paulo"),
+        "INSERT INTO pregoes(cnpj, ano, seq, numero_controle, uf, municipio, esfera)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (CNPJ_SP, 2026, 1, "NC-CAPAG-1", "SP", "São Paulo", "M"),
     )
     con.commit()
     pid = con.execute("SELECT id FROM pregoes").fetchone()["id"]
@@ -111,6 +149,28 @@ def test_endpoint_capag(client, con):
     assert body["disponivel"] is True
     assert body["nota"] == "B"
     assert body["indicadores"][0]["valor_pct"] == 32.75
+
+
+def test_endpoint_capag_federal_em_sp(client, con):
+    """O endpoint lê a coluna `esfera` do pregão e a repassa: pregão FEDERAL
+    sediado em São Paulo (município na base) → 'federal', NÃO herda a nota."""
+    _montar_capag(con)
+    con.execute(
+        "INSERT INTO pregoes(cnpj, ano, seq, numero_controle, uf, municipio, esfera)"
+        " VALUES (?,?,?,?,?,?,?)",
+        ("10882594000165", 2026, 67, "NC-CAPAG-FED", "SP", "São Paulo", "F"),
+    )
+    con.commit()
+    pid = con.execute(
+        "SELECT id FROM pregoes WHERE numero_controle='NC-CAPAG-FED'"
+    ).fetchone()["id"]
+
+    r = client.get(f"/pregoes/{pid}/capag")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["disponivel"] is False
+    assert body["motivo"] == "federal"
+    assert body.get("nota") is None
 
 
 def test_endpoint_capag_pregao_inexistente(client):

@@ -120,8 +120,9 @@ def persistir_hit(con: sqlite3.Connection, hit: dict,
         """INSERT INTO pregoes
              (cnpj, ano, seq, numero_controle, titulo, descricao, orgao, unidade,
               municipio, uf, modalidade, situacao, data_inicio_vigencia,
-              data_fim_vigencia, valor_global, json_busca, link_pncp, busca_id, novo)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)
+              data_fim_vigencia, valor_global, json_busca, link_pncp, busca_id,
+              esfera, novo)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)
            ON CONFLICT(numero_controle) DO NOTHING""",
         (
             cnpj, ano, seq, numero_controle,
@@ -134,6 +135,9 @@ def persistir_hit(con: sqlite3.Connection, hit: dict,
             json.dumps(hit, ensure_ascii=False),
             pncp.link_pncp(cnpj, ano, seq),
             busca_id,
+            # esfera do órgão (§4.4 orgaoEntidade.esferaId): None na busca §4.1
+            # ou em hits pré-v7 — não quebra (coluna aceita NULL).
+            hit.get("esfera_orgao"),
         ),
     )
     return cur.lastrowid if cur.rowcount else None

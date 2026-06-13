@@ -178,6 +178,16 @@ MIGRACOES = [
         esfera TEXT          -- M | E
     );
     """,
+    # v7 — esfera do órgão comprador no pregão (CAPAG esfera-aware). A API de
+    # Consulta (§4.4) traz orgaoEntidade.esferaId ("F" Federal | "E" Estadual |
+    # "M" Municipal | "D" Distrital); a busca textual (§4.1) NÃO traz esfera
+    # (fica NULL nesse caminho). A esfera, não a localização, decide a CAPAG:
+    # federal paga pela União (risco baixo) e NUNCA herda a nota do município
+    # onde está sediado (bug do Zionn). NULL = esfera desconhecida → CAPAG não
+    # faz fallback por município (evita misatribuir). Pregões pré-v7 ficam NULL.
+    """
+    ALTER TABLE pregoes ADD COLUMN esfera TEXT;
+    """,
 ]
 
 

@@ -264,11 +264,14 @@ def capag_pregao(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
     request). Federal/sem dado → {disponivel: False, motivo} — nunca chuta nota.
     """
     p = con.execute(
-        "SELECT cnpj, uf, municipio FROM pregoes WHERE id=?", (pregao_id,)
+        "SELECT * FROM pregoes WHERE id=?", (pregao_id,)
     ).fetchone()
     if p is None:
         raise HTTPException(404, "Pregão não encontrado")
-    return capag.capag_do_pregao(con, p["cnpj"], p["uf"], p["municipio"])
+    # esfera do órgão (v7): decide a CAPAG (esfera-aware). Tolera banco antigo
+    # sem a coluna (a migração v7 a garante, mas keys() protege em testes/fixtures).
+    esfera = p["esfera"] if "esfera" in p.keys() else None
+    return capag.capag_do_pregao(con, p["cnpj"], p["uf"], p["municipio"], esfera)
 
 
 @router.get("/{pregao_id}/habilitacao")
