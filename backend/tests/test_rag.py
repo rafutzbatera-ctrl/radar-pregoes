@@ -5,7 +5,7 @@ inline (nunca PDF/modelo real). Decisões do dono: threshold 0.80, single-edital
 import numpy as np
 import pytest
 
-from app.services import habilitacao, rag
+from app.services import extracao, habilitacao, matching, rag
 
 # --------- páginas inline (texto cru com cláusulas numeradas) ---------
 
@@ -166,6 +166,71 @@ def test_blob_round_trip_float32(con):
     for i, r in enumerate(rows):
         esperado = np.asarray(_eixo(r["texto"]), dtype=np.float32)
         assert np.allclose(matriz[i], esperado)
+
+
+# --------- endpoints ---------
+
+def test_endpoint_indexar_status_perguntar(client, con, cliente_fake, monkeypatch):
+    pid = _criar_pregao(con)
+    # nunca PDF/modelo real: extração devolve páginas inline; embed é fake
+    monkeypatch.setattr(extracao, "extrair_paginas", lambda _p: PAGINAS)
+    monkeypatch.setattr(matching, "embed_padrao", EmbedFake())
+    import app.pncp as pncp_mod
+    monkeypatch.setattr(pncp_mod, "cliente", lambda: cliente_fake)
+
+    r = client.post(f"/pregoes/{pid}/rag/indexar")
+    assert r.status_code == 200
+    assert r.json()["n_chunks"] > 0
+
+    s = client.get(f"/pregoes/{pid}/rag/status")
+    assert s.status_code == 200
+    assert s.json()["indexado"] is True
+    assert s.json()["n_paginas"] == 2
+
+    r2 = client.post(f"/pregoes/{pid}/rag/perguntar",
+                     json={"pergunta": "qual o prazo de entrega?"})
+    assert r2.status_code == 200
+    dados = r2.json()
+    assert dados["disponivel"] is True
+    assert dados["trechos"]
+    assert "prazo de entrega" in dados["trechos"][0]["texto"].lower()
+
+
+def test_endpoint_perguntar_fora_do_tema(client, con, cliente_fake, monkeypatch):
+    pid = _criar_pregao(con)
+    monkeypatch.setattr(extracao, "extrair_paginas", lambda _p: PAGINAS)
+    monkeypatch.setattr(matching, "embed_padrao", EmbedFake())
+    import app.pncp as pncp_mod
+    monkeypatch.setattr(pncp_mod, "cliente", lambda: cliente_fake)
+    client.post(f"/pregoes/{pid}/rag/indexar")
+
+    r = client.post(f"/pregoes/{pid}/rag/perguntar",
+                    json={"pergunta": "qual a cor do papel timbrado?"})
+    assert r.status_code == 200
+    assert r.json()["disponivel"] is False
+
+
+def test_endpoint_status_nao_indexado(client, con):
+    pid = _criar_pregao(con)
+    s = client.get(f"/pregoes/{pid}/rag/status")
+    assert s.status_code == 200
+    assert s.json()["indexado"] is False
+
+
+def test_endpoint_pregao_inexistente_404(client, con):
+    # ingerir checa o pregão ANTES de tocar o cliente PNCP → 404 sem rede
+    r0 = client.post("/pregoes/99999/rag/indexar")
+    assert r0.status_code == 404
+    r = client.post("/pregoes/99999/rag/perguntar", json={"pergunta": "x"})
+    assert r.status_code == 404
+    s = client.get("/pregoes/99999/rag/status")
+    assert s.status_code == 404
+
+
+def test_endpoint_pergunta_vazia_422(client, con):
+    pid = _criar_pregao(con)
+    r = client.post(f"/pregoes/{pid}/rag/perguntar", json={"pergunta": "   "})
+    assert r.status_code == 422
 
 
 # --------- helpers ---------
