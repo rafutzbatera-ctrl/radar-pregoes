@@ -278,6 +278,22 @@ export const api = {
   // justificativa,documento}]}.
   historico: (pregaoId) => req(`/pregoes/${pregaoId}/historico`),
 
+  // RAG "Perguntar ao edital" (Fase 1, 100% local). Lazy: a aba Perguntar chama
+  // ragStatus na abertura. Respostas são EXTRATIVAS — trechos verbatim do PDF.
+  // status → {indexado, n_chunks?, n_paginas?, ingerido_em?, modelo?}.
+  ragStatus: (pregaoId) => req(`/pregoes/${pregaoId}/rag/status`),
+  // indexar → {n_chunks, n_paginas, motivo?}. Roda o e5 local + extrai PDFs:
+  // operação LENTA — timeout generoso (espelha o /descobrir).
+  ragIndexar: (pregaoId) =>
+    req(`/pregoes/${pregaoId}/rag/indexar`, { method: "POST", timeoutMs: 120000 }),
+  // perguntar → {disponivel, motivo?, pergunta, trechos:[{texto, arquivo_id,
+  // arquivo_titulo, pagina, offset_inicio, offset_fim, score}], fonte?}.
+  ragPerguntar: (pregaoId, pergunta, k) =>
+    req(`/pregoes/${pregaoId}/rag/perguntar`, {
+      method: "POST",
+      body: JSON.stringify(k != null ? { pergunta, k } : { pergunta }),
+    }),
+
   // URLs de download direto (o navegador baixa via <a> / window.open; não passam
   // pelo req()/fetch porque a resposta é binária com content-disposition).
   exportarItensUrl: (pregaoId, formato = "csv") =>

@@ -97,6 +97,7 @@ export default function AnalysisScreen({
     { id: "fiscal", rotulo: "Fiscal · NF-e", contador: prontos + "/" + fiscalTotal, tipo: prontos === fiscalTotal ? "sinal" : "pico" },
     { id: "capag", rotulo: "CAPAG", contador: null, tipo: null },
     { id: "historico", rotulo: "Histórico", contador: null, tipo: null },
+    { id: "perguntar", rotulo: "Perguntar ao edital", contador: null, tipo: null },
   ];
 
   const linhaSilk = [
@@ -287,6 +288,9 @@ export default function AnalysisScreen({
             )}
             {aba === "historico" && (
               <HistoricoTab pregao={pregao} />
+            )}
+            {aba === "perguntar" && (
+              <PerguntarTab pregao={pregao} />
             )}
           </motion.div>
         </React.Fragment>
@@ -602,6 +606,274 @@ function dataHist(iso) {
   const hh = String(d.getHours()).padStart(2, "0");
   const mi = String(d.getMinutes()).padStart(2, "0");
   return `${dd}/${mm}/${d.getFullYear()} ${hh}:${mi}`;
+}
+
+/* ============ ABA PERGUNTAR AO EDITAL — RAG Fase 1 (extrativo, 100% local) ============
+   Honestidade (princípio 1 — nunca inventar): a resposta é o TEXTO LITERAL do
+   edital (trechos verbatim com página + similaridade); o sistema nunca redige
+   uma resposta. Fluxo: ragStatus na abertura → se não indexado, oferece indexar
+   (operação lenta: roda o e5 local + extrai PDFs); se indexado, caixa de
+   pergunta → ragPerguntar devolve trechos ou um motivo neutro. */
+const RAG_EXEMPLOS = [
+  "qual o prazo de entrega?",
+  "exige atestado de capacidade técnica?",
+  "qual a garantia?",
+];
+
+// similaridade 0..1 → "0,88" (vírgula, 2 casas) — espelha o NumPct do projeto
+function fmtScore(s) {
+  if (s == null || Number.isNaN(s)) return "—";
+  return Number(s).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function PerguntarTab({ pregao }) {
+  // status: null=carregando · {indexado:bool,...}
+  const [status, setStatus] = React.useState(null);
+  const [erroStatus, setErroStatus] = React.useState(null);
+  const [indexando, setIndexando] = React.useState(false);
+  const [erroIndex, setErroIndex] = React.useState(null);
+  const [semArquivos, setSemArquivos] = React.useState(false);
+
+  const [pergunta, setPergunta] = React.useState("");
+  const [perguntando, setPerguntando] = React.useState(false);
+  const [resposta, setResposta] = React.useState(null);   // {disponivel, motivo?, trechos?, pergunta}
+  const [erroPergunta, setErroPergunta] = React.useState(null);
+
+  const carregarStatus = React.useCallback(() => {
+    setStatus(null);
+    setErroStatus(null);
+    let vivo = true;
+    api.ragStatus(pregao.id)
+      .then((d) => { if (vivo) setStatus(d || { indexado: false }); })
+      .catch((e) => { if (vivo) setErroStatus((e && e.message) || "erro"); });
+    return () => { vivo = false; };
+  }, [pregao.id]);
+
+  React.useEffect(() => carregarStatus(), [carregarStatus]);
+
+  const indexar = () => {
+    setIndexando(true);
+    setErroIndex(null);
+    setSemArquivos(false);
+    api.ragIndexar(pregao.id)
+      .then((d) => {
+        if (d && d.motivo === "sem_arquivos") {
+          setSemArquivos(true);
+        } else {
+          // sucesso: refaz o status (mostra "{n_chunks} trechos de {n_paginas} páginas")
+          carregarStatus();
+        }
+      })
+      .catch((e) => setErroIndex((e && e.message) || "erro"))
+      .finally(() => setIndexando(false));
+  };
+
+  const enviar = (texto) => {
+    const q = (texto != null ? texto : pergunta).trim();
+    if (!q || perguntando) return;
+    if (texto != null) setPergunta(texto);
+    setPerguntando(true);
+    setErroPergunta(null);
+    setResposta(null);
+    api.ragPerguntar(pregao.id, q)
+      .then((d) => {
+        setResposta(d || { disponivel: false });
+        // se o backend diz que nada está indexado, volta ao passo de indexar
+        if (d && d.motivo === "nao_indexado") {
+          setStatus({ indexado: false });
+        }
+      })
+      .catch((e) => setErroPergunta((e && e.message) || "erro"))
+      .finally(() => setPerguntando(false));
+  };
+
+  // ---- carregando o status inicial ----
+  if (status == null && !erroStatus) {
+    return (
+      <div className="rag-wrap" aria-busy="true">
+        <div className="card-pregao mod skel">
+          <span className="skel-bar w30"></span>
+          <span className="skel-bar w70"></span>
+          <span className="skel-bar w90"></span>
+        </div>
+      </div>
+    );
+  }
+
+  if (erroStatus) {
+    return (
+      <div className="rag-wrap">
+        <div className="estado-vazio mod">
+          <h3>Não foi possível verificar a indexação</h3>
+          <p>{erroStatus}</p>
+          <button type="button" className="rag-btn" onClick={carregarStatus}>Tentar de novo</button>
+        </div>
+      </div>
+    );
+  }
+
+  const indexado = !!(status && status.indexado);
+
+  return (
+    <div className="rag-wrap">
+      <div className="tbl-titulo">
+        <span className="silk">Perguntar ao edital — respostas extrativas (trechos verbatim do PDF)</span>
+      </div>
+
+      {!indexado ? (
+        /* ---- passo 1: não indexado → oferece indexar ---- */
+        <div className="rag-card mod rag-indexar">
+          <p className="rag-explica">
+            Indexe os documentos deste edital para poder perguntar — roda 100%
+            local, sem enviar nada para fora.
+          </p>
+          {semArquivos ? (
+            <div className="rag-aviso rag-aviso-alerta">
+              {Ico.alerta} Nenhum PDF de edital baixado. Faça a sincronização
+              completa do pregão primeiro.
+            </div>
+          ) : indexando ? (
+            <div className="rag-indexando">
+              <span className="rag-spinner" aria-hidden="true"></span>
+              <span>Indexando… roda o modelo local, pode levar um tempo.</span>
+            </div>
+          ) : (
+            <button type="button" className="rag-btn rag-btn-primario" onClick={indexar}>
+              {Ico.raio} Indexar documentos
+            </button>
+          )}
+          {erroIndex && <div className="rag-aviso rag-aviso-erro">Falha ao indexar: {erroIndex}</div>}
+        </div>
+      ) : (
+        /* ---- passo 2: indexado → perguntar ---- */
+        <React.Fragment>
+          <div className="rag-card mod">
+            {(status.n_chunks != null || status.n_paginas != null) && (
+              <div className="rag-meta silk">
+                {Ico.check} {status.n_chunks ?? "?"} trechos indexados
+                {status.n_paginas != null ? ` de ${status.n_paginas} páginas` : ""}
+                {status.modelo ? ` · ${status.modelo}` : ""}
+              </div>
+            )}
+            <div className="rag-form">
+              <textarea
+                className="rag-input"
+                rows={2}
+                value={pergunta}
+                placeholder="ex.: qual o prazo de entrega?"
+                aria-label="Sua pergunta sobre o edital"
+                disabled={perguntando}
+                onChange={(e) => setPergunta(e.target.value)}
+                onKeyDown={(e) => {
+                  // Enter envia; Shift+Enter quebra linha
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); }
+                }}
+              />
+              <button
+                type="button"
+                className="rag-btn rag-btn-primario"
+                disabled={perguntando || !pergunta.trim()}
+                onClick={() => enviar()}
+              >
+                {Ico.busca} {perguntando ? "Buscando…" : "Perguntar"}
+              </button>
+            </div>
+            <div className="rag-exemplos">
+              <span className="silk rag-exemplos-rotulo">Exemplos:</span>
+              {RAG_EXEMPLOS.map((ex) => (
+                <button key={ex} type="button" className="rag-exemplo" disabled={perguntando}
+                  onClick={() => enviar(ex)}>
+                  {ex}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {erroPergunta && (
+            <div className="rag-aviso rag-aviso-erro">Não foi possível perguntar: {erroPergunta}</div>
+          )}
+
+          {resposta && <RagResposta resposta={resposta} indexar={indexar} indexando={indexando} />}
+        </React.Fragment>
+      )}
+
+      <p className="rag-rodape silk">
+        Respostas extrativas — trechos verbatim do edital, com página e
+        similaridade. Nada é inventado; confira sempre no PDF oficial.
+      </p>
+    </div>
+  );
+}
+
+/* ---------- bloco de resposta do RAG (trechos OU motivo neutro) ---------- */
+function RagResposta({ resposta, indexar, indexando }) {
+  // motivo "nao_indexado" → o índice sumiu; oferece reindexar
+  if (resposta.motivo === "nao_indexado" && !resposta.disponivel) {
+    return (
+      <div className="rag-card mod rag-resposta-neutra">
+        <p>Os documentos ainda não estão indexados.</p>
+        {indexando ? (
+          <div className="rag-indexando">
+            <span className="rag-spinner" aria-hidden="true"></span>
+            <span>Indexando… roda o modelo local, pode levar um tempo.</span>
+          </div>
+        ) : (
+          <button type="button" className="rag-btn rag-btn-primario" onClick={indexar}>
+            {Ico.raio} Indexar documentos
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // motivo "nao_encontrado" → nada acima do limiar; bloco neutro, sem chute
+  if (!resposta.disponivel || resposta.motivo === "nao_encontrado") {
+    return (
+      <div className="rag-card mod rag-resposta-neutra">
+        <p>
+          Não encontrei isso nos documentos deste edital (abaixo do limite de
+          confiança). Pode estar escrito de outra forma — tente reformular a
+          pergunta.
+        </p>
+      </div>
+    );
+  }
+
+  const trechos = resposta.trechos || [];
+  if (trechos.length === 0) {
+    return (
+      <div className="rag-card mod rag-resposta-neutra">
+        <p>Nenhum trecho retornado para esta pergunta. Tente reformular.</p>
+      </div>
+    );
+  }
+
+  // maior score em destaque sutil (o backend devolve ordenado, mas calculamos
+  // o topo aqui para não depender da ordem)
+  const topo = trechos.reduce((m, t) => (t.score != null && (m == null || t.score > m) ? t.score : m), null);
+
+  return (
+    <div className="rag-respostas">
+      <div className="rag-respostas-cab">
+        Trechos do edital que respondem (a resposta é o texto literal do edital):
+      </div>
+      {trechos.map((t, i) => {
+        const destaque = topo != null && t.score === topo;
+        return (
+          <div key={i} className={"rag-trecho mod" + (destaque ? " rag-trecho-topo" : "")}>
+            <p className="rag-trecho-texto">{t.texto}</p>
+            <div className="rag-trecho-rodape">
+              {t.pagina != null && <span className="rag-chip">pág. {t.pagina}</span>}
+              {t.arquivo_titulo && <span className="rag-chip rag-chip-arq">{t.arquivo_titulo}</span>}
+              {t.score != null && (
+                <span className="rag-chip rag-chip-score">similaridade {fmtScore(t.score)}</span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 /* ---------- linha (com sub-barra de match quando sugerido/sem match) ---------- */

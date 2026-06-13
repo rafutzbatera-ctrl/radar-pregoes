@@ -2093,3 +2093,227 @@ a.arq-link:hover { border-color: var(--silk); box-shadow: 0 4px 12px -6px rgba(0
 /* alvo invisível no fim da lista; o IntersectionObserver (rootMargin 900px)
    dispara o carregarMais antes de o usuário chegar ao fim */
 .vivo-sentinela { height: 1px; }
+
+/* ============================================================
+   RAG — aba "Perguntar ao edital" (Fase 1, extrativo, 100% local)
+   ============================================================ */
+.rag-wrap { margin-top: 18px; }
+
+.rag-card {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.rag-indexar { gap: 16px; }
+
+.rag-explica {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--tinta-2);
+  max-width: 64ch;
+}
+
+.rag-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+}
+.rag-meta svg { flex: none; color: var(--sinal); }
+
+/* botões (color explícito — herança vinha preta) */
+.rag-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  align-self: flex-start;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--linha);
+  background: var(--painel);
+  color: var(--tinta);
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+}
+.rag-btn svg { flex: none; }
+.rag-btn:hover { border-color: var(--sinal); background: var(--fundo-2); }
+.rag-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.rag-btn-primario {
+  border-color: var(--sinal);
+  background: var(--sinal);
+  color: var(--sobre-acento);
+}
+.rag-btn-primario:hover:not(:disabled) {
+  background: var(--sinal);
+  border-color: var(--sinal);
+  filter: brightness(1.06);
+}
+
+/* formulário de pergunta */
+.rag-form {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.rag-input {
+  flex: 1 1 320px;
+  resize: vertical;
+  min-height: 42px;
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--tinta);
+  background: var(--painel);
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  padding: 9px 12px;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.rag-input:focus {
+  outline: none;
+  border-color: var(--sinal);
+  background: var(--aluminio);
+  box-shadow: 0 0 0 3px var(--halo);
+}
+.rag-input:disabled { opacity: 0.6; }
+.rag-form .rag-btn { align-self: stretch; }
+
+/* exemplos clicáveis */
+.rag-exemplos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.rag-exemplos-rotulo { font-size: 11.5px; }
+.rag-exemplo {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--tinta-2);
+  background: var(--fundo-2);
+  border: 1px solid var(--linha);
+  border-radius: 20px;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.rag-exemplo:hover:not(:disabled) { border-color: var(--sinal); color: var(--tinta); }
+.rag-exemplo:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* estado indexando + spinner */
+.rag-indexando {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--tinta-2);
+}
+.rag-spinner {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--linha);
+  border-top-color: var(--sinal);
+  animation: rag-spin 0.7s linear infinite;
+}
+@keyframes rag-spin { to { transform: rotate(360deg); } }
+
+/* avisos (alerta sem-arquivos · erro) */
+.rag-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  border-radius: 8px;
+  padding: 10px 13px;
+}
+.rag-aviso svg { flex: none; margin-top: 1px; }
+.rag-aviso-alerta {
+  color: var(--pico);
+  background: rgba(224, 162, 27, 0.10);
+  border: 1px solid rgba(224, 162, 27, 0.35);
+}
+.rag-aviso-erro {
+  color: var(--clip);
+  background: rgba(226, 90, 74, 0.10);
+  border: 1px solid rgba(226, 90, 74, 0.35);
+}
+
+/* resposta neutra (não-encontrado / não-indexado) */
+.rag-resposta-neutra {
+  margin-top: 14px;
+  gap: 12px;
+}
+.rag-resposta-neutra p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--tinta-2);
+  max-width: 64ch;
+}
+
+/* lista de trechos verbatim */
+.rag-respostas { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
+.rag-respostas-cab {
+  font-size: 12.5px;
+  color: var(--tinta-2);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.rag-trecho {
+  padding: 14px 16px;
+  border: 1px solid var(--linha);
+  border-radius: 9px;
+  background: var(--painel);
+}
+.rag-trecho-topo {
+  border-color: rgba(43, 217, 127, 0.45);
+  box-shadow: inset 3px 0 0 var(--sinal);
+}
+.rag-trecho-texto {
+  margin: 0 0 10px 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--tinta);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.rag-trecho-rodape {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+.rag-chip {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--silk);
+  background: var(--fundo-2);
+  border: 1px solid var(--linha);
+  border-radius: 7px;
+  padding: 2px 8px;
+}
+.rag-chip-arq { color: var(--tinta-2); }
+.rag-chip-score { color: var(--sinal); border-color: rgba(43, 217, 127, 0.3); }
+
+.rag-rodape {
+  font-size: 11.5px;
+  line-height: 1.5;
+  margin-top: 16px;
+  max-width: 70ch;
+}
+
+@media (max-width: 640px) {
+  .rag-form .rag-btn { width: 100%; justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rag-spinner { animation: none; }
+}
