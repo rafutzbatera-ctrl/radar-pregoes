@@ -268,6 +268,10 @@ export const api = {
     req(`/pregoes/${pregaoId}/arquivos`).then((as) =>
       as.map((a) => ({ titulo: a.titulo, tipo: a.tipo, url: a.url }))),
   fiscal: (pregaoId) => req(`/pregoes/${pregaoId}/fiscal`),
+  // CAPAG — risco de pagamento do comprador (Tesouro/SICONFI). Lazy: chamado
+  // só quando a aba CAPAG abre. Devolve o dict cru do backend (disponivel,
+  // nota, cor, icf, origem, indicadores[], ente, uf, esfera, fonte, motivo).
+  capag: (pregaoId) => req(`/pregoes/${pregaoId}/capag`),
 
   // matching (human-in-the-loop)
   definirMatch: (itemId, produtoId, confirmado) =>

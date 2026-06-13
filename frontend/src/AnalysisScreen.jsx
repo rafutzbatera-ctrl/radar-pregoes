@@ -10,6 +10,7 @@ import {
 } from "./helpers.jsx";
 import { STATUS_PIPELINE } from "./Kanban.jsx";
 import { HabilitacaoTab, FiscalTab } from "./Tabs.jsx";
+import { api } from "./api.js";
 import DetailPanel from "./DetailPanel.jsx";
 import { EstadoCarregando, EstadoErro } from "./FindScreen.jsx";
 
@@ -94,6 +95,7 @@ export default function AnalysisScreen({
     { id: "itens", rotulo: "Itens & margem", contador: a.sugeridos > 0 ? a.sugeridos + " a casar" : null, tipo: a.sugeridos > 0 ? "pico" : null },
     { id: "habilitacao", rotulo: "Habilitação", contador: habil.length ? pendentesHabil + "/" + habil.length : "—", tipo: pendentesHabil > 0 ? "pico" : "sinal" },
     { id: "fiscal", rotulo: "Fiscal · NF-e", contador: prontos + "/" + fiscalTotal, tipo: prontos === fiscalTotal ? "sinal" : "pico" },
+    { id: "capag", rotulo: "CAPAG", contador: null, tipo: null },
   ];
 
   const linhaSilk = [
@@ -271,6 +273,9 @@ export default function AnalysisScreen({
             )}
             {aba === "fiscal" && (
               <FiscalTab fiscalItens={fiscalItens} prontos={prontos} total={fiscalTotal} config={config} setRegime={setRegime} pregao={pregao} />
+            )}
+            {aba === "capag" && (
+              <CapagTab pregao={pregao} />
             )}
           </motion.div>
         </React.Fragment>
@@ -598,6 +603,146 @@ function MatchBar({ item, setMatch, catalogo }) {
       )}
     </div>
   );
+}
+
+/* ============ ABA CAPAG — risco de pagamento do comprador ============
+   Dados REAIS do Tesouro Nacional / SICONFI (nunca inventa nota — princípio 1).
+   Carrega lazy: só chama /pregoes/{id}/capag quando a aba abre. Cor por nota:
+   A=--sinal (verde), B=--pico (âmbar), C/D=--clip (vermelho). */
+const CAPAG_COR_VAR = { ok: "var(--sinal)", atencao: "var(--pico)", ruim: "var(--clip)" };
+
+function CapagTab({ pregao }) {
+  const [estado, setEstado] = React.useState({ carregando: true, dados: null, erro: null });
+
+  React.useEffect(() => {
+    let vivo = true;
+    setEstado({ carregando: true, dados: null, erro: null });
+    api.capag(pregao.id)
+      .then((d) => { if (vivo) setEstado({ carregando: false, dados: d, erro: null }); })
+      .catch((e) => { if (vivo) setEstado({ carregando: false, dados: null, erro: (e && e.message) || "erro" }); });
+    return () => { vivo = false; };
+  }, [pregao.id]);
+
+  if (estado.carregando) {
+    return (
+      <div className="capag-wrap" aria-busy="true">
+        <div className="card-pregao mod skel">
+          <span className="skel-bar w30"></span>
+          <span className="skel-bar w70 big"></span>
+          <span className="skel-bar w90"></span>
+        </div>
+      </div>
+    );
+  }
+
+  if (estado.erro) {
+    return (
+      <div className="capag-wrap">
+        <div className="estado-vazio mod">
+          <h3>Não foi possível carregar a CAPAG</h3>
+          <p>{estado.erro}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const d = estado.dados || {};
+
+  // Federal: bloco honesto — a CAPAG só avalia municípios e estados.
+  if (!d.disponivel && d.motivo === "federal") {
+    return (
+      <div className="capag-wrap">
+        <div className="tbl-titulo">
+          <span className="silk">CAPAG — capacidade de pagamento do comprador</span>
+        </div>
+        <div className="capag-card mod capag-federal">
+          <div className="capag-federal-tit">Federal — pagamento pela União (risco baixo)</div>
+          <p className="capag-federal-txt">
+            A CAPAG (Capacidade de Pagamento, do Tesouro Nacional) só avalia
+            municípios e estados. Entes federais (União, autarquias, institutos
+            e universidades federais) não recebem nota — o pagamento corre pela
+            União, de risco historicamente baixo.
+          </p>
+          <span className="capag-fonte silk">{Ico.escudo} {d.fonte || "Tesouro Nacional / SICONFI"}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Sem dados: cinza, honesto — nunca um chute.
+  if (!d.disponivel) {
+    return (
+      <div className="capag-wrap">
+        <div className="tbl-titulo">
+          <span className="silk">CAPAG — capacidade de pagamento do comprador</span>
+        </div>
+        <div className="capag-card mod capag-vazio">
+          <div className="capag-vazio-tit silk">CAPAG não disponível para este ente</div>
+          <p className="capag-vazio-txt silk">
+            O Tesouro Nacional não publicou nota CAPAG para este comprador.
+            Nada foi estimado — sem dado, sem nota.
+          </p>
+          <span className="capag-fonte silk">{d.fonte || "Tesouro Nacional / SICONFI"}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Disponível: nota grande colorida + 3 indicadores + ICF + selo de fonte.
+  const cor = CAPAG_COR_VAR[d.cor] || "var(--silk)";
+  return (
+    <div className="capag-wrap">
+      <div className="tbl-titulo">
+        <span className="silk">CAPAG — capacidade de pagamento do comprador</span>
+      </div>
+
+      <div className="capag-card mod">
+        <div className="capag-topo">
+          <div className="capag-nota-bloco">
+            <div className="silk">Nota CAPAG</div>
+            <div className="capag-nota" style={{ color: cor }}>{d.nota}</div>
+          </div>
+          <div className="capag-ente">
+            <div className="capag-ente-nome">{d.ente || d.municipio || "—"}{d.uf ? " / " + d.uf : ""}</div>
+            <div className="silk">
+              {d.esfera === "E" ? "Estado" : "Município"}
+              {d.icf ? " · ranking ICF " + d.icf : ""}
+            </div>
+          </div>
+        </div>
+
+        <div className="capag-inds">
+          {(d.indicadores || []).map((ind, i) => (
+            <div className="capag-ind" key={i}>
+              <div className="silk capag-ind-rotulo">{ind.rotulo}</div>
+              <div className="capag-ind-linha">
+                <span className="capag-ind-nota" style={{ color: CAPAG_COR_VAR[corDaNota(ind.nota)] || "var(--silk)" }}>
+                  {ind.nota || "—"}
+                </span>
+                <span className="capag-ind-pct mono">
+                  {ind.valor_pct != null ? ind.valor_pct.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%" : "—"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="capag-rodape">
+          <span className="capag-fonte silk">{Ico.escudo} Fonte: {d.fonte || "Tesouro Nacional / SICONFI"}{d.origem ? " · " + d.origem : ""}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// cor da nota de um indicador (espelha o helper do backend: A→ok, B→atenção, C/D→ruim)
+function corDaNota(nota) {
+  if (!nota) return null;
+  const n = String(nota).trim().toUpperCase()[0];
+  if (n === "A") return "ok";
+  if (n === "B") return "atencao";
+  if (n === "C" || n === "D") return "ruim";
+  return null;
 }
 
 function SeletorProduto({ cat, atual, onPick, onCancel }) {

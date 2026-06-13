@@ -150,6 +150,34 @@ MIGRACOES = [
     ALTER TABLE pregoes ADD COLUMN receita_aderente REAL;
     ALTER TABLE pregoes ADD COLUMN itens_aderentes INTEGER;
     """,
+    # v6 — CAPAG (Capacidade de Pagamento do comprador, fonte Tesouro/SICONFI).
+    # Dados oficiais POPULADOS por scripts/seed_capag.py (manual/mensal), nunca
+    # no request — o serviço só LÊ. capag_entes casa cnpj→cod_ibge (download do
+    # /entes do SICONFI); capag_notas guarda a nota+indicadores do XLSX anual
+    # (municípios E estados; estado usa cod_ibge de 2 díg + esfera 'E').
+    # Federais NÃO aparecem em nenhuma das duas (não têm CAPAG — princípio 1:
+    # sem dado, sem nota inventada).
+    """
+    CREATE TABLE capag_entes(
+        cnpj TEXT PRIMARY KEY,
+        cod_ibge TEXT,
+        ente TEXT,
+        uf TEXT,
+        esfera TEXT          -- M (município) | E (estado)
+    );
+    CREATE TABLE capag_notas(
+        cod_ibge TEXT PRIMARY KEY,
+        municipio TEXT,
+        uf TEXT,
+        nota TEXT,           -- nota final CAPAG: A | B | C | D
+        ind1 REAL, nota1 TEXT,   -- Indicador 1 (Endividamento) + sua nota
+        ind2 REAL, nota2 TEXT,   -- Indicador 2 (Poupança Corrente) + sua nota
+        ind3 REAL, nota3 TEXT,   -- Indicador 3 (Liquidez Relativa) + sua nota
+        icf TEXT,            -- ranking ICF (ex. "Bicf")
+        origem TEXT,         -- "Origem da Nota Final" (ex. "CAPAG Ano Base 2024")
+        esfera TEXT          -- M | E
+    );
+    """,
 ]
 
 

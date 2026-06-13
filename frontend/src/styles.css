@@ -1356,6 +1356,65 @@ body {
 }
 .fiscal-disclaimer svg { color: var(--pico); flex: none; margin-top: 1px; }
 
+/* ============ CAPAG — risco de pagamento do comprador (Tesouro/SICONFI) ============
+   Nota grande colorida por faixa (A=sinal, B=pico, C/D=clip); 3 indicadores;
+   ICF; selo de fonte. Federal e sem-dados em blocos honestos. */
+.capag-wrap { margin-top: 18px; }
+.capag-card { padding: 20px 22px; }
+.capag-topo {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--linha);
+}
+.capag-nota-bloco { min-width: 92px; }
+.capag-nota {
+  font-family: var(--font-mono);
+  font-size: 58px;
+  font-weight: 600;
+  line-height: 1;
+  margin-top: 4px;
+}
+.capag-ente-nome { font-weight: 600; font-size: 16px; margin-bottom: 3px; }
+.capag-inds {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  padding: 18px 0 4px 0;
+}
+.capag-ind {
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--fundo-2);
+}
+.capag-ind-rotulo { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; }
+.capag-ind-linha { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.capag-ind-nota { font-family: var(--font-mono); font-size: 26px; font-weight: 600; line-height: 1; }
+.capag-ind-pct { font-size: 14px; color: var(--silk); }
+.capag-rodape { margin-top: 14px; }
+.capag-fonte {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--silk);
+}
+.capag-fonte svg { flex: none; }
+.capag-federal-tit { font-weight: 600; font-size: 16px; margin-bottom: 8px; color: var(--sinal); }
+.capag-federal-txt { font-size: 13px; line-height: 1.55; color: var(--silk); margin: 0 0 12px 0; max-width: 60ch; }
+.capag-federal, .capag-vazio { padding: 20px 22px; }
+.capag-vazio-tit { font-size: 14px; margin-bottom: 8px; }
+.capag-vazio-txt { font-size: 12.5px; line-height: 1.5; margin: 0 0 12px 0; max-width: 56ch; }
+
+@media (max-width: 720px) {
+  .capag-inds { grid-template-columns: 1fr; }
+  .capag-nota { font-size: 48px; }
+}
+
 /* painel: match + fiscal */
 .painel-match { border: 1px solid var(--linha); border-radius: 8px; padding: 12px 14px; }
 .painel-match-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }

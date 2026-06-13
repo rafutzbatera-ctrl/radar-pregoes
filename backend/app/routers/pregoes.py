@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from .. import pncp
 from ..deps import get_db
-from ..services import analise, fiscal, sincronizacao
+from ..services import analise, capag, fiscal, sincronizacao
 
 router = APIRouter(prefix="/pregoes", tags=["pregoes"])
 
@@ -254,6 +254,21 @@ def fiscal_pregao(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
     if con.execute("SELECT 1 FROM pregoes WHERE id=?", (pregao_id,)).fetchone() is None:
         raise HTTPException(404, "Pregão não encontrado")
     return fiscal.fiscal_do_pregao(con, pregao_id)
+
+
+@router.get("/{pregao_id}/capag")
+def capag_pregao(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
+    """CAPAG do ente comprador (risco de pagamento) — Tesouro/SICONFI.
+
+    Lazy: só lê as tabelas populadas por scripts/seed_capag.py (nunca baixa no
+    request). Federal/sem dado → {disponivel: False, motivo} — nunca chuta nota.
+    """
+    p = con.execute(
+        "SELECT cnpj, uf, municipio FROM pregoes WHERE id=?", (pregao_id,)
+    ).fetchone()
+    if p is None:
+        raise HTTPException(404, "Pregão não encontrado")
+    return capag.capag_do_pregao(con, p["cnpj"], p["uf"], p["municipio"])
 
 
 @router.get("/{pregao_id}/habilitacao")
