@@ -142,7 +142,9 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
   const [recebendo, setRecebendo] = React.useState(false);
   const [soNovos, setSoNovos] = React.useState(false);
   // fonte: "radar" (pregões já descobertos) | "vivo" (busca ao vivo no PNCP)
-  const [fonte, setFonte] = React.useState("radar");
+  // Abre em "vivo": a tela Encontrar serve para TRIAR oportunidades ao vivo e
+  // decidir o que entra no radar; "No meu radar" é só um clique ao lado.
+  const [fonte, setFonte] = React.useState("vivo");
   const aoVivo = !apenasSalvos && fonte === "vivo";
 
   // P9 — "Só compra de bens" (padrão LIGADO): credenciamentos/chamamentos
