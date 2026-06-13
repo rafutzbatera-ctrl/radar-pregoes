@@ -158,6 +158,26 @@ def analisar_pregao(con: sqlite3.Connection, pregao_id: int) -> dict:
     }
 
 
+def cobertura_cost_based(itens_calc: list[dict]) -> float | None:
+    """Cobertura COST-BASED a partir dos itens já calculados (_itens_calculados):
+    fração de itens que entram na conta — custo efetivo definido E preço esperado
+    válido (> 0) — sobre o total. É a MESMA definição de `cobertura` em
+    analisar_pregao (`com_custo / total_itens`), só que reconstruída no nível do
+    endpoint para o PDF não exibir o número MATCH-based do _resumo_pregao.
+
+    Sem itens → None (não há fração para reportar; coerente com princípio 1)."""
+    total = len(itens_calc)
+    if not total:
+        return None
+    com_custo = sum(
+        1 for d in itens_calc
+        if d.get("custo_efetivo") is not None
+        and d.get("preco_esperado") is not None
+        and d.get("preco_esperado") > 0
+    )
+    return com_custo / total
+
+
 def margem_lucro_item(valor_unit, custo_unit, qtd) -> dict:
     """Conta por item (exposta nos endpoints junto dos dados crus)."""
     if valor_unit is None or custo_unit is None or not valor_unit:

@@ -193,6 +193,12 @@ def _itens_calculados(con: sqlite3.Connection, pregao_id: int) -> list[dict]:
     saida = []
     for ln in linhas:
         d = dict(ln)
+        # material/serviço do PNCP (§4.2; coluna v8). SELECT i.* já o traz, mas
+        # garantimos a chave para itens pré-v8 (None) — o export lê esta chave.
+        d["material_ou_servico"] = (
+            ln["material_ou_servico"]
+            if "material_ou_servico" in ln.keys() else None
+        )
         custo_ef, fonte = analise.custo_efetivo_row(ln)
         d["custo_efetivo"] = custo_ef
         d["fonte_custo"] = fonte
@@ -262,8 +268,8 @@ def _valor_export(d: dict, chave: str):
     Sigiloso esconde os valores oficiais; margem_pct = margem×100 (2 casas)."""
     sig = d.get("sigiloso")
     if chave == "materialOuServico":
-        # a coluna de material/serviço não está em itens_pregao; só o NCM e a
-        # descrição vêm do PNCP — deixamos o material vazio quando não há.
+        # material/serviço do PNCP (§4.2, coluna v8 persistida na sync). Itens
+        # pré-v8 não têm o dado → vazio (honesto, sem backfill).
         return d.get("material_ou_servico") or ""
     if chave in ("valor_unit_estimado", "valor_total") and sig:
         return "sigiloso"
@@ -350,6 +356,12 @@ def relatorio_pregao(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
         raise HTTPException(404, "Pregão não encontrado")
     agregados = _resumo_pregao(con, p)
     itens_calc = _itens_calculados(con, pregao_id)
+    # FIX honestidade: o PDF exibe a regra do veredito (cobertura COST-BASED),
+    # mas _resumo_pregao traz cobertura MATCH-based (itens_confirmados/total).
+    # Recalculamos cost-based a partir dos itens já calculados — MESMA definição
+    # de analise.analisar_pregao — para o número do PDF casar com o hero/veredito.
+    agregados = {**agregados,
+                 "cobertura": analise.cobertura_cost_based(itens_calc)}
     esfera = p["esfera"] if "esfera" in p.keys() else None
     capag_dados = capag.capag_do_pregao(con, p["cnpj"], p["uf"], p["municipio"], esfera)
     pdf_bytes = relatorio.montar_pdf(p, itens_calc, capag_dados, agregados)

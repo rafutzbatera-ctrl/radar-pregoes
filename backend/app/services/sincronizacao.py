@@ -116,8 +116,9 @@ def _persistir_itens(con: sqlite3.Connection, pregao_id: int, itens: list) -> in
         con.execute(
             """INSERT INTO itens_pregao
                  (pregao_id, numero, descricao, qtd, unidade, valor_unit_estimado,
-                  valor_total, beneficio, criterio, ncm_pncp, info_complementar, sigiloso)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                  valor_total, beneficio, criterio, ncm_pncp, info_complementar,
+                  sigiloso, material_ou_servico)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT(pregao_id, numero) DO UPDATE SET
                  descricao=excluded.descricao, qtd=excluded.qtd,
                  unidade=excluded.unidade,
@@ -125,7 +126,8 @@ def _persistir_itens(con: sqlite3.Connection, pregao_id: int, itens: list) -> in
                  valor_total=excluded.valor_total, beneficio=excluded.beneficio,
                  criterio=excluded.criterio, ncm_pncp=excluded.ncm_pncp,
                  info_complementar=excluded.info_complementar,
-                 sigiloso=excluded.sigiloso""",
+                 sigiloso=excluded.sigiloso,
+                 material_ou_servico=excluded.material_ou_servico""",
             (
                 pregao_id, it.get("numeroItem"), it.get("descricao"),
                 it.get("quantidade"), it.get("unidadeMedida"),
@@ -134,6 +136,8 @@ def _persistir_itens(con: sqlite3.Connection, pregao_id: int, itens: list) -> in
                 it.get("tipoBeneficioNome"), it.get("criterioJulgamentoNome"),
                 it.get("ncmNbsCodigo"), it.get("informacaoComplementar"),
                 int(bool(it.get("orcamentoSigiloso"))),
+                # §4.2 materialOuServicoNome ("Material" | "Serviço"); tolera ausência
+                it.get("materialOuServicoNome"),
             ),
         )
     con.commit()

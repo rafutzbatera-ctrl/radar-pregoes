@@ -7,9 +7,12 @@ alterações com justificativa real, documentos. O cliente pncp devolve a lista
 crua; este helper (testável, sem rede) filtra e adapta para a UI.
 
 Filtro: descartar entradas cuja `justificativa` NORMALIZADA (minúsculas, sem
-acento) contenha "sincroniza" — pega "Sincronizacao automatica", "sincronização",
-etc. Cap defensivo de 50 eventos (os mais recentes). Mesma filosofia de
-normalização do gate de citação e do matching de município (capag).
+acento) contenha "sincronizacao automatica" — a string EXATA do ruído do
+scheduler ("Sincronizacao automatica (scheduler 5min)"). Antes o filtro casava
+só "sincroniza", o que mataria uma retificação legítima ("sincronizar prazos
+com o TR"); agora só o ruído real cai. Cap defensivo de 50 eventos (os mais
+recentes). Mesma filosofia de normalização do gate de citação e do matching de
+município (capag).
 """
 import unicodedata
 
@@ -28,8 +31,10 @@ def _normalizar(s: str | None) -> str:
 
 
 def _e_ruido_sync(justificativa: str | None) -> bool:
-    """True se a justificativa é ruído de sincronização automática (scheduler)."""
-    return "sincroniza" in _normalizar(justificativa)
+    """True só se a justificativa é o ruído do scheduler — string normalizada
+    contendo "sincronizacao automatica". Uma retificação legítima que mencione
+    "sincronizar" (ex.: "sincronizar prazos com o TR") é PRESERVADA."""
+    return "sincronizacao automatica" in _normalizar(justificativa)
 
 
 def _data_de(ev: dict) -> str:

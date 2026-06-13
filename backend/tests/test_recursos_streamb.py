@@ -6,7 +6,7 @@ testável (services.historico) deve devolver SÓ os 2 marcos.
 """
 import io
 
-from app.services import historico
+from app.services import analise, historico
 from app.services.relatorio import montar_pdf
 
 CNPJ = "01613770000172"
@@ -198,3 +198,124 @@ def test_endpoint_relatorio_pdf(client, con):
 def test_endpoint_relatorio_pregao_inexistente(client):
     r = client.get("/pregoes/999999/relatorio.pdf")
     assert r.status_code == 404
+
+
+# ---------- FIX 1: cobertura do PDF é COST-BASED (casa com o hero/veredito) ----------
+
+def test_cobertura_cost_based_meio_a_meio():
+    """Helper testável: 1 item com custo efetivo + preço esperado, 1 sem custo
+    → cobertura = 0.5 (MESMA definição de analisar_pregao)."""
+    itens_calc = [
+        {"custo_efetivo": 900.0, "preco_esperado": 1200.0},
+        {"custo_efetivo": None, "preco_esperado": 800.0},
+    ]
+    assert analise.cobertura_cost_based(itens_calc) == 0.5
+
+
+def test_cobertura_cost_based_sem_itens_none():
+    """Sem itens → None (não há fração para reportar)."""
+    assert analise.cobertura_cost_based([]) is None
+
+
+def test_cobertura_cost_based_ignora_custo_sem_preco():
+    """Item com custo mas sem preço esperado (sigiloso sem lance) NÃO entra na
+    conta — igual a analisar_pregao (preco None/<=0 é descartado)."""
+    itens_calc = [
+        {"custo_efetivo": 500.0, "preco_esperado": None},   # fora
+        {"custo_efetivo": 900.0, "preco_esperado": 1200.0},  # dentro
+    ]
+    assert analise.cobertura_cost_based(itens_calc) == 0.5
+
+
+def test_endpoint_relatorio_cobertura_cost_based(client, con):
+    """ENDPOINT: pregão com 1 item COM custo efetivo (custo_manual, SEM match
+    confirmado) e 1 SEM custo → PDF gera (200 %PDF) e a cobertura COST-BASED do
+    endpoint = 0.5. Garante que o PDF usa a regra do veredito, não a MATCH-based
+    do _resumo_pregao (que aqui seria 0/2 = 0 — não há match confirmado)."""
+    pid = _criar_pregao(con, numero_controle="NC-PDF-COST")
+    # item 1: custo manual, SEM match confirmado → custo efetivo definido
+    # item 2: sem custo nenhum
+    con.executemany(
+        "INSERT INTO itens_pregao(pregao_id, numero, descricao, qtd, unidade,"
+        " valor_unit_estimado, valor_total, sigiloso, custo_manual)"
+        " VALUES (?,?,?,?,?,?,?,?,?)",
+        [
+            (pid, 1, "Caixa de som ativa 500W", 4, "UN", 1200.0, 4800.0, 0, 900.0),
+            (pid, 2, "Microfone sem fio duplo", 2, "UN", 800.0, 1600.0, 0, None),
+        ],
+    )
+    con.commit()
+
+    # cost-based via o MESMO caminho do endpoint (_itens_calculados → helper)
+    from app.routers.pregoes import _itens_calculados
+    itens_calc = _itens_calculados(con, pid)
+    assert analise.cobertura_cost_based(itens_calc) == 0.5
+    # MATCH-based (o que o PDF mostrava ANTES) seria 0 — confirma a divergência
+    from app.routers.pregoes import _resumo_pregao
+    p = con.execute("SELECT * FROM pregoes WHERE id=?", (pid,)).fetchone()
+    assert _resumo_pregao(con, p)["cobertura"] == 0
+
+    r = client.get(f"/pregoes/{pid}/relatorio.pdf")
+    assert r.status_code == 200
+    assert r.content[:4] == b"%PDF"
+
+
+# ---------- FIX 2: material_ou_servico persistido (export deixa de sair vazio) ----------
+
+def test_material_persistido_e_no_export(con, client, cliente_fake, monkeypatch):
+    """Após sincronizar itens (fixture com materialOuServicoNome), o item
+    calculado traz material_ou_servico e o CSV contém o valor ("Material")."""
+    from app.routers.pregoes import _itens_calculados
+    from app.services import sincronizacao
+
+    pid = _criar_pregao(con, numero_controle="NC-MAT")
+    sincronizacao.sincronizar_itens(con, pid, cliente=cliente_fake)
+
+    calc = _itens_calculados(con, pid)
+    assert calc, "sincronização deve ter inserido itens"
+    # a fixture real traz materialOuServicoNome = "Material"
+    assert any(d.get("material_ou_servico") == "Material" for d in calc)
+
+    r = client.get(f"/pregoes/{pid}/itens/export?formato=csv")
+    assert r.status_code == 200
+    texto = r.content.decode("utf-8-sig")
+    assert "Material" in texto
+    # cabeçalho da coluna presente
+    assert "material_ou_servico" in texto.splitlines()[0]
+
+
+def test_material_ausente_fica_none(con, client):
+    """Item inserido SEM material_ou_servico (pré-v8 / sem dado) → None no item
+    calculado e célula vazia no CSV (honesto, sem chute)."""
+    from app.routers.pregoes import _itens_calculados
+
+    pid = _criar_pregao(con, numero_controle="NC-MAT-NONE")
+    _inserir_itens(con, pid)  # helper não preenche material_ou_servico
+    calc = _itens_calculados(con, pid)
+    assert all(d.get("material_ou_servico") is None for d in calc)
+
+
+# ---------- FIX 3: filtro de histórico mais preciso ----------
+
+def test_ruido_sync_so_pega_scheduler():
+    """Retificação legítima que menciona 'sincronizar' é PRESERVADA; só o ruído
+    real do scheduler ('Sincronizacao automatica ...') é descartado."""
+    legitima = {
+        "logManutencaoDataInclusao": "2026-06-13T10:00:00",
+        "tipoLogManutencaoNome": "Alteração",
+        "categoriaLogManutencaoNome": "Documento",
+        "justificativa": "sincronizar prazos com o TR",
+    }
+    ruido = {
+        "logManutencaoDataInclusao": "2026-06-13T08:05:00",
+        "tipoLogManutencaoNome": "Alteração",
+        "categoriaLogManutencaoNome": "Documento",
+        "justificativa": "Sincronizacao automatica (scheduler 5min)",
+    }
+    # helper de baixo nível
+    assert historico._e_ruido_sync(legitima["justificativa"]) is False
+    assert historico._e_ruido_sync(ruido["justificativa"]) is True
+    # ponta a ponta no filtro: só a legítima sobrevive
+    evs = historico.filtrar_eventos([legitima, ruido])
+    assert len(evs) == 1
+    assert evs[0]["justificativa"] == "sincronizar prazos com o TR"

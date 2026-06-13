@@ -188,6 +188,13 @@ MIGRACOES = [
     """
     ALTER TABLE pregoes ADD COLUMN esfera TEXT;
     """,
+    # v8 — material/serviço do item (§4.2 materialOuServicoNome: "Material" |
+    # "Serviço"). A sync descartava esse campo, então a coluna do export saía
+    # sempre vazia. Agora é persistido na inclusão do item. Itens pré-v8 ficam
+    # NULL (honesto, sem backfill — princípio 1: sem dado, sem chute).
+    """
+    ALTER TABLE itens_pregao ADD COLUMN material_ou_servico TEXT;
+    """,
 ]
 
 
