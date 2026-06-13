@@ -273,6 +273,17 @@ export const api = {
   // nota, cor, icf, origem, indicadores[], ente, uf, esfera, fonte, motivo).
   capag: (pregaoId) => req(`/pregoes/${pregaoId}/capag`),
 
+  // histórico do pregão (PNCP) — só os marcos, sem o ruído de sync. Lazy: a aba
+  // Histórico chama na abertura. Devolve {eventos:[{data,evento,responsavel,
+  // justificativa,documento}]}.
+  historico: (pregaoId) => req(`/pregoes/${pregaoId}/historico`),
+
+  // URLs de download direto (o navegador baixa via <a> / window.open; não passam
+  // pelo req()/fetch porque a resposta é binária com content-disposition).
+  exportarItensUrl: (pregaoId, formato = "csv") =>
+    `${BASE}/pregoes/${pregaoId}/itens/export?formato=${formato}`,
+  relatorioPdfUrl: (pregaoId) => `${BASE}/pregoes/${pregaoId}/relatorio.pdf`,
+
   // matching (human-in-the-loop)
   definirMatch: (itemId, produtoId, confirmado) =>
     req(`/itens/${itemId}/match`, {

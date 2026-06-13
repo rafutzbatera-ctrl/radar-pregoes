@@ -96,6 +96,7 @@ export default function AnalysisScreen({
     { id: "habilitacao", rotulo: "Habilitação", contador: habil.length ? pendentesHabil + "/" + habil.length : "—", tipo: pendentesHabil > 0 ? "pico" : "sinal" },
     { id: "fiscal", rotulo: "Fiscal · NF-e", contador: prontos + "/" + fiscalTotal, tipo: prontos === fiscalTotal ? "sinal" : "pico" },
     { id: "capag", rotulo: "CAPAG", contador: null, tipo: null },
+    { id: "historico", rotulo: "Histórico", contador: null, tipo: null },
   ];
 
   const linhaSilk = [
@@ -108,7 +109,14 @@ export default function AnalysisScreen({
     <motion.div className="screen-inner" variants={pai} initial={estatico ? false : "hidden"} animate="show">
       <div ref={cabRef} style={{ willChange: "transform" }}>
         <motion.div variants={entrada}>
-          <button type="button" className="voltar" onClick={voltar}>{Ico.seta} Voltar</button>
+          <div className="cab-acoes">
+            <button type="button" className="voltar" onClick={voltar}>{Ico.seta} Voltar</button>
+            <a className="btn-relatorio" href={api.relatorioPdfUrl(pregao.id)}
+              target="_blank" rel="noopener noreferrer"
+              title="Baixar um PDF com o resumo do edital, veredito e itens">
+              {Ico.externo} Gerar relatório
+            </a>
+          </div>
           <div className="cab-info">
             <div className="silk">{linhaSilk}</div>
             <h1>{pregao.titulo}</h1>
@@ -277,6 +285,9 @@ export default function AnalysisScreen({
             {aba === "capag" && (
               <CapagTab pregao={pregao} />
             )}
+            {aba === "historico" && (
+              <HistoricoTab pregao={pregao} />
+            )}
           </motion.div>
         </React.Fragment>
       )}
@@ -300,6 +311,13 @@ export default function AnalysisScreen({
   );
 }
 
+// normalização leve para a busca nos itens (sem acento, caixa baixa) — espelha
+// a filosofia do gate de citação / matching de município do backend.
+function _normTxt(s) {
+  if (!s) return "";
+  return String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+}
+
 /* ============ ABA ITENS ============ */
 function ItensTab({ a, pregao, abrir, setCusto, confirmarCusto, limparCusto, definirMargemAlvo, config, desagio,
   setLance, confirmarLance, limparLance, definirDesagio, setMatch, catalogo, estatico, reduzido, itemAberto }) {
@@ -307,6 +325,14 @@ function ItensTab({ a, pregao, abrir, setCusto, confirmarCusto, limparCusto, def
     ? { hidden: { opacity: 0 }, show: { opacity: 1, transition: { duration: 0.15 } } }
     : { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 340, damping: 30 } } };
   const tbl = { hidden: {}, show: { transition: { staggerChildren: reduzido ? 0 : 0.04, delayChildren: reduzido ? 0 : 0.05 } } };
+
+  // Recurso 4b: busca nos itens (frontend-only) — filtra por descrição/spec
+  // normalizada. Zero backend.
+  const [busca, setBusca] = React.useState("");
+  const bNorm = _normTxt(busca);
+  const itensFiltrados = bNorm
+    ? a.itens.filter((it) => _normTxt((it.nome || "") + " " + (it.spec || "")).includes(bNorm))
+    : a.itens;
 
   return (
     <div className="tbl-wrap">
@@ -322,10 +348,17 @@ function ItensTab({ a, pregao, abrir, setCusto, confirmarCusto, limparCusto, def
       <div className="tbl-titulo">
         <span className="silk">Itens do edital — teto × preço esperado × seu custo</span>
         <div className="tbl-controles">
+          <BuscaItens valor={busca} setValor={setBusca} />
+          <ExportarItens pregaoId={pregao.id} />
           <DesagioControle config={config} definirDesagio={definirDesagio} />
           <MargemAlvoControle config={config} definirMargemAlvo={definirMargemAlvo} />
         </div>
       </div>
+      {bNorm && (
+        <div className="busca-itens-info silk">
+          {itensFiltrados.length} de {a.itens.length} itens com “{busca}”
+        </div>
+      )}
       <div className="mod tbl" role="table" aria-label="Itens do pregão">
         <div className="tbl-head" role="row">
           <div className="silk" role="columnheader">Nº</div>
@@ -339,7 +372,7 @@ function ItensTab({ a, pregao, abrir, setCusto, confirmarCusto, limparCusto, def
           <div className="silk" role="columnheader">Status</div>
         </div>
         <motion.div variants={tbl} initial={estatico ? false : "hidden"} animate="show" role="rowgroup">
-          {a.itens.map((it) => (
+          {itensFiltrados.map((it) => (
             <LinhaItem key={it.n} item={it} variants={linha} ativa={itemAberto === it.n} abrir={abrir}
               setCusto={setCusto} confirmarCusto={confirmarCusto} limparCusto={limparCusto}
               setLance={setLance} confirmarLance={confirmarLance} limparLance={limparLance} desagio={desagio}
@@ -349,6 +382,13 @@ function ItensTab({ a, pregao, abrir, setCusto, confirmarCusto, limparCusto, def
             <div className="tbl-row fora" role="row">
               <div role="cell" style={{ gridColumn: "1 / -1", color: "var(--silk)", padding: "6px 0" }}>
                 Nenhum item carregado ainda — sincronize o pregão para buscar os itens no PNCP.
+              </div>
+            </div>
+          )}
+          {a.itens.length > 0 && itensFiltrados.length === 0 && (
+            <div className="tbl-row fora" role="row">
+              <div role="cell" style={{ gridColumn: "1 / -1", color: "var(--silk)", padding: "6px 0" }}>
+                Nenhum item corresponde a “{busca}”.
               </div>
             </div>
           )}
@@ -427,6 +467,141 @@ function DesagioControle({ config, definirDesagio }) {
       %
     </label>
   );
+}
+
+/* ---------- busca nos itens (Recurso 4b — frontend-only) ---------- */
+function BuscaItens({ valor, setValor }) {
+  return (
+    <label className="busca-itens silk" title="Filtra os itens por descrição (sem acento)">
+      buscar item
+      <input type="search" className="busca-itens-input" value={valor}
+        placeholder="ex.: microfone"
+        aria-label="Buscar item por descrição"
+        onChange={(e) => setValor(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => { if (e.key === "Escape") setValor(""); e.stopPropagation(); }} />
+    </label>
+  );
+}
+
+/* ---------- exportar itens (Recurso 2 — CSV/XLSX, download direto) ---------- */
+function ExportarItens({ pregaoId }) {
+  const [aberto, setAberto] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!aberto) return;
+    const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
+    const onKey = (e) => { if (e.key === "Escape") setAberto(false); };
+    window.addEventListener("mousedown", onClick);
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("mousedown", onClick); window.removeEventListener("keydown", onKey); };
+  }, [aberto]);
+  const baixar = (formato) => {
+    // download direto: a resposta é binária com content-disposition (o navegador
+    // salva o arquivo). window.open evita navegar a SPA para fora.
+    window.open(api.exportarItensUrl(pregaoId, formato), "_blank", "noopener");
+    setAberto(false);
+  };
+  return (
+    <div className="export-itens" ref={ref}>
+      <button type="button" className="export-btn" aria-haspopup="true" aria-expanded={aberto}
+        onClick={(e) => { e.stopPropagation(); setAberto((v) => !v); }}>
+        {Ico.externo} Exportar itens
+      </button>
+      {aberto && (
+        <div className="export-menu" role="menu">
+          <button type="button" role="menuitem" onClick={() => baixar("csv")}>CSV (.csv)</button>
+          <button type="button" role="menuitem" onClick={() => baixar("xlsx")}>Excel (.xlsx)</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============ ABA HISTÓRICO — eventos do pregão (PNCP, sem ruído de sync) ============
+   Carrega lazy: chama /pregoes/{id}/historico só quando a aba abre. Timeline com
+   data, evento, responsável e justificativa. Vazio → "Sem eventos relevantes". */
+function HistoricoTab({ pregao }) {
+  const [estado, setEstado] = React.useState({ carregando: true, eventos: null, erro: null });
+
+  React.useEffect(() => {
+    let vivo = true;
+    setEstado({ carregando: true, eventos: null, erro: null });
+    api.historico(pregao.id)
+      .then((d) => { if (vivo) setEstado({ carregando: false, eventos: (d && d.eventos) || [], erro: null }); })
+      .catch((e) => { if (vivo) setEstado({ carregando: false, eventos: null, erro: (e && e.message) || "erro" }); });
+    return () => { vivo = false; };
+  }, [pregao.id]);
+
+  if (estado.carregando) {
+    return (
+      <div className="hist-wrap" aria-busy="true">
+        <div className="card-pregao mod skel">
+          <span className="skel-bar w30"></span>
+          <span className="skel-bar w70"></span>
+          <span className="skel-bar w90"></span>
+        </div>
+      </div>
+    );
+  }
+
+  if (estado.erro) {
+    return (
+      <div className="hist-wrap">
+        <div className="estado-vazio mod">
+          <h3>Não foi possível carregar o histórico</h3>
+          <p>{estado.erro}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const eventos = estado.eventos || [];
+  return (
+    <div className="hist-wrap">
+      <div className="tbl-titulo">
+        <span className="silk">Histórico do pregão — marcos no PNCP (sem o ruído de sincronização)</span>
+      </div>
+      {eventos.length === 0 ? (
+        <div className="capag-card mod capag-vazio">
+          <div className="capag-vazio-tit silk">Sem eventos relevantes</div>
+          <p className="capag-vazio-txt silk">
+            O PNCP não registrou marcos para este pregão (inclusões, retificações,
+            documentos). Eventos de sincronização automática são filtrados.
+          </p>
+        </div>
+      ) : (
+        <ol className="hist-timeline mod">
+          {eventos.map((ev, i) => (
+            <li className="hist-item" key={i}>
+              <span className="hist-ponto" aria-hidden="true"></span>
+              <div className="hist-conteudo">
+                <div className="hist-linha-topo">
+                  <strong className="hist-evento">{ev.evento || "Evento"}</strong>
+                  <span className="hist-data mono silk">{dataHist(ev.data)}</span>
+                </div>
+                {ev.responsavel && <div className="hist-resp silk">por {ev.responsavel}</div>}
+                {ev.justificativa && <div className="hist-just">{ev.justificativa}</div>}
+                {ev.documento && <div className="hist-doc silk">{Ico.externo} {ev.documento}</div>}
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+// data ISO do histórico → pt-BR curto (dd/mm/aaaa hh:mm). Mantém o cru se inválida.
+function dataHist(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${dd}/${mm}/${d.getFullYear()} ${hh}:${mi}`;
 }
 
 /* ---------- linha (com sub-barra de match quando sugerido/sem match) ---------- */
