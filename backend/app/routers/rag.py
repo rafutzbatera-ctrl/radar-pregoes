@@ -20,6 +20,7 @@ router = APIRouter(prefix="/pregoes", tags=["rag"])
 class PerguntaRAG(BaseModel):
     pergunta: str
     k: int | None = None
+    sintetizar: bool = False
 
 
 @router.post("/{pregao_id}/rag/indexar")
@@ -54,10 +55,13 @@ def perguntar(pregao_id: int, corpo: PerguntaRAG,
     """Recuperação extrativa: trechos do edital mais próximos da pergunta.
 
     404 se o pregão não existe; 422 se a pergunta for vazia. Os trechos SÃO a
-    resposta (verbatim, com página + offsets) — nunca há síntese/LLM.
+    resposta (verbatim, com página + offsets). Com `sintetizar=true` (opt-in,
+    Fase 2), anexa uma síntese em prosa em `sintese` SEM remover os trechos —
+    a prosa nunca substitui a fonte (princípio 1).
     """
     if con.execute("SELECT 1 FROM pregoes WHERE id=?", (pregao_id,)).fetchone() is None:
         raise HTTPException(404, "Pregão não encontrado")
     if not corpo.pergunta or not corpo.pergunta.strip():
         raise HTTPException(422, "pergunta vazia")
-    return rag.perguntar(con, pregao_id, corpo.pergunta, k=corpo.k)
+    return rag.perguntar(con, pregao_id, corpo.pergunta, k=corpo.k,
+                         sintetizar=corpo.sintetizar)

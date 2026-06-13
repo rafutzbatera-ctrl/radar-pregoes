@@ -295,12 +295,20 @@ def _carregar_matriz(con: sqlite3.Connection, pregao_id: int):
 
 def perguntar(con: sqlite3.Connection, pregao_id: int, pergunta: str,
               k: int | None = None, embed=matching.embed_padrao,
-              threshold: float | None = None) -> dict:
-    """Recuperação extrativa: devolve os trechos do edital mais próximos da
-    pergunta (cosseno ≥ threshold). NUNCA sintetiza — os trechos são a resposta.
+              threshold: float | None = None, sintetizar: bool = False,
+              sintetizador=None) -> dict:
+    """Recuperação extrativa (Fase 1): devolve os trechos do edital mais
+    próximos da pergunta (cosseno ≥ threshold). Os trechos são a resposta.
 
     Sem chunks → disponivel=False, motivo "nao_indexado".
     max(score) < threshold → disponivel=False, motivo "nao_encontrado".
+
+    `sintetizar=True` (opt-in, Fase 2): quando há trechos E
+    settings.RAG_SINTESE_MODO != "off", anexa uma síntese em prosa em
+    `resposta["sintese"]` (gate de citação duro em rag_sintese). Os TRECHOS
+    NUNCA são removidos — a prosa nunca substitui a fonte (princípio 1/4).
+    A síntese é injetável p/ teste via `sintetizador` (default usa
+    rag_sintese.sintetizar) — assim os testes nunca chamam o CLI real.
     """
     k = k or settings.RAG_TOP_K
     threshold = threshold if threshold is not None else settings.RAG_THRESHOLD
@@ -345,9 +353,23 @@ def perguntar(con: sqlite3.Connection, pregao_id: int, pergunta: str,
     if not trechos:
         return {"disponivel": False, "motivo": "nao_encontrado", "trechos": []}
 
-    return {
+    resposta = {
         "disponivel": True,
         "pergunta": pergunta,
         "trechos": trechos,
         "fonte": "documentos do edital (PNCP)",
     }
+
+    # Fase 2 (opt-in): síntese em prosa SOBRE os trechos, sem removê-los.
+    if sintetizar and settings.RAG_SINTESE_MODO != "off":
+        sint = sintetizador or _sintetizar_padrao
+        resposta["sintese"] = sint(pergunta, trechos)
+
+    return resposta
+
+
+def _sintetizar_padrao(pergunta: str, trechos: list[dict]) -> dict:
+    """Default de perguntar(): chama rag_sintese.sintetizar (import local p/
+    evitar ciclo). Substituível por um fake nos testes via `sintetizador`."""
+    from . import rag_sintese
+    return rag_sintese.sintetizar(pergunta, trechos)

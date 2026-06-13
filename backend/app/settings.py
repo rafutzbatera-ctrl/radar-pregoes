@@ -41,6 +41,13 @@ RAG_CHUNK_MAX = int(os.getenv("RADAR_RAG_CHUNK_MAX", "900"))      # teto de char
 RAG_CHUNK_MIN = int(os.getenv("RADAR_RAG_CHUNK_MIN", "40"))       # mín. de chars ÚTEIS p/ manter o chunk
 RAG_CHUNK_OVERLAP = int(os.getenv("RADAR_RAG_CHUNK_OVERLAP", "120"))  # sobreposição entre chunks
 
+# RAG Fase 2 (OPCIONAL) — síntese em prosa sobre os trechos recuperados na
+# Fase 1, com gate de citação DURO. Só roda quando o pedido vem com
+# sintetizar=true (opt-in); a Fase 1 extrativa segue como default e fallback.
+# "claude_cli" (padrão, local-first e de graça via Claude CLI desarmado),
+# "api" (Anthropic — TODO), "off" desliga a síntese de vez.
+RAG_SINTESE_MODO = os.getenv("RADAR_RAG_SINTESE", "claude_cli")
+
 # regras do veredito (CLAUDE.md §6.2) — sobreponíveis via tabela config
 VEREDITO_PADRAO = {
     "vale_margem_min": 0.20,
