@@ -30,10 +30,12 @@ MATCH_THRESHOLD = 0.90
 
 # RAG leve extrativo (Fase 1) — Q&A sobre os documentos de UM edital por vez.
 # Reusa o mesmo e5 do matching (MATCH_MODELO); threshold SEPARADO do 0.90 do
-# matching: aqui 0.80 (decisão do dono). Abaixo do threshold a resposta é
-# "não encontrado" — nunca inventa (princípio 1). Chunking em chars sobre o
-# texto cru da página (verbatim), com fronteiras de parágrafo/cláusula.
-RAG_THRESHOLD = float(os.getenv("RADAR_RAG_THRESHOLD", "0.80"))
+# matching. CALIBRADO em editais reais (14/06/2026): o e5-small tem um PISO de
+# similaridade ~0.83 para qualquer pergunta PT × qualquer texto PT (pergunta
+# fora do tema cravou 0.833); respostas reais ficam 0.846–0.881. 0.84 separa o
+# fora-do-tema das respostas reais. Abaixo do threshold → "não encontrado",
+# nunca inventa (princípio 1). Chunking verbatim por parágrafo/cláusula.
+RAG_THRESHOLD = float(os.getenv("RADAR_RAG_THRESHOLD", "0.84"))
 RAG_TOP_K = int(os.getenv("RADAR_RAG_TOP_K", "5"))
 RAG_CHUNK_MAX = int(os.getenv("RADAR_RAG_CHUNK_MAX", "900"))      # teto de chars/chunk
 RAG_CHUNK_MIN = int(os.getenv("RADAR_RAG_CHUNK_MIN", "40"))       # mín. de chars ÚTEIS p/ manter o chunk

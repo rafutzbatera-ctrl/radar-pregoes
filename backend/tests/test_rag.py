@@ -97,6 +97,30 @@ def test_chunk_citacao_aponta_trecho_real():
         assert habilitacao.verificar_citacao(ch["texto"], PAGINAS) is True
 
 
+def test_chunkar_descarta_ruido_de_extracao_preserva_verbatim():
+    """PDF escaneado: pymupdf4llm injeta placeholders de imagem e blobs hex de
+    assinatura. Esses blocos NÃO viram chunk (achatavam o cosseno ~0.84 e
+    enganavam o threshold), mas o verbatim do que sobra é preservado."""
+    pagina = (
+        "**==> picture [55 x 55] intentionally omitted <==**\n"
+        "\n"
+        "09F680D5C2028AC2B5C8A0CBA58D4E1F2A3B4C5D6E7F8\n"
+        "\n"
+        "2. DO PRAZO DE ENTREGA\n"
+        "2.1 O prazo de entrega e de 30 (trinta) dias corridos apos a ordem.\n"
+        "\n"
+        "----- Start of picture text -----\n"
+    )
+    chunks = rag._chunkar([pagina])
+    assert len(chunks) == 1, "só o bloco de texto real deveria virar chunk"
+    ch = chunks[0]
+    assert "prazo de entrega" in ch["texto"].lower()
+    assert "intentionally omitted" not in ch["texto"]
+    assert "09F680D5" not in ch["texto"]
+    # verbatim intacto mesmo com o filtro de ruído
+    assert ch["texto"] == pagina[ch["offset_inicio"]:ch["offset_fim"]]
+
+
 def test_chunkar_pagina_longa_split_com_overlap_preserva_verbatim():
     """Caminho de maior risco do verbatim: página > RAG_CHUNK_MAX vira ≥2 chunks
     com overlap. Cada chunk continua sendo fatia EXATA da página, os offsets são

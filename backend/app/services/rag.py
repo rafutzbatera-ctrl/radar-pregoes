@@ -44,6 +44,23 @@ def _texto_util(s: str) -> int:
     return len(re.sub(r"\s+", "", s))
 
 
+# ruído de extração de PDF escaneado/com imagem (pymupdf4llm): placeholders de
+# imagem e blobs hex/base64 de assinatura digital. NÃO é conteúdo do edital e,
+# por ser quase idêntico entre páginas, achata o cosseno (tudo ~0.84) e engana o
+# threshold. Filtra-se por BLOCO — o verbatim dos chunks sobreviventes é mantido
+# (só escolhemos quais spans viram chunk; nunca editamos o texto).
+_RE_RUIDO = re.compile(
+    r"intentionally omitted|-{3,}\s*(start|end) of picture text|==>\s*picture"
+    r"|[A-F0-9]{20,}",
+    re.IGNORECASE,
+)
+
+
+def _e_ruido(texto: str) -> bool:
+    """True para blocos que são ruído de extração (não conteúdo do edital)."""
+    return bool(_RE_RUIDO.search(texto))
+
+
 def _blocos_da_pagina(pagina: str) -> list[tuple[int, int]]:
     """Quebra a página em blocos (parágrafos), retornando (inicio, fim) de cada
     bloco como índices na string ORIGINAL. Fronteiras: linha em branco e início
@@ -107,6 +124,9 @@ def _chunkar(paginas: list[str]) -> list[dict]:
             continue
         num_pagina = idx + 1
         blocos = _blocos_da_pagina(pagina)
+        # descarta blocos de ruído de extração (placeholder de imagem, blob hex
+        # de assinatura) — preserva o verbatim: só remove spans inteiros
+        blocos = [b for b in blocos if not _e_ruido(pagina[b[0]:b[1]])]
         if not blocos:
             continue
         ordem = 0
