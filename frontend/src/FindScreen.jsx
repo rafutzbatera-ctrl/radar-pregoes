@@ -265,6 +265,10 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
     termos, excluir, ufs: ufsVivo,
     modalidades: modVivo.length ? modVivo : (soCompras ? MODALIDADES_COMPRA : []),
     esferas: esferasVivo,
+    // P9: o toggle restringe as modalidades (acima) E manda so_bens ao backend,
+    // que pós-filtra serviço/concessão vazado dentro das modalidades de compra.
+    // O pós-filtro item-level (sohServico) abaixo refina depois da avaliação.
+    soBens: soCompras,
     status: statusVivo, tipo: tipoVivo, ordenacao: ordemVivo, pagina,
   }), [termos, excluir, ufsVivo, modVivo, esferasVivo, statusVivo, tipoVivo, ordemVivo, soCompras]);
 

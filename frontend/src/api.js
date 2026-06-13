@@ -309,7 +309,7 @@ export const api = {
   // termos[]/excluir[] viram params repetidos; ufs/modalidades/esferas viram csv.
   descobrir: ({
     termos = [], excluir = [], ufs = [], uf, status, tipo, ordenacao,
-    modalidades = [], esferas = [], pagina,
+    modalidades = [], esferas = [], soBens = false, pagina,
   } = {}) => {
     const p = new URLSearchParams();
     (termos || []).filter(Boolean).forEach((t) => p.append("q", t));
@@ -323,6 +323,9 @@ export const api = {
     if (ordenacao) p.set("ordenacao", ordenacao);
     if (modalidades && modalidades.length) p.set("modalidades", modalidades.join(","));
     if (esferas && esferas.length) p.set("esferas", esferas.join(","));
+    // "só compra de bens": pós-filtro aquisição-aware no backend (além das
+    // modalidades de compra que o front já manda)
+    if (soBens) p.set("so_bens", "true");
     if (pagina != null) p.set("pagina", pagina);
     const s = p.toString();
     // 90s: multi-termo (até 5×1 req/s) + retries do WAF cabem; backend morto
