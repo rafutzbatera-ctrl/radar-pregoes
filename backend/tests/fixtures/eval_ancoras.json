@@ -1,0 +1,56 @@
+{
+  "versao": 1,
+  "modelo_embed": "intfloat/multilingual-e5-small",
+  "rag_threshold": 0.84,
+  "_nota": "Ancoras de eval LOCAL (M7) — sem ragas, sem chave de API. Termos confirmados no PDF real (extracao.extrair_paginas + _normalizar). 'termo_no_trecho' eh comparado normalizado (caixa baixa, espacos colapsados; acentos preservados — _normalizar usa NFC sem strip de acento). Perguntas 'nao_encontrado' sao claramente fora do escopo deste edital de aquisicao de palanques.",
+  "editais": [
+    {
+      "id": "imbau_2026_67",
+      "cnpj": "01613770000172",
+      "ano": 2026,
+      "seq": 67,
+      "pdf": "data/arquivos/01613770000172_2026_67/Edital+EX+PE+27.2026+Aquisicao+de+Palanques.pdf",
+      "categorias_esperadas": ["juridica", "fiscal", "economico_financeira", "proposta"],
+      "perguntas": [
+        {
+          "pergunta": "Qual a prova de regularidade com o FGTS exigida na habilitacao fiscal?",
+          "espera": "encontrado",
+          "termo_no_trecho": "Fundo de Garantia do Tempo de Serviço"
+        },
+        {
+          "pergunta": "Que certidao trabalhista o licitante precisa apresentar?",
+          "espera": "encontrado",
+          "termo_no_trecho": "certidão negativa de débitos trabalhistas"
+        },
+        {
+          "pergunta": "Qual a exigencia de qualificacao economico-financeira sobre falencia?",
+          "espera": "encontrado",
+          "termo_no_trecho": "Certidão Negativa de Falência ou Concordata"
+        },
+        {
+          "pergunta": "Qual documento da Junta Comercial e exigido na habilitacao juridica?",
+          "espera": "encontrado",
+          "termo_no_trecho": "Certidão Simplificada da Junta Comercial"
+        },
+        {
+          "pergunta": "Qual o prazo de validade da proposta comercial?",
+          "espera": "encontrado",
+          "termo_no_trecho": "validade da proposta"
+        },
+        {
+          "pergunta": "Quem pode participar desta licitacao, microempresas e empresas de pequeno porte?",
+          "espera": "encontrado",
+          "termo_no_trecho": "microempresas e empresas de pequeno porte"
+        },
+        {
+          "pergunta": "Qual a marca e modelo do drone exigido para vigilancia aerea do canteiro?",
+          "espera": "nao_encontrado"
+        },
+        {
+          "pergunta": "Quantas horas de treinamento de mergulho profissional o fornecedor deve oferecer?",
+          "espera": "nao_encontrado"
+        }
+      ]
+    }
+  ]
+}

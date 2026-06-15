@@ -273,8 +273,17 @@ conta atrás do veredito.
 - **M5 — Front React:** portar o mock premium do Claude Design e ligar nos
   endpoints; estados de carregando/vazio/erro; reduced-motion respeitado.
 - **M6 — Monitoramento:** APScheduler 2×/dia, flag "novo", resumo no dashboard.
-- **M7 (opcional, portfólio) — Eval:** ragas/faithfulness no extrator de
-  habilitação sobre 3 editais reais baixados.
+- **M7 (opcional, portfólio) — Eval LOCAL (sem dependência externa nem chave):**
+  `scripts/eval_habilitacao.py` mede taxa de **citação verificada** (excerto
+  existe literal no PDF) + **cobertura de categorias**; `scripts/eval_rag.py`
+  mede **recall** (recupera o que existe) e **rejeição** de perguntas fora de
+  escopo, sobre editais reais baixados, com âncoras versionadas em
+  `backend/tests/fixtures/eval_ancoras.json`. Sem ragas (que exigiria API/chave):
+  reusa o gate de citação e o e5 já locais. Rodar:
+  `backend\.venv\Scripts\python scripts\eval_habilitacao.py` e `... eval_rag.py`.
+  (Achado do eval, rastreado em docs/MELHORIAS.md: a rejeição de perguntas fora
+  de escopo no RAG é permissiva — floor do e5-small + ramo léxico — e precisa de
+  calibração multi-edital.)
 
 ## 9. Avisos fixos na UI (copiar literalmente)
 - "Ferramenta de apoio à decisão. O edital oficial e os valores estão no PNCP.

@@ -38,6 +38,25 @@ Cinco commits de baixo risco, cada um com teste:
 
 Legenda: severidade (alta/média/baixa) · esforço · risco de corrigir.
 
+### 2.0 Achado do eval M7 (2026-06-15) — honestidade do RAG é permissiva
+
+O eval local `scripts/eval_rag.py` (M7) sobre o edital real de Imbaú revelou:
+**recall 6/6 (perfeito)**, mas **rejeição 0/2** — perguntas claramente fora do
+escopo ("drone de vigilância", "treinamento de mergulho" num edital de
+palanques) **vazam** com score 0.82–0.85 em vez de responder "não encontrado".
+Causa: o `multilingual-e5-small` tem **floor de similaridade ~0.82** (texto PT
+qualquer já pontua alto) e o **ramo léxico do gate híbrido** (`score≥thr OR
+match FTS`) deixa passar qualquer pergunta que compartilhe um termo genérico com
+o edital. Viola os princípios 1 e 2 (deveria dizer "não encontrado").
+*Por que não corrigi já:* re-tunar o threshold (0.84, calibrado) ou o gate com
+as âncoras de **um só edital** seria overfitting e arriscaria regredir recall e
+a busca híbrida recém-entregue. **Fix correto (prioritário):** calibração
+**multi-edital** — exigir margem/gap mínimo do top score, piso semântico para o
+ramo léxico contar, ou um cross-encoder reranker leve. O eval M7 já é o **gate
+de regressão** que mede isso. (`eval_habilitacao.py`, por contraste: citação
+verificada **13/13** e cobertura de categorias **4/4** — o extrator+gate de
+habilitação está sólido.)
+
 ### 2.1 Bugs confirmados (corrigir — risco de fix baixo)
 
 Todos verificados no código; nenhum exige refactor arriscado. Ordem por impacto.
