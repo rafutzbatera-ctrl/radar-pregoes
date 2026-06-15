@@ -135,6 +135,24 @@ def test_patch_custo_manual_negativo_422_e_404(client, con):
     assert client.patch("/itens/999", json={"custo_manual": 10}).status_code == 404
 
 
+def test_retorno_item_inexistente_404_nao_500(con):
+    """_retorno re-SELECTa o item após o UPDATE; se ele sumiu (janela mínima,
+    single-user) fetchone()=None e dict(None) estouraria TypeError -> 500.
+    O guard deve devolver HTTPException 404, nunca um 500."""
+    import pytest
+    from fastapi import HTTPException
+
+    from app.routers.itens import _retorno
+
+    con.execute("INSERT INTO pregoes (cnpj, ano, seq, numero_controle) "
+                "VALUES ('1',2026,1,'NC-RET')")
+    pregao_id = con.execute("SELECT id FROM pregoes").fetchone()["id"]
+    con.commit()
+    with pytest.raises(HTTPException) as exc:
+        _retorno(con, 999_999, pregao_id)   # item inexistente
+    assert exc.value.status_code == 404
+
+
 def test_custo_manual_prevalece_e_simulacao(client, con):
     """custo_manual ▸ catálogo no GET itens; simulação por margem alvo só
     quando não há custo efetivo."""

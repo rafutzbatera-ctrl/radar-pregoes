@@ -27,10 +27,14 @@ class ItemPatchIn(BaseModel):
 
 def _retorno(con: sqlite3.Connection, item_id: int, pregao_id: int) -> dict:
     agregados = analise.analisar_pregao(con, pregao_id)
-    atualizado = dict(con.execute(
+    linha = con.execute(
         "SELECT * FROM itens_pregao WHERE id=?", (item_id,)
-    ).fetchone())
-    return {"item": atualizado, "pregao": agregados}
+    ).fetchone()
+    # guarda contra None: se o item sumiu entre o UPDATE e este SELECT (janela
+    # mínima, single-user), dict(None) estouraria TypeError -> 500. Devolve 404.
+    if linha is None:
+        raise HTTPException(404, "Item não encontrado")
+    return {"item": dict(linha), "pregao": agregados}
 
 
 @router.post("/{item_id}/match")
