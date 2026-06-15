@@ -80,7 +80,16 @@ def _desagio_real_pct(estimado, homologado) -> float | None:
 
 
 def _linha_item(item_row: sqlite3.Row, resultados: list) -> dict:
-    """Monta o dict de saída de UM item a partir dos resultados (já buscados)."""
+    """Monta o dict de saída de UM item a partir dos resultados (já buscados).
+
+    NOTA sobre homologação: o projeto NÃO chuta — a homologação é INFERIDA por
+    `ordemClassificacaoSrp == 1` (1ª colocação) + presença de
+    `valorUnitarioHomologado`. Filtrar por `situacaoCompraItemResultadoId` seria
+    o sinal canônico do PNCP, mas NÃO temos a semântica verificada desses ids
+    (1, 2, ...), então é refinamento FUTURO que exige mapear/validar os ids do
+    PNCP antes — sem mapa verificado, não usamos (princípio nº 1).
+    O `coletar_resultados` só persiste FATO DE MERCADO quando há
+    `valor_homologado_unit` (item homologado sem preço unitário não é fato)."""
     estimado = item_row["valor_unit_estimado"]
     base = {
         "numero": item_row["numero"],
@@ -236,16 +245,27 @@ def _ncm_do_item(con: sqlite3.Connection, pregao_id: int, numero: int):
 
 def coletar_resultados(con: sqlite3.Connection, pregao_ids=None,
                        cliente=None) -> dict:
-    """ETL de inteligência de mercado: persiste itens HOMOLOGADOS em
+    """ETL de inteligência de mercado: persiste FATOS DE MERCADO em
     resultados_itens (denormalizado, upsert idempotente por pregao+item).
 
+    FATO DE MERCADO = item homologado (inferido por ordemClassificacaoSrp==1 +
+    valor homologado presente — ver `_linha_item`) E COM `valor_homologado_unit`
+    não nulo. Item homologado sem preço unitário homologado NÃO é fato de
+    mercado → não grava (não há "por quanto venceu"). Filtrar por
+    `situacaoCompraItemResultadoId` é refinamento FUTURO (exige mapeamento
+    verificado dos ids do PNCP, hoje inexistente — princípio nº 1).
+
     - `pregao_ids` None → varre TODOS os pregões (cap defensivo _CAP_PREGOES,
-      logando se truncar). Pregões sem resultado simplesmente não gravam nada.
+      logando se truncar). Pregões sem fato simplesmente não gravam nada.
     - Para cada pregão: lê a linha (orgao/uf/cnpj/ano/seq), chama
-      `resultados_do_pregao`; se homologado, faz UPSERT de cada item
-      homologado=True com os campos do item + denormalização + ncm/unidade de
-      itens_pregao + coletado_em=datetime('now').
-    - Robustez: falha de UM pregão é logada e NÃO derruba o lote.
+      `resultados_do_pregao`; faz UPSERT de cada item homologado COM preço +
+      denormalização + ncm/unidade de itens_pregao + coletado_em=datetime('now').
+    - RECONCILIAÇÃO: a cada coleta, na MESMA transação do pregão e ANTES do
+      commit, apaga de resultados_itens as linhas daquele pregão cujo
+      numero_item NÃO veio na coleta atual como fato válido (resultado
+      revogado/cancelado/sem preço some). Coleta sem nenhum fato → apaga TODAS
+      as linhas do pregão. DELETE+UPSERT são atômicos por pregão.
+    - Robustez: falha de UM pregão é logada, faz rollback e NÃO derruba o lote.
 
     LENTO: bate no PNCP item a item por pregão — é manual/sob demanda.
     Retorna {pregoes_processados, pregoes_homologados, itens_gravados}.
@@ -283,12 +303,30 @@ def coletar_resultados(con: sqlite3.Connection, pregao_ids=None,
                 continue
             pregoes_processados += 1
             out = resultados_do_pregao(con, pid, cliente)
-            if not out.get("homologado"):
+            # FATO DE MERCADO: homologado E com preço unitário homologado.
+            fatos = [
+                d for d in out["itens"]
+                if d.get("homologado") and d.get("valor_homologado_unit") is not None
+            ]
+            numeros_fato = [d["numero"] for d in fatos]
+            # RECONCILIAÇÃO atômica (antes do commit deste pregão): apaga as
+            # linhas órfãs — itens que não vieram como fato válido nesta coleta.
+            if numeros_fato:
+                marks = ",".join("?" for _ in numeros_fato)
+                con.execute(
+                    f"DELETE FROM resultados_itens WHERE pregao_id=?"
+                    f" AND numero_item NOT IN ({marks})",
+                    (pid, *numeros_fato),
+                )
+            else:
+                # nenhum fato nesta coleta → resultado some por completo.
+                con.execute(
+                    "DELETE FROM resultados_itens WHERE pregao_id=?", (pid,)
+                )
+                con.commit()
                 continue
             pregoes_homologados += 1
-            for d in out["itens"]:
-                if not d.get("homologado"):
-                    continue
+            for d in fatos:
                 ncm, unidade = _ncm_do_item(con, pid, d["numero"])
                 con.execute(
                     """

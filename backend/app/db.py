@@ -322,8 +322,12 @@ MIGRACOES = [
     # para SOBREVIVER mesmo se o pregão for descartado/removido — é um registro
     # histórico do MERCADO (quem venceu, por quanto, com qual deságio real), não
     # um cache derivável da linha do pregão. Fonte: services/resultados.py
-    # (resultados_do_pregao → cliente.resultados_item, §4). Só itens com
-    # homologado=True entram (princípio nº 1: item sem resultado não vira linha).
+    # (resultados_do_pregao → cliente.resultados_item, §4). Entram só FATOS DE
+    # MERCADO: item homologado (inferido por ordemClassificacaoSrp==1 + valor
+    # homologado presente) E COM valor_homologado_unit não nulo — item sem
+    # preço homologado não vira linha (princípio nº 1). A tabela é RECONCILIADA
+    # a cada coleta: linhas de itens que não vieram mais como fato (revogado/
+    # cancelado/sem preço) são apagadas na mesma transação do pregão.
     # ncm: resolvido de itens_pregao(pregao_id, numero) na coleta; NULL se ausente
     # (NUNCA inventado). UNIQUE(pregao_id, numero_item) → upsert idempotente.
     # Índices em vencedor_cnpj (quem concorre) e ncm (que produto/mercado) para

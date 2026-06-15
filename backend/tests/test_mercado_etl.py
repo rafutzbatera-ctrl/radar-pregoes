@@ -128,6 +128,131 @@ def test_coleta_todos_quando_pregao_ids_none(con, cliente_fake):
     assert out["itens_gravados"] == 1
 
 
+class _ClienteResultadoFixo:
+    """Cliente fake que devolve uma lista de resultados FIXA para o item 1
+    (e [] para os demais). Permite testar item homologado SEM preço."""
+
+    def __init__(self, resultado_item1):
+        self._r = resultado_item1
+
+    def resultados_item(self, cnpj, ano, seq, numero_item, usar_cache=True):
+        return self._r if int(numero_item) == 1 else []
+
+
+class _ClienteMutavel:
+    """Cliente fake cuja resposta para o item 1 MUDA entre coletas (lista de
+    respostas consumida em ordem). Para testar reconciliação."""
+
+    def __init__(self, respostas_item1):
+        self._respostas = list(respostas_item1)
+        self._i = 0
+
+    def resultados_item(self, cnpj, ano, seq, numero_item, usar_cache=True):
+        if int(numero_item) != 1:
+            return []
+        idx = min(self._i, len(self._respostas) - 1)
+        return self._respostas[idx]
+
+    def avancar(self):
+        self._i += 1
+
+
+def test_item_homologado_sem_valor_unit_nao_grava(con):
+    """Item com vencedor (ordem 1) mas SEM valorUnitarioHomologado NÃO é fato
+    de mercado → não grava (não há 'por quanto venceu')."""
+    pid = _criar_pregao(con, numero_controle="NC-MKT-SEMVAL")
+    _inserir_itens(con, pid, [(1, "Hom sem preço", 7, "UN", 900.0, 6300.0, 0, "85183000")])
+    cliente = _ClienteResultadoFixo([{
+        "numeroItem": 1,
+        "niFornecedor": "34318729000122",
+        "nomeRazaoSocialFornecedor": "Sem Preço LTDA",
+        "porteFornecedorId": 3,
+        "ordemClassificacaoSrp": 1,
+        "dataCancelamento": None,
+        "valorUnitarioHomologado": None,  # <- sem preço homologado
+        "quantidadeHomologada": 7.0,
+        "valorTotalHomologado": None,
+        "dataResultado": "2026-05-21",
+    }])
+    out = resultados.coletar_resultados(con, pregao_ids=[pid], cliente=cliente)
+    assert out["pregoes_homologados"] == 0
+    assert out["itens_gravados"] == 0
+    total = con.execute(
+        "SELECT COUNT(*) c FROM resultados_itens WHERE pregao_id=?", (pid,)
+    ).fetchone()["c"]
+    assert total == 0
+
+
+def test_reconciliacao_apaga_linha_obsoleta(con):
+    """1ª coleta grava o item 1; 2ª coleta devolve o MESMO pregão sem o item 1
+    como fato (lista vazia = resultado revogado) → a linha SOME."""
+    pid = _criar_pregao(con, numero_controle="NC-MKT-RECON")
+    _inserir_itens(con, pid, [(1, "Hom", 7, "UN", 900.0, 6300.0, 0, "85183000")])
+    venc = {
+        "numeroItem": 1,
+        "niFornecedor": "34318729000122",
+        "nomeRazaoSocialFornecedor": "MEDCOM",
+        "porteFornecedorId": 3,
+        "ordemClassificacaoSrp": 1,
+        "dataCancelamento": None,
+        "valorUnitarioHomologado": 630.0,
+        "quantidadeHomologada": 7.0,
+        "valorTotalHomologado": 4410.0,
+        "dataResultado": "2026-05-21",
+    }
+    cliente = _ClienteMutavel([[venc], []])  # 1ª: homologado; 2ª: nada
+
+    resultados.coletar_resultados(con, pregao_ids=[pid], cliente=cliente)
+    assert con.execute(
+        "SELECT COUNT(*) c FROM resultados_itens WHERE pregao_id=?", (pid,)
+    ).fetchone()["c"] == 1
+
+    cliente.avancar()
+    out2 = resultados.coletar_resultados(con, pregao_ids=[pid], cliente=cliente)
+    assert out2["pregoes_homologados"] == 0
+    assert con.execute(
+        "SELECT COUNT(*) c FROM resultados_itens WHERE pregao_id=?", (pid,)
+    ).fetchone()["c"] == 0  # linha obsoleta foi apagada
+
+
+def test_reconciliacao_apaga_item_removido_mantendo_os_demais(con):
+    """1ª coleta grava itens 1 e 2; 2ª coleta só traz o item 1 como fato → a
+    linha do item 2 some, a do item 1 fica."""
+    pid = _criar_pregao(con, numero_controle="NC-MKT-RECON2")
+    _inserir_itens(con, pid, [
+        (1, "Item 1", 7, "UN", 900.0, 6300.0, 0, "85183000"),
+        (2, "Item 2", 3, "UN", 500.0, 1500.0, 0, None),
+    ])
+    # 1ª coleta: insere item 2 manualmente como linha pré-existente; cliente
+    # devolve fato só para item 1 (item 2 = []). Grava item 1; reconcilia
+    # apagando qualquer linha de outro numero — então pré-insiro item 2 antes.
+    con.execute(
+        "INSERT INTO resultados_itens(pregao_id, numero_item, descricao,"
+        " valor_homologado_unit, vencedor_cnpj, coletado_em)"
+        " VALUES (?,?,?,?,?,datetime('now'))",
+        (pid, 2, "Item 2 antigo", 400.0, "99999999000199"),
+    )
+    con.commit()
+    cliente = _ClienteFakeItem1()
+    out = resultados.coletar_resultados(con, pregao_ids=[pid], cliente=cliente)
+    assert out["itens_gravados"] == 1
+    nums = [r["numero_item"] for r in con.execute(
+        "SELECT numero_item FROM resultados_itens WHERE pregao_id=? ORDER BY numero_item",
+        (pid,),
+    ).fetchall()]
+    assert nums == [1]  # item 2 (obsoleto) apagado, item 1 mantido
+
+
+class _ClienteFakeItem1:
+    """Igual ao cliente_fake do conftest: item 1 = fixture MEDCOM, resto []."""
+
+    def resultados_item(self, cnpj, ano, seq, numero_item, usar_cache=True):
+        if int(numero_item) == 1:
+            from tests.conftest import carregar_fixture
+            return carregar_fixture("resultados_item.json")
+        return []
+
+
 def test_endpoint_coletar_200(client, con, cliente_fake, monkeypatch):
     _patch_pncp(monkeypatch, cliente_fake)
     pid = _criar_pregao(con, numero_controle="NC-MKT-EP")
