@@ -8,6 +8,12 @@ def test_raiz_tem_aviso(client):
     assert "PNCP" in r.json()["aviso"]
 
 
+def test_health_ok(client):
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok", "db": "ok"}
+
+
 def test_crud_buscas(client):
     r = client.post("/buscas", json={"nome": "AV SP", "termos": "áudio, vídeo",
                                      "ufs": "SP"})

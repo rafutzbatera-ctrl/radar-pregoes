@@ -228,6 +228,29 @@ MIGRACOES = [
         modelo TEXT
     );
     """,
+    # v10 — índices em colunas de FK/filtro quentes (queries reais confirmadas
+    # por grep). Todos com IF NOT EXISTS (idempotente; o índice do RAG já foi
+    # criado nominalmente na v9). Por que cada um:
+    #   itens_pregao(pregao_id): "WHERE pregao_id=?" no resumo do pregão
+    #     (routers/pregoes.py), fiscal (services/fiscal.py), matching.
+    #   habilitacao(pregao_id): "WHERE pregao_id=?" no resumo, no detalhe da
+    #     habilitação (routers/pregoes.py, routers/habilitacao via service) e no
+    #     DELETE de re-extração (services/habilitacao.py).
+    #   pregoes(salvo): "WHERE salvo=?" na listagem (routers/pregoes.py) e
+    #     "WHERE salvo=1" no funil de pipeline (routers/pipeline.py).
+    #   pregoes(status_pipeline): lido no funil e no gatilho de entrada
+    #     "WHERE id=? AND status_pipeline IS NULL" (routers/pregoes.py).
+    #   pregoes(busca_id): "WHERE busca_id=?" na contagem de novos por busca
+    #     (routers/buscas.py) e na descoberta (services/descoberta.py).
+    # arquivos(pregao_id) NÃO entra: já coberto pelo índice do UNIQUE(pregao_id,
+    # url), cuja coluna líder é pregao_id (índice extra seria redundante).
+    """
+    CREATE INDEX IF NOT EXISTS idx_itens_pregao_pregao ON itens_pregao(pregao_id);
+    CREATE INDEX IF NOT EXISTS idx_habilitacao_pregao ON habilitacao(pregao_id);
+    CREATE INDEX IF NOT EXISTS idx_pregoes_salvo ON pregoes(salvo);
+    CREATE INDEX IF NOT EXISTS idx_pregoes_status_pipeline ON pregoes(status_pipeline);
+    CREATE INDEX IF NOT EXISTS idx_pregoes_busca_id ON pregoes(busca_id);
+    """,
 ]
 
 
@@ -239,6 +262,12 @@ def conectar(db_path: Path | str | None = None) -> sqlite3.Connection:
     con = sqlite3.connect(caminho, check_same_thread=False)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
+    # WAL + synchronous NORMAL: combinação padrão segura que melhora a
+    # concorrência leitura×escrita (o app tem scheduler 2×/dia somado a
+    # requests). Só vale para db de ARQUIVO; em :memory: o WAL é ignorado
+    # em silêncio pelo SQLite, então não há regressão para esse caso.
+    con.execute("PRAGMA journal_mode = WAL")
+    con.execute("PRAGMA synchronous = NORMAL")
     return con
 
 

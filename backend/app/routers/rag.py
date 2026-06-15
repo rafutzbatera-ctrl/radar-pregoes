@@ -61,7 +61,12 @@ def perguntar(pregao_id: int, corpo: PerguntaRAG,
     """
     if con.execute("SELECT 1 FROM pregoes WHERE id=?", (pregao_id,)).fetchone() is None:
         raise HTTPException(404, "Pregão não encontrado")
-    if not corpo.pergunta or not corpo.pergunta.strip():
+    pergunta = corpo.pergunta.strip() if corpo.pergunta else ""
+    if not pergunta:
         raise HTTPException(422, "pergunta vazia")
-    return rag.perguntar(con, pregao_id, corpo.pergunta, k=corpo.k,
+    # cap de tamanho: a pergunta é texto livre do usuário; trava prompt
+    # patológico na síntese (Fase 2). Mede o texto já normalizado (strip).
+    if len(pergunta) > 2000:
+        raise HTTPException(422, "pergunta muito longa (máx. 2000 caracteres)")
+    return rag.perguntar(con, pregao_id, pergunta, k=corpo.k,
                          sintetizar=corpo.sintetizar)

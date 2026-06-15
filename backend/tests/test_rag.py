@@ -286,6 +286,26 @@ def test_endpoint_pergunta_vazia_422(client, con):
     assert r.status_code == 422
 
 
+def test_endpoint_pergunta_muito_longa_422(client, con):
+    pid = _criar_pregao(con)
+    r = client.post(f"/pregoes/{pid}/rag/perguntar",
+                    json={"pergunta": "a" * 2001})
+    assert r.status_code == 422
+    assert "2000" in r.json()["detail"]
+
+
+def test_endpoint_pergunta_no_limite_nao_estoura(client, con):
+    # pergunta de 2000 chars (no teto) passa pelo cap; sem indexar → 200 com
+    # disponivel=False. perguntar() retorna ANTES de embedar quando não há
+    # chunks, então o e5 real nunca é tocado (validação de entrada, não de
+    # recuperação).
+    pid = _criar_pregao(con)
+    r = client.post(f"/pregoes/{pid}/rag/perguntar",
+                    json={"pergunta": "a" * 2000})
+    assert r.status_code == 200
+    assert r.json()["disponivel"] is False
+
+
 # --------- Fase 2: síntese opt-in em perguntar (sintetizador FAKE) ---------
 
 def test_perguntar_sem_sintetizar_e_fase1_pura(con):
