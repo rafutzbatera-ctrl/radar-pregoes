@@ -17,6 +17,7 @@ identificável seguem intactos.
 import hashlib
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -35,10 +36,12 @@ BASE_CONSULTA = "https://pncp.gov.br/api/consulta/v1"
 # intervalos por pista (segundos entre requisições da MESMA pista)
 _INTERVALO_PESADA = 1.0       # itens/downloads (loops) — como sempre
 _INTERVALO_INTERATIVA = 0.3   # buscar/consulta/detalhe/arquivos (ação avulsa)
-_MIN_INTERVALO = _INTERVALO_PESADA  # compat: pista pesada é o default
 # a busca do PNCP costuma derrubar as primeiras conexões (WAF); o backoff resolve
 _TENTATIVAS = 5
 _CACHE_TTL = 6 * 3600  # 6 h
+# teto de bytes do binário do edital: PDF gigante = DoS local (memória/disco).
+# Editais reais têm centenas de KB a poucos MB (CLAUDE.md §4.3); 60 MB é folga.
+MAX_PDF_BYTES = 60 * 1024 * 1024
 
 
 def _validar_identidade(cnpj, ano, seq) -> tuple[str, int, int]:
@@ -107,11 +110,41 @@ class ClientePNCP:
         bruto = url + "?" + json.dumps(params, sort_keys=True, ensure_ascii=False)
         return self.cache_dir / (hashlib.sha256(bruto.encode()).hexdigest() + ".json")
 
+    def _ler_cache(self, arq: Path):
+        """Lê o cache JSON de forma TOLERANTE: arquivo corrompido/meio-escrito
+        nunca derruba a request — é tratado como cache miss (None) e o arquivo
+        ruim é removido para não bricar a query pelas próximas 6h (TTL)."""
+        try:
+            return json.loads(arq.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, ValueError) as exc:
+            log.warning("Cache PNCP corrompido (%s): tratando como miss", exc)
+            try:
+                arq.unlink()
+            except OSError:
+                pass
+            return None
+
+    def _escrever_cache(self, arq: Path, dados) -> None:
+        """Escrita ATÔMICA: grava num tmp no MESMO diretório e os.replace —
+        um crash no meio nunca deixa JSON parcial no caminho final."""
+        tmp = arq.with_suffix(arq.suffix + f".tmp{os.getpid()}")
+        try:
+            tmp.write_text(json.dumps(dados, ensure_ascii=False), encoding="utf-8")
+            os.replace(tmp, arq)
+        except OSError as exc:
+            log.warning("Falha ao gravar cache PNCP (%s); seguindo sem cache", exc)
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+
     def _get_json(self, url: str, params: dict, usar_cache: bool = True,
                   pista: str = "pesada"):
         arq = self._chave_cache(url, params)
         if usar_cache and arq.exists() and time.time() - arq.stat().st_mtime < self.cache_ttl:
-            return json.loads(arq.read_text(encoding="utf-8"))
+            cached = self._ler_cache(arq)
+            if cached is not None:
+                return cached
 
         ultima_exc: Exception | None = None
         for tentativa in range(_TENTATIVAS):
@@ -127,7 +160,7 @@ class ClientePNCP:
                 else:
                     resp.raise_for_status()
                     dados = resp.json()
-                arq.write_text(json.dumps(dados, ensure_ascii=False), encoding="utf-8")
+                self._escrever_cache(arq, dados)
                 return dados
             except (httpx.HTTPStatusError, httpx.TransportError) as exc:
                 ultima_exc = exc
@@ -139,8 +172,10 @@ class ClientePNCP:
         # dado oficial — só mais velho; servir é melhor que tela vazia. Só após
         # esgotar TODAS as tentativas, e nunca quando usar_cache=False.
         if usar_cache and arq.exists():
-            log.warning("PNCP %s segue fora; servindo cache vencido", url)
-            return json.loads(arq.read_text(encoding="utf-8"))
+            vencido = self._ler_cache(arq)
+            if vencido is not None:
+                log.warning("PNCP %s segue fora; servindo cache vencido", url)
+                return vencido
         raise RuntimeError(f"PNCP indisponível após {_TENTATIVAS} tentativas: {ultima_exc}")
 
     # ---------- endpoints (CLAUDE.md §4) ----------
@@ -319,14 +354,47 @@ class ClientePNCP:
         for tentativa in range(_TENTATIVAS):
             self._esperar_vez("pesada")
             try:
-                resp = self._http.get(url)
-                resp.raise_for_status()
-                nome = _nome_do_content_disposition(
-                    resp.headers.get("content-disposition", "")
-                ) or "arquivo.pdf"
-                destino = destino_dir / nome
-                destino.write_bytes(resp.content)
-                return destino
+                # streaming + teto de bytes: PDF gigante não vira DoS local.
+                with self._http.stream("GET", url) as resp:
+                    resp.raise_for_status()
+                    # se o servidor declara tamanho acima do teto, recusa antes
+                    # de baixar (não consome banda/disco à toa).
+                    cl = resp.headers.get("content-length")
+                    if cl is not None:
+                        try:
+                            if int(cl) > MAX_PDF_BYTES:
+                                raise ValueError(
+                                    f"arquivo {url} excede o teto "
+                                    f"({cl} > {MAX_PDF_BYTES} bytes)"
+                                )
+                        except (TypeError, ValueError) as exc:
+                            # ValueError nosso (acima do teto) propaga; cl não-int
+                            # é só ignorado (segue para o controle por streaming).
+                            if "excede o teto" in str(exc):
+                                raise
+                    nome = _nome_do_content_disposition(
+                        resp.headers.get("content-disposition", "")
+                    ) or "arquivo.pdf"
+                    destino = destino_dir / nome
+                    total = 0
+                    try:
+                        with open(destino, "wb") as fh:
+                            for bloco in resp.iter_bytes():
+                                total += len(bloco)
+                                if total > MAX_PDF_BYTES:
+                                    raise ValueError(
+                                        f"arquivo {url} excede o teto de "
+                                        f"{MAX_PDF_BYTES} bytes (download abortado)"
+                                    )
+                                fh.write(bloco)
+                    except ValueError:
+                        # não deixa arquivo truncado no disco
+                        try:
+                            destino.unlink()
+                        except OSError:
+                            pass
+                        raise
+                    return destino
             except (httpx.HTTPStatusError, httpx.TransportError) as exc:
                 ultima_exc = exc
                 time.sleep(2**tentativa)

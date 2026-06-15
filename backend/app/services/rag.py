@@ -24,6 +24,7 @@ Reusa: matching.embed_padrao (e5, vetores normalizados), extracao.extrair_pagina
 sincronizacao._baixar_arquivos, pncp.cliente().
 """
 import logging
+import math
 import re
 import sqlite3
 
@@ -398,16 +399,30 @@ def ingerir(con: sqlite3.Connection, pregao_id: int,
         return {"n_chunks": 0, "n_paginas": 0, "motivo": "sem_arquivos"}
 
     fontes: list[tuple[int | None, list[str]]] = []
+    n_falhas = 0
     for caminho in pdfs:
         arq = con.execute(
             "SELECT id FROM arquivos WHERE pregao_id=? AND caminho_local=?",
             (pregao_id, caminho),
         ).fetchone()
         arquivo_id = arq["id"] if arq else None
-        paginas = extracao.extrair_paginas(caminho)
+        # melhor-esforço POR ARQUIVO: um PDF corrompido/ilegível (extrair_paginas
+        # lança) não pode abortar a indexação do pregão inteiro — pula, loga e
+        # segue. Os demais PDFs indexam normalmente.
+        try:
+            paginas = extracao.extrair_paginas(caminho)
+        except Exception as exc:  # noqa: BLE001 — isolamento por arquivo
+            n_falhas += 1
+            log.warning("Pregão %s: falha ao extrair %r (%s); pulando arquivo",
+                        pregao_id, caminho, exc)
+            continue
         fontes.append((arquivo_id, paginas))
 
-    return indexar_chunks(con, pregao_id, fontes, embed=embed)
+    resultado = indexar_chunks(con, pregao_id, fontes, embed=embed)
+    if n_falhas:
+        # reporta sem quebrar contrato (campo extra, opcional p/ o chamador)
+        resultado["arquivos_falhos"] = n_falhas
+    return resultado
 
 
 def _carregar_matriz(con: sqlite3.Connection, pregao_id: int):
@@ -484,6 +499,11 @@ def perguntar(con: sqlite3.Connection, pregao_id: int, pergunta: str,
     if matriz.shape[1] != q.shape[0]:
         return {"disponivel": False, "motivo": "reindexar", "trechos": []}
     scores = matriz @ q  # cosseno (vetores e5 já normalizados)
+    # Robustez: um vetor degenerado (NaN/inf gravado) produziria score NaN; como
+    # `nan >= threshold` é False mas `nan` desordena o argsort e pode "vazar" no
+    # ranking léxico/topo, neutralizamos NaN/inf para -inf ANTES de ordenar e do
+    # gate — chunk com score inválido é efetivamente descartado.
+    scores = np.nan_to_num(scores, nan=-np.inf, posinf=-np.inf, neginf=-np.inf)
 
     # mapeia chunk_id (rag_chunks.id) → posição na matriz/rows, p/ casar o
     # ranking léxico (que vem por chunk_id) com os índices da matriz.
@@ -523,7 +543,12 @@ def perguntar(con: sqlite3.Connection, pregao_id: int, pergunta: str,
     # vier do ranking léxico (match BM25 = termo exato da pergunta no chunk). A
     # pergunta fora do tema não casa o FTS nem tem cosseno alto → nao_encontrado.
     def _tem_sinal(idx: int) -> bool:
-        return float(scores[idx]) >= threshold or idx in rank_lexico
+        s = float(scores[idx])
+        # score inválido (NaN→-inf) descarta o chunk mesmo que tenha vindo do FTS:
+        # sem cosseno confiável não há como afirmar relevância (princípio 1).
+        if not math.isfinite(s):
+            return False
+        return s >= threshold or idx in rank_lexico
 
     if not topo or not any(_tem_sinal(idx) for _rrf, idx in topo):
         return {"disponivel": False, "motivo": "nao_encontrado", "trechos": []}

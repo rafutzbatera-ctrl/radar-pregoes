@@ -162,22 +162,34 @@ def _baixar_arquivos(con: sqlite3.Connection, pregao: sqlite3.Row,
     pdfs: list[Path] = []
     for arq in arquivos:
         url = arq.get("url")
-        existente = con.execute(
-            "SELECT caminho_local FROM arquivos WHERE pregao_id=? AND url=?",
-            (pregao["id"], url),
-        ).fetchone()
-        if existente and existente["caminho_local"] and Path(existente["caminho_local"]).exists():
-            caminho = Path(existente["caminho_local"])
-        else:
-            caminho = cliente.baixar_arquivo(url, destino_dir)
-            con.execute(
-                """INSERT INTO arquivos (pregao_id, titulo, tipo, url, caminho_local, baixado_em)
-                   VALUES (?,?,?,?,?,datetime('now'))
-                   ON CONFLICT(pregao_id, url) DO UPDATE SET
-                     caminho_local=excluded.caminho_local, baixado_em=excluded.baixado_em""",
-                (pregao["id"], arq.get("titulo"), arq.get("tipoDocumentoNome"),
-                 url, str(caminho)),
-            )
+        # arquivo sem url (PNCP às vezes devolve url null/vazia): pula e segue —
+        # baixar_arquivo(None,...) abortaria o LOTE inteiro (some o edital).
+        if not url:
+            log.warning("Pregão %s: arquivo sem url ignorado (%r)",
+                        pregao["id"], arq.get("titulo"))
+            continue
+        # melhor-esforço POR ARQUIVO: falha de UM download não derruba os demais.
+        try:
+            existente = con.execute(
+                "SELECT caminho_local FROM arquivos WHERE pregao_id=? AND url=?",
+                (pregao["id"], url),
+            ).fetchone()
+            if existente and existente["caminho_local"] and Path(existente["caminho_local"]).exists():
+                caminho = Path(existente["caminho_local"])
+            else:
+                caminho = cliente.baixar_arquivo(url, destino_dir)
+                con.execute(
+                    """INSERT INTO arquivos (pregao_id, titulo, tipo, url, caminho_local, baixado_em)
+                       VALUES (?,?,?,?,?,datetime('now'))
+                       ON CONFLICT(pregao_id, url) DO UPDATE SET
+                         caminho_local=excluded.caminho_local, baixado_em=excluded.baixado_em""",
+                    (pregao["id"], arq.get("titulo"), arq.get("tipoDocumentoNome"),
+                     url, str(caminho)),
+                )
+        except Exception as exc:  # noqa: BLE001 — isolamento por arquivo
+            log.warning("Pregão %s: falha ao baixar arquivo %r (%s); seguindo",
+                        pregao["id"], url, exc)
+            continue
         tipo = (arq.get("tipoDocumentoNome") or "").lower()
         if caminho.suffix.lower() == ".pdf" and ("edital" in tipo or "termo" in tipo):
             pdfs.append(caminho)

@@ -1,7 +1,6 @@
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 
 from ..deps import get_db
 from ..services import analise
@@ -29,11 +28,6 @@ _FAIXAS_VEREDITO = {
     "veredito_vale_lucro_min": (0.0, None),
     "veredito_nao_vale_lucro_max": (0.0, None),
 }
-
-
-class ConfigPatch(BaseModel):
-    regime_tributario: str | None = None
-    uf_origem: str | None = None
 
 
 @router.get("")
