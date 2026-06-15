@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Radar de Pregões">
+  <!-- fundo verde-noite (chassi) — preenche todo o quadro p/ maskable -->
+  <rect width="512" height="512" fill="#0A0F0D"/>
+  <!-- artwork no safe zone central (~80%) -->
+  <g fill="none" stroke="#2BD97F" stroke-linecap="round">
+    <!-- aneis concentricos da varredura -->
+    <circle cx="256" cy="256" r="150" stroke-opacity="0.30" stroke-width="6"/>
+    <circle cx="256" cy="256" r="100" stroke-opacity="0.45" stroke-width="6"/>
+    <circle cx="256" cy="256" r="50" stroke-opacity="0.60" stroke-width="6"/>
+    <!-- cruz de eixos -->
+    <line x1="256" y1="106" x2="256" y2="406" stroke-opacity="0.22" stroke-width="4"/>
+    <line x1="106" y1="256" x2="406" y2="256" stroke-opacity="0.22" stroke-width="4"/>
+  </g>
+  <!-- setor de varredura (gradiente fosforo) -->
+  <defs>
+    <radialGradient id="sweep" cx="256" cy="256" r="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2BD97F" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#2BD97F" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <path d="M256 256 L406 256 A150 150 0 0 0 332 126 Z" fill="url(#sweep)"/>
+  <!-- traco do feixe -->
+  <line x1="256" y1="256" x2="406" y2="256" stroke="#2BD97F" stroke-width="8" stroke-linecap="round"/>
+  <!-- blip / alvo detectado -->
+  <circle cx="332" cy="200" r="12" fill="#2BD97F"/>
+  <!-- centro -->
+  <circle cx="256" cy="256" r="10" fill="#2BD97F"/>
+</svg>
