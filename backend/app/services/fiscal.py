@@ -11,7 +11,7 @@ def config_fiscal(con: sqlite3.Connection) -> dict:
     return {ln["chave"]: ln["valor"] for ln in linhas}
 
 
-def fiscal_do_item(item: sqlite3.Row, produto: sqlite3.Row | None,
+def fiscal_do_item(item: sqlite3.Row, produto: sqlite3.Row | dict | None,
                    uf_pregao: str | None, cfg: dict) -> dict:
     """NCM (PNCP→catálogo→vazio), CFOP por regra local, CST/CSOSN por regime."""
     # NCM: dado oficial do PNCP tem precedência; senão o do catálogo
@@ -54,8 +54,18 @@ def fiscal_do_item(item: sqlite3.Row, produto: sqlite3.Row | None,
 def fiscal_do_pregao(con: sqlite3.Connection, pregao_id: int) -> dict:
     pregao = con.execute("SELECT uf FROM pregoes WHERE id=?", (pregao_id,)).fetchone()
     cfg = config_fiscal(con)
+    # LEFT JOIN único (evita N+1: era 1 SELECT em catalogo_produtos por item com
+    # match). As colunas do produto saem com prefixo p_ para não colidir com as
+    # do item (ncm/unidade existem nos dois) — `fiscal_do_item` recebe um dict
+    # com as MESMAS chaves do produto (ncm, csosn, cst, unidade), montado só
+    # quando match_confirmado=1, idêntico ao SELECT-por-item anterior.
     itens = con.execute(
-        "SELECT * FROM itens_pregao WHERE pregao_id=? ORDER BY numero", (pregao_id,)
+        """SELECT i.*, p.ncm p_ncm, p.csosn p_csosn, p.cst p_cst,
+                  p.unidade p_unidade
+           FROM itens_pregao i
+           LEFT JOIN catalogo_produtos p ON p.id = i.produto_id
+           WHERE i.pregao_id=? ORDER BY i.numero""",
+        (pregao_id,),
     ).fetchall()
     resultado = []
     prontos = 0
@@ -63,9 +73,10 @@ def fiscal_do_pregao(con: sqlite3.Connection, pregao_id: int) -> dict:
     for it in itens:
         produto = None
         if it["produto_id"] and it["match_confirmado"]:
-            produto = con.execute(
-                "SELECT * FROM catalogo_produtos WHERE id=?", (it["produto_id"],)
-            ).fetchone()
+            produto = {
+                "ncm": it["p_ncm"], "csosn": it["p_csosn"],
+                "cst": it["p_cst"], "unidade": it["p_unidade"],
+            }
         f = fiscal_do_item(it, produto, pregao["uf"] if pregao else None, cfg)
         f["item_id"] = it["id"]
         f["numero"] = it["numero"]
