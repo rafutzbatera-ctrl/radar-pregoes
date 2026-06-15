@@ -2470,6 +2470,110 @@ a.arq-link:hover { border-color: var(--silk); box-shadow: 0 4px 12px -6px rgba(0
   max-width: 70ch;
 }
 
+/* ---- ABA DECLARAÇÕES ---- */
+.decl-wrap { display: block; }
+.decl-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--linha);
+  border-radius: 12px;
+  background: var(--painel);
+  max-width: 80ch;
+}
+.decl-aviso svg { flex: 0 0 auto; margin-top: 1px; }
+.decl-lista { display: flex; flex-direction: column; gap: 16px; }
+.decl-card {
+  padding: 16px 18px;
+  border-radius: 14px;
+}
+.decl-card-cab { margin-bottom: 12px; }
+.decl-card-tit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--tinta);
+  font-size: 14.5px;
+}
+.decl-card-tit svg { flex: 0 0 auto; }
+.decl-fundamento {
+  margin-top: 5px;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.decl-chip {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border: 1px solid;
+  border-radius: 999px;
+}
+.decl-incompleto {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px solid;
+  border-radius: 10px;
+  background: var(--painel);
+}
+.decl-incompleto svg { vertical-align: -2px; margin-right: 4px; }
+.decl-link-empresa {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.decl-link-empresa:hover { border-color: var(--sinal); }
+.decl-texto {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--tinta);
+  background: var(--painel);
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 0;
+  max-height: 360px;
+  overflow: auto;
+}
+.decl-card-rodape {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+.decl-copiar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--painel);
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.decl-copiar:disabled { opacity: 0.5; cursor: default; }
+.decl-copiar:not(:disabled):hover { border-color: var(--sinal); }
+
 /* ---- Fase 2: toggle "Resumir com IA local" (opt-in) ---- */
 .rag-toggle {
   display: flex;

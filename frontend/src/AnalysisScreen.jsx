@@ -22,7 +22,7 @@ export const STATUS_TXT = {
 export default function AnalysisScreen({
   pregao, estado, setCusto, confirmarCusto, limparCusto, definirMargemAlvo,
   setLance, confirmarLance, limparLance, definirDesagio,
-  setMatch, setHabil, voltar, scrollRef,
+  setMatch, setHabil, voltar, irPara, scrollRef,
   meterVariant, config, setRegime, catalogo, catalogoPorCod,
   sincronizar, sincronizando, erroDetalhe, recarregarDetalhe,
   mudarPipeline, salvarPregao,
@@ -100,6 +100,7 @@ export default function AnalysisScreen({
     { id: "capag", rotulo: "CAPAG", contador: null, tipo: null },
     { id: "historico", rotulo: "Histórico", contador: null, tipo: null },
     { id: "perguntar", rotulo: "Perguntar ao edital", contador: null, tipo: null },
+    { id: "declaracoes", rotulo: "Declarações", contador: null, tipo: null },
   ];
 
   const linhaSilk = [
@@ -319,6 +320,9 @@ export default function AnalysisScreen({
             )}
             {aba === "perguntar" && (
               <PerguntarTab pregao={pregao} />
+            )}
+            {aba === "declaracoes" && (
+              <DeclaracoesTab pregao={pregao} irPara={irPara} />
             )}
           </motion.div>
         </React.Fragment>
@@ -1125,6 +1129,162 @@ function RagResumo({ sintese }) {
   return (
     <div className={"rag-resumo rag-resumo-neutro" + (erro ? " rag-resumo-erro" : "")}>
       <p className="rag-resumo-neutro-texto">{msg}</p>
+    </div>
+  );
+}
+
+/* ============ ABA DECLARAÇÕES — minutas geradas com dados da empresa ============
+   Honestidade (princípio 1 — nunca inventar): o texto_renderizado já vem com as
+   lacunas visíveis ("[RAZÃO SOCIAL — preencher]") quando faltam dados da empresa.
+   NUNCA escondemos a lacuna; quando completo===false mostramos um aviso claro com
+   atalho para a tela "Minha empresa". Carrega lazy: só chama
+   /pregoes/{id}/declaracoes quando a aba abre. O aviso jurídico (campo `aviso`) é
+   exibido uma única vez no topo. */
+
+// nomes crus dos campos faltando → rótulos legíveis
+const DECL_CAMPO_ROTULO = {
+  razao_social: "Razão social",
+  cnpj: "CNPJ",
+  endereco: "Endereço",
+  representante_nome: "Nome do representante",
+  representante_cpf: "CPF do representante",
+  representante_cargo: "Cargo do representante",
+};
+function rotuloCampo(c) {
+  return DECL_CAMPO_ROTULO[c] || String(c).replace(/_/g, " ");
+}
+
+function DeclaracoesTab({ pregao, irPara }) {
+  const [estado, setEstado] = React.useState({ carregando: true, dados: null, erro: null });
+
+  React.useEffect(() => {
+    let vivo = true;
+    setEstado({ carregando: true, dados: null, erro: null });
+    api.declaracoesPregao(pregao.id)
+      .then((d) => { if (vivo) setEstado({ carregando: false, dados: d, erro: null }); })
+      .catch((e) => { if (vivo) setEstado({ carregando: false, dados: null, erro: (e && e.message) || "erro" }); });
+    return () => { vivo = false; };
+  }, [pregao.id]);
+
+  if (estado.carregando) {
+    return (
+      <div className="decl-wrap" aria-busy="true">
+        <div className="card-pregao mod skel">
+          <span className="skel-bar w30"></span>
+          <span className="skel-bar w70"></span>
+          <span className="skel-bar w90"></span>
+        </div>
+      </div>
+    );
+  }
+
+  if (estado.erro) {
+    return (
+      <div className="decl-wrap">
+        <div className="estado-vazio mod">
+          <h3>Não foi possível carregar as declarações</h3>
+          <p>{estado.erro}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const d = estado.dados || {};
+  const declaracoes = d.declaracoes || [];
+
+  return (
+    <div className="decl-wrap">
+      <div className="tbl-titulo">
+        <span className="silk">Declarações — minutas com os dados da sua empresa (confira antes de assinar)</span>
+      </div>
+
+      {/* aviso jurídico fixo, uma vez no topo */}
+      {d.aviso && (
+        <div className="decl-aviso mod" role="note"
+          style={{ color: "var(--silk)", borderColor: "var(--linha)" }}>
+          {Ico.alerta} {d.aviso}
+        </div>
+      )}
+
+      {declaracoes.length === 0 ? (
+        <div className="capag-card mod capag-vazio">
+          <div className="capag-vazio-tit silk">Nenhuma declaração disponível</div>
+          <p className="capag-vazio-txt silk">
+            Não há minutas de declaração para este pregão.
+          </p>
+        </div>
+      ) : (
+        <div className="decl-lista">
+          {declaracoes.map((dec) => (
+            <DeclaracaoCard key={dec.id} dec={dec} irPara={irPara} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DeclaracaoCard({ dec, irPara }) {
+  const [copiado, setCopiado] = React.useState(false);
+  const copiar = () => {
+    const txt = dec.texto_renderizado || "";
+    if (!txt) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt)
+        .then(() => { setCopiado(true); setTimeout(() => setCopiado(false), 2000); })
+        .catch(() => {});
+    }
+  };
+  const faltando = dec.faltando || [];
+
+  return (
+    <div className="decl-card mod">
+      <div className="decl-card-cab">
+        <div className="decl-card-tit">
+          {Ico.doc}
+          <strong>{dec.titulo}</strong>
+          {dec.exigido_no_edital === true && (
+            <span className="decl-chip" style={{ color: "var(--pico)", borderColor: "var(--pico)" }}>
+              exigida no edital
+            </span>
+          )}
+        </div>
+        {dec.fundamento_legal && (
+          <div className="decl-fundamento silk">{dec.fundamento_legal}</div>
+        )}
+      </div>
+
+      {/* completo===false: aviso claro com atalho para Minha empresa.
+          NUNCA esconde as lacunas do texto (que segue renderizado abaixo). */}
+      {dec.completo === false && (
+        <div className="decl-incompleto" role="alert"
+          style={{ color: "var(--pico)", borderColor: "var(--pico)" }}>
+          <span>
+            {Ico.alerta} Preencha o cadastro da empresa para completar
+            {faltando.length > 0 && (
+              <> (faltam: {faltando.map(rotuloCampo).join(", ")})</>
+            )}.
+          </span>
+          {irPara && (
+            <button type="button" className="decl-link-empresa"
+              style={{ color: "var(--sinal)" }}
+              onClick={() => irPara("empresa")}>
+              {Ico.predio} Ir para Minha empresa
+            </button>
+          )}
+        </div>
+      )}
+
+      <pre className="decl-texto mono">{dec.texto_renderizado || "—"}</pre>
+
+      <div className="decl-card-rodape">
+        <button type="button" className="decl-copiar"
+          style={{ color: "var(--tinta)" }}
+          disabled={!dec.texto_renderizado}
+          onClick={copiar}>
+          {copiado ? Ico.check : Ico.doc} {copiado ? "Copiado" : "Copiar"}
+        </button>
+      </div>
     </div>
   );
 }

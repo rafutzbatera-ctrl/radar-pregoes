@@ -639,6 +639,7 @@ export default function App() {
           mudarPipeline={mudarPipeline}
           salvarPregao={salvarPregao}
           voltar={() => setTela({ nome: tela.origem && tela.origem !== "analise" ? tela.origem : "find" })}
+          irPara={(id) => setTela({ nome: id })}
           scrollRef={scrollRef}
           meterVariant="led"
         />
