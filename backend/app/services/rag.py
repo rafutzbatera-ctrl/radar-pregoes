@@ -318,6 +318,12 @@ def perguntar(con: sqlite3.Connection, pregao_id: int, pergunta: str,
         return {"disponivel": False, "motivo": "nao_indexado", "trechos": []}
 
     q = np.asarray(embed(["query: " + pergunta])[0], dtype=np.float32)
+    # Modelo de embedding trocado (ou upgrade da lib) sem reindexar: os vetores
+    # gravados têm a dimensão antiga e `matriz @ q` estouraria ValueError → 500
+    # cru. Devolve gracioso (padrão honesto: nao_indexado/nao_encontrado) pedindo
+    # reindexação, em vez de quebrar a tela.
+    if matriz.shape[1] != q.shape[0]:
+        return {"disponivel": False, "motivo": "reindexar", "trechos": []}
     scores = matriz @ q  # cosseno (vetores e5 já normalizados)
 
     ordem = np.argsort(scores)[::-1][:k]

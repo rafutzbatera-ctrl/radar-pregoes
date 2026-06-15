@@ -187,6 +187,24 @@ def test_perguntar_sem_indexar_nao_indexado(con):
     assert r["trechos"] == []
 
 
+def test_perguntar_dimensao_incompativel_pede_reindexar(con):
+    """Modelo trocado sem reindexar: vetores armazenados (dim N) ≠ embed atual
+    (dim M). Em vez de estourar 500 no matriz @ q, devolve gracioso
+    {disponivel: False, motivo: 'reindexar'} (padrão honesto do RAG)."""
+    pid = _criar_pregao(con)
+    # indexa com o embed de dim 4 (EmbedFake)
+    rag.indexar_chunks(con, pid, [(None, PAGINAS)], embed=EmbedFake())
+
+    # consulta com um embed que devolve vetor de OUTRA dimensão (dim 6)
+    def embed_outra_dim(textos):
+        return [[0.0, 0.0, 0.0, 0.0, 0.0, 1.0] for _ in textos]
+
+    r = rag.perguntar(con, pid, "qual o prazo de entrega?", embed=embed_outra_dim)
+    assert r["disponivel"] is False
+    assert r["motivo"] == "reindexar"
+    assert r["trechos"] == []
+
+
 def test_indexar_idempotente_substitui(con):
     pid = _criar_pregao(con)
     embed = EmbedFake()
