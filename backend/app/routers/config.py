@@ -18,6 +18,18 @@ CHAVES_VALIDAS = {
     "veredito_nao_vale_lucro_max",
 }
 
+# Faixas dos parâmetros do veredito (analise._regras faz float(valor); um valor
+# não-numérico/fora de faixa corromperia o estado GLOBAL e quebraria match/
+# edição-de-item/sincronização de TODOS os pregões). margens e cobertura são
+# frações 0–1; pisos/tetos de lucro são valores em R$ ≥ 0.
+_FAIXAS_VEREDITO = {
+    "veredito_vale_margem_min": (0.0, 1.0),
+    "veredito_vale_cobertura_min": (0.0, 1.0),
+    "veredito_nao_vale_margem_max": (0.0, 1.0),
+    "veredito_vale_lucro_min": (0.0, None),
+    "veredito_nao_vale_lucro_max": (0.0, None),
+}
+
 
 class ConfigPatch(BaseModel):
     regime_tributario: str | None = None
@@ -58,6 +70,15 @@ def atualizar(corpo: dict, con: sqlite3.Connection = Depends(get_db)):
             if not (0 <= dg <= 0.90):
                 raise HTTPException(422, "desagio_esperado deve estar entre 0 e 0.90")
             reanalisar = True
+        if chave in _FAIXAS_VEREDITO:
+            piso, teto = _FAIXAS_VEREDITO[chave]
+            try:
+                v = float(valor)
+            except (ValueError, TypeError):
+                raise HTTPException(422, f"{chave} deve ser numérico")
+            if v < piso or (teto is not None and v > teto):
+                limite = f"entre {piso} e {teto}" if teto is not None else f"≥ {piso}"
+                raise HTTPException(422, f"{chave} deve ser {limite}")
         con.execute(
             "INSERT INTO config (chave, valor) VALUES (?,?) "
             "ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor",

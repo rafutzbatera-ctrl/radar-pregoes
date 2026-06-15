@@ -194,6 +194,39 @@ def test_config_margem_alvo_validacao(client):
     assert client.patch("/config", json={"margem_alvo": "abc"}).status_code == 422
 
 
+def test_config_veredito_validacao(client):
+    """As 5 chaves veredito_* devem ser float em range sensato; valor inválido
+    → 422 e config inalterada (não corrompe o estado global lido por _regras)."""
+    # baseline persistido pelo seed da migração
+    antes = client.get("/config").json()
+
+    # não-numérico → 422, sem gravar (o estado global continua intacto)
+    r = client.patch("/config", json={"veredito_vale_lucro_min": "abc"})
+    assert r.status_code == 422
+    depois = client.get("/config").json()
+    assert depois.get("veredito_vale_lucro_min") == antes.get("veredito_vale_lucro_min")
+
+    # margem/cobertura fora de [0,1] → 422
+    assert client.patch("/config", json={"veredito_vale_margem_min": "1.5"}).status_code == 422
+    assert client.patch("/config", json={"veredito_vale_cobertura_min": "-0.1"}).status_code == 422
+    assert client.patch("/config", json={"veredito_nao_vale_margem_max": "abc"}).status_code == 422
+    # lucro negativo → 422
+    assert client.patch("/config", json={"veredito_nao_vale_lucro_max": "-5"}).status_code == 422
+
+    # valores válidos → 200 e persistem
+    r = client.patch("/config", json={
+        "veredito_vale_margem_min": "0.25",
+        "veredito_vale_cobertura_min": "0.5",
+        "veredito_vale_lucro_min": "1500",
+        "veredito_nao_vale_margem_max": "0.1",
+        "veredito_nao_vale_lucro_max": "400",
+    })
+    assert r.status_code == 200
+    cfg = r.json()
+    assert cfg["veredito_vale_margem_min"] == "0.25"
+    assert cfg["veredito_vale_lucro_min"] == "1500"
+
+
 def test_recusa_memoriza_produto(client, con):
     """POST match com produto_id null appenda o produto atual em
     produtos_recusados (recusa memorizada)."""
