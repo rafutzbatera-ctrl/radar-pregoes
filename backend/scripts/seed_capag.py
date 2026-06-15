@@ -156,6 +156,33 @@ def _to_float(v):
         return None
 
 
+# IBGE: os 2 primeiros dígitos do código de município/estado são o código da UF.
+# Mapa oficial e fixo (27 unidades) — usado para preencher a sigla da UF quando
+# o XLSX não traz a coluna. NÃO é chute: é a tabela oficial do IBGE.
+_UF_POR_COD_IBGE = {
+    "11": "RO", "12": "AC", "13": "AM", "14": "RR", "15": "PA", "16": "AP",
+    "17": "TO", "21": "MA", "22": "PI", "23": "CE", "24": "RN", "25": "PB",
+    "26": "PE", "27": "AL", "28": "SE", "29": "BA", "31": "MG", "32": "ES",
+    "33": "RJ", "35": "SP", "41": "PR", "42": "SC", "43": "RS", "50": "MS",
+    "51": "MT", "52": "GO", "53": "DF",
+}
+
+
+def _uf_da_linha(cod, uf_xlsx) -> str | None:
+    """Sigla da UF da linha. Usa a coluna 'uf' do XLSX quando válida (2 letras);
+    senão deriva do código IBGE (2 primeiros dígitos do cod_ibge).
+
+    Essencial para as notas ESTADUAIS: o serviço (capag.py) casa o estado por
+    (UF + esfera 'E'), e o XLSX de estados pode não trazer coluna 'uf' — sem
+    esta derivação determinística a nota estadual ficaria sem sigla e nunca
+    casaria. Mapeamento IBGE oficial, não inventa dado (princípio nº 1)."""
+    s = str(uf_xlsx or "").strip().upper()
+    if len(s) == 2 and s.isalpha():
+        return s
+    prefixo = str(cod or "").strip()[:2]
+    return _UF_POR_COD_IBGE.get(prefixo)
+
+
 def parsear_xlsx(con, conteudo: bytes, esfera: str) -> int:
     """Parseia a aba 'Prévia da CAPAG' e popula capag_notas."""
     wb = load_workbook(io.BytesIO(conteudo), read_only=True, data_only=True)
@@ -212,7 +239,7 @@ def parsear_xlsx(con, conteudo: bytes, esfera: str) -> int:
                 (
                     cod,
                     pega(linha, "municipio"),
-                    pega(linha, "uf"),
+                    _uf_da_linha(cod, pega(linha, "uf")),
                     str(nota).strip(),
                     _to_float(pega(linha, "ind1")), pega(linha, "nota1"),
                     _to_float(pega(linha, "ind2")), pega(linha, "nota2"),
