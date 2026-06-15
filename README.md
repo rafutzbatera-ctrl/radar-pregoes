@@ -1,5 +1,7 @@
 # Handoff: Radar de Pregões — Front-end (telas + fluxos)
 
+![CI](https://github.com/rafutzbatera-ctrl/radar-pregoes/actions/workflows/ci.yml/badge.svg)
+
 ## Visão geral
 **Radar de Pregões** é um SaaS de uso próprio para um fornecedor de equipamentos de
 áudio/vídeo/AV que disputa pregões e licitações (Lei 14.133). O front-end aqui
