@@ -38,24 +38,39 @@ Cinco commits de baixo risco, cada um com teste:
 
 Legenda: severidade (alta/média/baixa) · esforço · risco de corrigir.
 
-### 2.0 Achado do eval M7 (2026-06-15) — honestidade do RAG é permissiva
+### 2.0 Honestidade do RAG — achado do eval M7 e fix (2026-06-15) ✅ RESOLVIDO
 
-O eval local `scripts/eval_rag.py` (M7) sobre o edital real de Imbaú revelou:
-**recall 6/6 (perfeito)**, mas **rejeição 0/2** — perguntas claramente fora do
+**Achado:** o eval `scripts/eval_rag.py` sobre o edital real de Imbaú mostrou
+**recall 6/6 (perfeito)** mas **rejeição 0/2** — perguntas claramente fora do
 escopo ("drone de vigilância", "treinamento de mergulho" num edital de
-palanques) **vazam** com score 0.82–0.85 em vez de responder "não encontrado".
-Causa: o `multilingual-e5-small` tem **floor de similaridade ~0.82** (texto PT
-qualquer já pontua alto) e o **ramo léxico do gate híbrido** (`score≥thr OR
-match FTS`) deixa passar qualquer pergunta que compartilhe um termo genérico com
-o edital. Viola os princípios 1 e 2 (deveria dizer "não encontrado").
-*Por que não corrigi já:* re-tunar o threshold (0.84, calibrado) ou o gate com
-as âncoras de **um só edital** seria overfitting e arriscaria regredir recall e
-a busca híbrida recém-entregue. **Fix correto (prioritário):** calibração
-**multi-edital** — exigir margem/gap mínimo do top score, piso semântico para o
-ramo léxico contar, ou um cross-encoder reranker leve. O eval M7 já é o **gate
-de regressão** que mede isso. (`eval_habilitacao.py`, por contraste: citação
-verificada **13/13** e cobertura de categorias **4/4** — o extrator+gate de
-habilitação está sólido.)
+palanques) **vazavam** (score 0.82–0.85) em vez de "não encontrado". Causa: o
+`multilingual-e5-small` tem **floor de similaridade ~0.82** (texto PT qualquer
+pontua alto) e o **ramo léxico** do gate híbrido (`cosseno≥thr OR match FTS`)
+abria a resposta para qualquer pergunta que compartilhasse um termo genérico
+("fornecedor"/"profissional") com o edital. Feria os princípios 1 e 2.
+
+**Fix (commit do gate semântico-primário):** separei a *decisão de responder* da
+*inclusão de trecho* em `rag.perguntar`:
+- **Gate (responde?)** = **semântico-puro**: só abre se algum chunk tem cosseno
+  ≥ `RAG_THRESHOLD`. O ramo léxico **não** abre mais o gate.
+- **Inclusão de trecho** (gate já aberto) = cosseno ≥ thr **OU** match léxico —
+  então numa pergunta on-topic um match exato (BM25) com cosseno um pouco abaixo
+  ainda entra como contexto (preserva o recall do híbrido da Onda 1; o teste
+  `test_hibrido_recall_...` continua verde sem mudança).
+- **Threshold recalibrado 0.84 → 0.855** (calibrado com `scripts/calibra_gate.py`:
+  off-topic ≤ 0.8493 < on-topic ≥ 0.8615).
+
+**Resultado (eval M7):** recall **6/6**, rejeição **2/2**, hit-rate **8/8**.
+Teste de regressão `test_gate_semantico_rejeita_match_so_lexico_generico`.
+
+**Tradeoff residual (documentado):** pelo floor do e5-small, as faixas de
+cosseno on/off-topic chegam a sobrepor por volta de 0.846–0.855; perguntas
+legítimas nesse limbo podem cair em "não encontrado" — erra para o lado
+**honesto** (princípio 1, melhor que inventar). Upgrade opcional para separar
+melhor sem esse tradeoff: **cross-encoder reranker** (sentence-transformers já é
+dep; modelo local, sem chave) como camada de gate, injetável e degradando
+gracioso — fica como próximo nível, não bloqueante. (`eval_habilitacao.py`
+segue sólido: citação **13/13**, cobertura de categorias **4/4**.)
 
 ### 2.1 Bugs confirmados (corrigir — risco de fix baixo)
 

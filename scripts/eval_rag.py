@@ -27,14 +27,12 @@ from app import db  # noqa: E402
 from app.services import extracao, matching, rag  # noqa: E402
 from app.services.habilitacao import _normalizar  # noqa: E402
 
-# alvos. RECALL e gate DURO (forca confiavel do sistema: recupera o que existe).
-# REJEICAO e o alvo IDEAL (rejeitar fora-de-escopo), mas hoje e LACUNA CONHECIDA:
-# o e5-small tem floor de similaridade ~0.82 e o ramo lexico do gate hibrido
-# (FTS OR) deixa negativos vazarem num edital grande. NAO falha o gate (seria
-# permanentemente vermelho) — e reportado em alto-relevo e rastreado em
-# docs/MELHORIAS.md; o fix exige calibracao multi-edital (margem / cross-encoder).
+# alvos (gates DUROS). RECALL: recupera o que existe. REJEICAO: rejeita perguntas
+# fora de escopo (responde "nao_encontrado"). Apos o fix do gate SEMANTICO-
+# PRIMARIO (rag.perguntar; threshold 0.855), o ramo lexico nao abre mais a
+# resposta, entao fora-de-escopo no floor do e5 (~0.82) sao rejeitados.
 ALVO_RECALL = 0.8
-ALVO_REJEICAO = 1.0  # alvo ideal; rejeicao abaixo disso e reportada, nao falha
+ALVO_REJEICAO = 1.0
 
 ANCORAS = RAIZ / "backend" / "tests" / "fixtures" / "eval_ancoras.json"
 
@@ -62,7 +60,6 @@ def _preparar_db(con, ed) -> int:
 def main() -> int:
     dados = json.loads(ANCORAS.read_text(encoding="utf-8"))
     falhou = False
-    lacuna = False
 
     for ed in dados["editais"]:
         pdf = RAIZ / ed["pdf"]
@@ -139,22 +136,14 @@ def main() -> int:
                     print(f"\nFALHA: recall {recall:.3f} < alvo {ALVO_RECALL}")
                     falhou = True
                 if rejeicao < ALVO_REJEICAO:
-                    print(f"\n>>> LACUNA CONHECIDA (nao falha o gate): rejeicao "
-                          f"{rejeicao:.3f} < ideal {ALVO_REJEICAO}. Negativos "
-                          f"fora-de-escopo vazaram (floor do e5-small ~0.82 + "
-                          f"ramo lexico do gate hibrido). Rastreado em "
-                          f"docs/MELHORIAS.md; fix = calibracao multi-edital.")
-                    lacuna = True
+                    print(f"\nFALHA: rejeicao {rejeicao:.3f} < alvo {ALVO_REJEICAO} "
+                          f"(fora-de-escopo vazou — ver docs/MELHORIAS.md §2.0)")
+                    falhou = True
             finally:
                 con.close()
 
-    if falhou:
-        print("\nRESULTADO: FALHOU (recall abaixo do alvo)")
-    elif lacuna:
-        print("\nRESULTADO: OK nas forcas (recall/citacao); REJEICAO de "
-              "fora-de-escopo = lacuna conhecida (ver docs/MELHORIAS.md)")
-    else:
-        print("\nRESULTADO: OK (todos os alvos atingidos)")
+    print("\n" + ("RESULTADO: FALHOU (abaixo do alvo)" if falhou
+                  else "RESULTADO: OK (todos os alvos atingidos)"))
     return 1 if falhou else 0
 
 

@@ -1,6 +1,7 @@
 """RAG Fase 1 — chunking verbatim, gate de citação, recuperação extrativa e
 endpoints. Tudo com embed FAKE determinístico (nunca o e5 real) e páginas
-inline (nunca PDF/modelo real). Decisões do dono: threshold 0.80, single-edital.
+inline (nunca PDF/modelo real). Decisões do dono: threshold 0.855 (recalibrado
+no eval M7 — gate semântico-primário), single-edital.
 """
 import numpy as np
 import pytest
@@ -691,6 +692,21 @@ def test_hibrido_off_topic_continua_nao_encontrado(con):
     embed = EmbedFake()
     rag.indexar_chunks(con, pid, [(None, PAGINAS)], embed=embed)
     r = rag.perguntar(con, pid, "qual a cor do papel timbrado?", embed=embed)
+    assert r["disponivel"] is False
+    assert r["motivo"] == "nao_encontrado"
+    assert r["trechos"] == []
+
+
+def test_gate_semantico_rejeita_match_so_lexico_generico(con):
+    """REGRESSÃO (achado do eval M7, MELHORIAS §2.0): um termo genérico
+    compartilhado faz o FTS casar, mas SEM cosseno semântico ≥ threshold o gate
+    NÃO abre. 'município' aparece na PÁGINA_1 (FTS casa), porém a pergunta é fora
+    do tema semântico (EmbedFake → eixo _FORA, cosseno 0). Gate semântico-
+    primário → nao_encontrado, apesar do match léxico (antes vazava)."""
+    pid = _criar_pregao(con)
+    embed = EmbedFake()
+    rag.indexar_chunks(con, pid, [(None, PAGINAS)], embed=embed)
+    r = rag.perguntar(con, pid, "qual o município responsável?", embed=embed)
     assert r["disponivel"] is False
     assert r["motivo"] == "nao_encontrado"
     assert r["trechos"] == []

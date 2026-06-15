@@ -1,7 +1,7 @@
 {
   "versao": 1,
   "modelo_embed": "intfloat/multilingual-e5-small",
-  "rag_threshold": 0.84,
+  "rag_threshold": 0.855,
   "_nota": "Ancoras de eval LOCAL (M7) — sem ragas, sem chave de API. Termos confirmados no PDF real (extracao.extrair_paginas + _normalizar). 'termo_no_trecho' eh comparado normalizado (caixa baixa, espacos colapsados; acentos preservados — _normalizar usa NFC sem strip de acento). Perguntas 'nao_encontrado' sao claramente fora do escopo deste edital de aquisicao de palanques.",
   "editais": [
     {

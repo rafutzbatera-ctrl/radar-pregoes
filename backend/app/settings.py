@@ -35,14 +35,18 @@ USER_AGENT = "RadarPregoes/0.1 (uso pessoal)"
 MATCH_MODELO = "intfloat/multilingual-e5-small"
 MATCH_THRESHOLD = 0.90
 
-# RAG leve extrativo (Fase 1) — Q&A sobre os documentos de UM edital por vez.
-# Reusa o mesmo e5 do matching (MATCH_MODELO); threshold SEPARADO do 0.90 do
-# matching. CALIBRADO em editais reais (14/06/2026): o e5-small tem um PISO de
-# similaridade ~0.83 para qualquer pergunta PT × qualquer texto PT (pergunta
-# fora do tema cravou 0.833); respostas reais ficam 0.846–0.881. 0.84 separa o
-# fora-do-tema das respostas reais. Abaixo do threshold → "não encontrado",
-# nunca inventa (princípio 1). Chunking verbatim por parágrafo/cláusula.
-RAG_THRESHOLD = float(os.getenv("RADAR_RAG_THRESHOLD", "0.84"))
+# RAG leve extrativo — Q&A sobre os documentos de UM edital por vez. Reusa o
+# mesmo e5 do matching (MATCH_MODELO); threshold SEPARADO do 0.90 do matching.
+# RECALIBRADO pelo eval M7 (15/06/2026): o e5-small tem PISO de similaridade
+# ~0.82 para qualquer par PT×PT; no edital real de Imbaú as perguntas FORA DE
+# ESCOPO cravaram até 0.8493 e as on-topic ficaram ≥ 0.8615 → 0.855 separa com
+# margem. (O 0.84 anterior deixava fora-de-escopo vazar.) O gate é SEMÂNTICO-
+# PRIMÁRIO (ver rag.perguntar): só o cosseno ≥ threshold ABRE a resposta; o
+# léxico não. Tradeoff conhecido do floor do e5: perguntas legítimas no limbo
+# (~0.846–0.855) podem cair em "não encontrado" — erra para o lado HONESTO
+# (princípio 1; melhor que inventar). Upgrade opcional p/ separar melhor:
+# cross-encoder reranker (docs/MELHORIAS.md §2.0). Ajustável por env.
+RAG_THRESHOLD = float(os.getenv("RADAR_RAG_THRESHOLD", "0.855"))
 RAG_TOP_K = int(os.getenv("RADAR_RAG_TOP_K", "5"))
 RAG_CHUNK_MAX = int(os.getenv("RADAR_RAG_CHUNK_MAX", "900"))      # teto de chars/chunk
 RAG_CHUNK_MIN = int(os.getenv("RADAR_RAG_CHUNK_MIN", "40"))       # mín. de chars ÚTEIS p/ manter o chunk

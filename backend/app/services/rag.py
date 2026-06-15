@@ -467,9 +467,12 @@ def perguntar(con: sqlite3.Connection, pregao_id: int, pergunta: str,
     (ex.: "prazo de entrega"); o e5 pega a semântica. Sem FTS5 (build sem o
     módulo) → degrada para só-vetor, idêntico à Fase 1.
 
-    GATE de honestidade (não regride): um trecho só entra se tiver SINAL real —
-    cosseno ≥ threshold OU match léxico FTS para a pergunta. Pergunta fora do
-    tema não casa o FTS nem tem cosseno alto → nao_encontrado (princípio 1).
+    GATE de honestidade (semântico-primário): a resposta só ABRE se algum chunk
+    do topo tiver cosseno ≥ threshold (sinal SEMÂNTICO); o ramo léxico (FTS) NÃO
+    abre o gate, só melhora o ranking e — uma vez aberto — traz trechos de match
+    exato como contexto. Pergunta fora do tema (sem cosseno alto) → nao_encontrado
+    mesmo que compartilhe termos genéricos com o edital (achado do eval M7,
+    docs/MELHORIAS.md §2.0; princípio 1).
 
     Sem chunks → disponivel=False, motivo "nao_indexado".
     Nenhum trecho com sinal → disponivel=False, motivo "nao_encontrado".
@@ -538,19 +541,28 @@ def perguntar(con: sqlite3.Connection, pregao_id: int, pergunta: str,
     fundidos.sort(key=lambda t: (t[0], float(scores[t[1]])), reverse=True)
     topo = fundidos[:k]
 
-    # --- GATE de honestidade (não pode regredir): só responde se houver SINAL
-    # real. disponivel=True se algum chunk do topo tiver cosseno ≥ threshold OU
-    # vier do ranking léxico (match BM25 = termo exato da pergunta no chunk). A
-    # pergunta fora do tema não casa o FTS nem tem cosseno alto → nao_encontrado.
+    # --- GATE de honestidade SEMÂNTICO-PRIMÁRIO: a resposta só ABRE se algum
+    # chunk do topo tiver cosseno ≥ threshold (sinal semântico). O ramo léxico
+    # (FTS) NÃO abre o gate — o eval M7 mostrou que o OR-match léxico em termos
+    # genéricos ("fornecedor"/"profissional") deixava perguntas FORA DE ESCOPO
+    # vazarem (cosseno no floor ~0.82 do e5) em vez de "nao_encontrado"
+    # (docs/MELHORIAS.md §2.0). O léxico segue no RRF (ranking) e na INCLUSÃO de
+    # trecho abaixo — só não decide sozinho se a pergunta é respondível.
+    def _tem_sinal_semantico(idx: int) -> bool:
+        s = float(scores[idx])
+        return math.isfinite(s) and s >= threshold
+
+    # INCLUSÃO de trecho (com o gate já aberto): cosseno ≥ threshold OU match
+    # léxico. Assim, numa pergunta ON-TOPIC, um chunk de match EXATO (BM25) com
+    # cosseno um pouco abaixo ainda entra como contexto — preserva o recall do
+    # híbrido SEM reabrir a porta a fora-de-escopo (o gate semântico já filtrou).
     def _tem_sinal(idx: int) -> bool:
         s = float(scores[idx])
-        # score inválido (NaN→-inf) descarta o chunk mesmo que tenha vindo do FTS:
-        # sem cosseno confiável não há como afirmar relevância (princípio 1).
-        if not math.isfinite(s):
+        if not math.isfinite(s):  # NaN→-inf: sem cosseno confiável, descarta
             return False
         return s >= threshold or idx in rank_lexico
 
-    if not topo or not any(_tem_sinal(idx) for _rrf, idx in topo):
+    if not topo or not any(_tem_sinal_semantico(idx) for _rrf, idx in topo):
         return {"disponivel": False, "motivo": "nao_encontrado", "trechos": []}
 
     # títulos dos arquivos (JOIN arquivos.titulo) — um lookup por arquivo_id
