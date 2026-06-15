@@ -5,8 +5,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import db, settings
-from .routers import (buscas, catalogo, config, descobrir, habilitacao, health,
-                      itens, pipeline, pregoes, rag)
+from .routers import (buscas, catalogo, certidoes, config, descobrir,
+                      habilitacao, health, itens, pipeline, pregoes, rag)
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -42,6 +42,7 @@ app.include_router(descobrir.router)
 app.include_router(pregoes.router)
 app.include_router(itens.router)
 app.include_router(catalogo.router)
+app.include_router(certidoes.router)
 app.include_router(habilitacao.router)
 app.include_router(config.router)
 app.include_router(pipeline.router)

@@ -264,6 +264,26 @@ MIGRACOES = [
     """
     INSERT OR IGNORE INTO config(chave, valor) VALUES ('rag_busca', 'hibrida');
     """,
+    # v12 — "Minhas certidões": o fornecedor guarda suas certidões/documentos de
+    # habilitação (CND federal, FGTS, trabalhista etc.) com data de validade, e o
+    # sistema AVISA quando estão vencidas/perto de vencer — para não perder pregão
+    # por documento expirado (reuso entre licitações; complementa o checklist de
+    # habilitação extraído do edital). validade = data ISO 'YYYY-MM-DD' ou NULL
+    # (sem validade / indeterminada — princípio 1: NULL é honesto, nunca chute).
+    # O status (vencida / vence_em_breve / ok / sem_validade) é CALCULADO a partir
+    # de hoje (services/certidoes.py), nunca persistido — assim nunca "envelhece"
+    # errado no banco.
+    """
+    CREATE TABLE certidoes(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        orgao_emissor TEXT,
+        validade TEXT,                   -- ISO 'YYYY-MM-DD' ou NULL = sem validade
+        observacao TEXT,
+        criado_em TEXT DEFAULT (datetime('now')),
+        atualizado_em TEXT
+    );
+    """,
 ]
 
 
