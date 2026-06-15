@@ -853,6 +853,106 @@ body {
 .cat-cod { font-family: var(--font-mono); font-size: 12px; color: var(--silk); }
 .cat-custo { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
+/* ---------- Minhas certidões ---------- */
+.cert-head, .cert-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 150px 130px 150px;
+  gap: 12px;
+  padding: 11px 16px;
+  align-items: center;
+}
+.cert-head { border-bottom: 1px solid var(--linha); background: var(--fundo-2); }
+.cert-row { border-bottom: 1px solid var(--linha); font-size: 13px; color: var(--tinta); }
+.cert-row:last-of-type { border-bottom: none; }
+.cert-nome { font-weight: 600; }
+.cert-obs { color: var(--silk); font-weight: 400; font-style: normal; }
+.cert-orgao { color: var(--tinta-2); font-size: 12.5px; }
+.cert-validade { font-size: 12.5px; color: var(--tinta-2); line-height: 1.35; }
+.cert-validade small { font-size: 10.5px; }
+.cert-vazia { padding: 22px 16px; }
+.cert-acoes { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.cert-btn {
+  background: var(--fundo-2);
+  color: var(--tinta-2);
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: filter 0.15s, color 0.15s, border-color 0.15s;
+}
+.cert-btn:hover { color: var(--tinta); border-color: var(--silk); }
+.cert-btn-ok { background: var(--sinal); color: var(--sobre-acento); border-color: transparent; }
+.cert-btn-ok:hover { filter: brightness(1.08); color: var(--sobre-acento); }
+.cert-btn-rm:hover { color: var(--clip); border-color: var(--clip); }
+/* badge de status (cor via --cor-badge inline, vinda do token de tema) */
+.cert-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 5px;
+  color: var(--cor-badge, var(--silk));
+  border: 1px solid color-mix(in srgb, var(--cor-badge, var(--silk)) 45%, transparent);
+  background: color-mix(in srgb, var(--cor-badge, var(--silk)) 12%, transparent);
+  white-space: nowrap;
+}
+.cert-badge-led {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--cor-badge, var(--silk));
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--cor-badge, var(--silk)) 60%, transparent);
+  flex: none;
+}
+.cert-aviso {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--tinta-2);
+  background: color-mix(in srgb, var(--pico) 10%, var(--painel));
+  border: 1px solid color-mix(in srgb, var(--pico) 35%, transparent);
+}
+.cert-aviso svg { color: var(--pico); flex: none; }
+.cert-edit {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 150px 1fr;
+  gap: 8px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--linha);
+  align-items: center;
+  background: var(--fundo-2);
+}
+.cert-edit .cert-acoes { grid-column: 1 / -1; justify-content: flex-start; margin-top: 4px; }
+/* selo de alerta no item de NAV "Minhas certidões" */
+.nav-alerta {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 9px;
+  color: var(--sobre-acento, #0A0F0D);
+  background: var(--pico);
+  flex: none;
+}
+
 /* ---------- Mobile ---------- */
 @media (max-width: 920px) {
   .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
@@ -935,6 +1035,19 @@ body {
   .cat-head, .cat-row { grid-template-columns: 1fr 110px; }
   .cat-head > div:nth-child(2), .cat-row > div:nth-child(2),
   .cat-head > div:nth-child(3), .cat-row > div:nth-child(3) { display: none; }
+  /* certidões: empilha em uma coluna; esconde o cabeçalho da grade */
+  .cert-head { display: none; }
+  .cert-row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "nome badge" "orgao badge" "validade acoes";
+    row-gap: 6px;
+  }
+  .cert-row > .cert-nome { grid-area: nome; }
+  .cert-row > .cert-orgao { grid-area: orgao; }
+  .cert-row > .cert-validade { grid-area: validade; }
+  .cert-row > div:nth-child(4) { grid-area: badge; justify-self: end; }
+  .cert-row > .cert-acoes { grid-area: acoes; justify-content: flex-start; }
+  .cert-edit { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 920px) {

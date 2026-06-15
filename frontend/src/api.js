@@ -406,6 +406,24 @@ export const api = {
     });
   },
 
+  // minhas certidões — documentos de habilitação reutilizáveis (CND, FGTS,
+  // trabalhista etc.) com aviso de vencimento. status/dias_restantes vêm
+  // calculados pelo backend a partir de hoje (vencida|vence_em_breve|ok|
+  // sem_validade). validade = ISO 'YYYY-MM-DD' ou null = sem validade.
+  listarCertidoes: () => req("/certidoes"),
+  criarCertidao: (corpo) =>
+    req("/certidoes", { method: "POST", body: JSON.stringify(corpo) }),
+  atualizarCertidao: (id, corpo) =>
+    req(`/certidoes/${id}`, { method: "PATCH", body: JSON.stringify(corpo) }),
+  removerCertidao: (id) =>
+    req(`/certidoes/${id}`, { method: "DELETE" }).catch((e) => {
+      // DELETE responde 204 sem corpo → req() faz r.json() e estoura; 204 = ok
+      if (e instanceof SyntaxError) return null;
+      throw e;
+    }),
+  // só vencidas + vence_em_breve (badge/dashboard) → {total, certidoes:[...]}
+  alertasCertidoes: () => req("/certidoes/alertas"),
+
   // config
   lerConfig: () => req("/config"),
   atualizarConfig: (corpo) =>

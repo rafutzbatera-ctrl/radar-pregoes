@@ -6,6 +6,7 @@ import { api, adaptarItem } from "./api.js";
 import { MotionCtx, Ico } from "./helpers.jsx";
 import { FindScreen, BuscasScreen, CatalogScreen, EstadoCarregando, EstadoErro } from "./FindScreen.jsx";
 import AnalysisScreen from "./AnalysisScreen.jsx";
+import CertidoesScreen from "./CertidoesScreen.jsx";
 
 const LandingPage = React.lazy(() => import("./landing/LandingPage.jsx"));
 
@@ -14,6 +15,7 @@ const NAV = [
   { id: "meus", rotulo: "Meus pregões", ico: "pasta" },
   { id: "buscas", rotulo: "Buscas salvas", ico: "raio" },
   { id: "catalogo", rotulo: "Meu catálogo (custos)", ico: "fader" },
+  { id: "certidoes", rotulo: "Minhas certidões", ico: "selo" },
 ];
 
 const CONFIG_PADRAO = { regime_tributario: "simples", uf_origem: "" };
@@ -31,7 +33,8 @@ export default function App() {
   const [config, setConfig] = React.useState(null);
   const [buscas, setBuscas] = React.useState(null);
   const [pregoes, setPregoes] = React.useState(null);
-  const [erros, setErros] = React.useState({});               // {pregoes, buscas, catalogo}
+  const [certidoes, setCertidoes] = React.useState(null);     // null = carregando
+  const [erros, setErros] = React.useState({});               // {pregoes, buscas, catalogo, certidoes}
   const [detalhe, setDetalhe] = React.useState(null);         // {id, pregao, itens, habilitacao, erro}
   const [sincronizando, setSincronizando] = React.useState(false);
 
@@ -64,7 +67,7 @@ export default function App() {
   /* ---------- carga inicial (paralela) + "Tentar de novo" ---------- */
   const carregarTudo = React.useCallback(() => {
     setErros({});
-    setPregoes(null); setBuscas(null); setCatalogo(null);
+    setPregoes(null); setBuscas(null); setCatalogo(null); setCertidoes(null);
     promessaCatalogo.current = api.listarCatalogo()
       .then((cs) => { setCatalogo(cs); return cs; })
       .catch((e) => { setCatalogo([]); setErros((o) => ({ ...o, catalogo: e.message || "erro" })); });
@@ -73,6 +76,8 @@ export default function App() {
       .catch((e) => setErros((o) => ({ ...o, buscas: e.message || "erro" })));
     api.listarPregoes().then(setPregoes)
       .catch((e) => setErros((o) => ({ ...o, pregoes: e.message || "erro" })));
+    api.listarCertidoes().then(setCertidoes)
+      .catch((e) => setErros((o) => ({ ...o, certidoes: e.message || "erro" })));
   }, []);
   React.useEffect(() => { carregarTudo(); }, [carregarTudo]);
 
@@ -461,6 +466,46 @@ export default function App() {
         throw e;
       });
 
+  /* ---------- minhas certidões — criar/editar/remover ---------- */
+  // criar: recarrega a lista (o backend devolve status/dias calculados e a
+  // ordenação por urgência). Em erro, toast e propaga (o form reseta no .then).
+  const criarCertidao = (corpo) =>
+    api.criarCertidao(corpo)
+      .then(() => api.listarCertidoes().then(setCertidoes))
+      .catch((e) => {
+        avisar("Não foi possível adicionar a certidão: " + (e.message || "erro"), "erro");
+        throw e;
+      });
+
+  // editar: otimista (funde os campos na linha) → API (recarrega para reordenar
+  // e recalcular status) → reverte em erro.
+  const atualizarCertidao = (id, corpo) => {
+    const anterior = certidoes;
+    setCertidoes((cs) => (cs || []).map((c) =>
+      c.id === id ? { ...c, ...corpo, validade: corpo.validade || null } : c));
+    return api.atualizarCertidao(id, corpo)
+      .then(() => api.listarCertidoes().then(setCertidoes))
+      .catch((e) => {
+        setCertidoes(anterior);
+        avisar("Não foi possível salvar a certidão — revertido.", "erro");
+        throw e;
+      });
+  };
+
+  // remover: otimista (some da lista) → API → reverte em erro.
+  const removerCertidao = (c) => {
+    const anterior = certidoes;
+    setCertidoes((cs) => (cs || []).filter((x) => x.id !== c.id));
+    api.removerCertidao(c.id).catch(() => {
+      setCertidoes(anterior);
+      avisar("Não foi possível remover a certidão — revertido.", "erro");
+    });
+  };
+
+  // contador de certidões urgentes (vencidas + vencendo) p/ badge na sidebar
+  const certidoesAlerta = (certidoes || []).filter(
+    (c) => c.status === "vencida" || c.status === "vence_em_breve").length;
+
   /* ---------- funil de disputa (P2) — otimista → API → reverte ---------- */
   const mudarPipeline = (id, campos) => {
     const anterior = (pregoes || []).find((p) => p.id === id);
@@ -551,6 +596,10 @@ export default function App() {
         <CatalogScreen catalogo={catalogo} erro={erros.catalogo} recarregar={carregarTudo}
           salvarCusto={salvarCustoProduto} criar={criarProduto} />
       )}
+      {tela.nome === "certidoes" && (
+        <CertidoesScreen certidoes={certidoes} erro={erros.certidoes} recarregar={carregarTudo}
+          criar={criarCertidao} atualizar={atualizarCertidao} remover={removerCertidao} />
+      )}
       {tela.nome === "analise" && pregaoAtivo && (
         <AnalysisScreen
           pregao={pregaoAtivo}
@@ -604,7 +653,8 @@ export default function App() {
   return (
     <MotionCtx.Provider value={modo}>
       <div className="app" key={semFramer ? "estatico" : "animado"}>
-        <Sidebar tela={tela} irPara={(id) => setTela({ nome: id })} semFramer={semFramer} />
+        <Sidebar tela={tela} irPara={(id) => setTela({ nome: id })} semFramer={semFramer}
+          certidoesAlerta={certidoesAlerta} />
         <main className="main">
           {semFramer ? (
             telaConteudo
@@ -638,7 +688,7 @@ export default function App() {
   );
 }
 
-function Sidebar({ tela, irPara, semFramer }) {
+function Sidebar({ tela, irPara, semFramer, certidoesAlerta = 0 }) {
   const entrada = semFramer
     ? {}
     : {
@@ -669,6 +719,11 @@ function Sidebar({ tela, irPara, semFramer }) {
           >
             {Ico[n.ico]}
             {n.rotulo}
+            {n.id === "certidoes" && certidoesAlerta > 0 && (
+              <span className="nav-alerta" aria-label={certidoesAlerta + " certidões vencendo ou vencidas"}>
+                {certidoesAlerta}
+              </span>
+            )}
           </button>
         ))}
       </nav>

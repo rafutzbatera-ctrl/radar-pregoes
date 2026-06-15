@@ -463,4 +463,14 @@ export const Ico = {
       <path d="M8 6.5v3.5M8 12h.01"></path>
     </svg>
   ),
+  // certidão: documento com selo (roseta) — usado no NAV "Minhas certidões"
+  selo: (
+    <svg className="nav-ico" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M4 2h6.5L14 5.5V11"></path>
+      <path d="M4 2v9.5"></path>
+      <path d="M10 2v3.5h3.5"></path>
+      <circle cx="7" cy="13.2" r="2.6"></circle>
+      <path d="M5.4 15 4.7 17l2.3-1.1L9.3 17l-.7-2"></path>
+    </svg>
+  ),
 };
