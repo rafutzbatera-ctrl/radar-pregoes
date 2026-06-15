@@ -359,6 +359,7 @@ body {
 }
 .filtro-status .led { width: 8px; height: 8px; border-radius: 50%; background: var(--linha); }
 .filtro-status.on .led { background: var(--sinal); box-shadow: 0 0 5px var(--halo); }
+.filtro-status:disabled { opacity: 0.45; cursor: not-allowed; color: var(--silk); }
 
 .cards { display: flex; flex-direction: column; gap: 12px; }
 .card-pregao {

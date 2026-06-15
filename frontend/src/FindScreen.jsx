@@ -190,6 +190,11 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
   const [statusVivo, setStatusVivo] = React.useState("recebendo_proposta");
   const [tipoVivo, setTipoVivo] = React.useState("edital");
   const [ordemVivo, setOrdemVivo] = React.useState("-data");
+  // re-rank semântico LOCAL (opt-in, default OFF): reordena a página por
+  // similaridade e5 aos termos digitados. Só relevante com termo de busca;
+  // a ordem oficial do PNCP (data/relevância) é preservada — o re-rank é uma
+  // reordenação derivada e a UI rotula isso explicitamente (princípio nº3).
+  const [rerankVivo, setRerankVivo] = React.useState(false);
   // P6: faixa de valor + ordenação CLIENT-SIDE sobre os itens já carregados/avaliados
   const [valorMinVivo, setValorMinVivo] = React.useState("");
   const [valorMaxVivo, setValorMaxVivo] = React.useState("");
@@ -257,7 +262,7 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
   const pai = { hidden: {}, show: { transition: { staggerChildren: reduzido ? 0 : 0.055, delayChildren: reduzido ? 0 : 0.05 } } };
 
   /* ---------- modo "PNCP ao vivo" (busca na API sem persistir) ---------- */
-  const [vivo, setVivo] = React.useState({ itens: [], total: 0, totalExato: true, fonte: "consulta", pagina: 1, carregando: false, erro: null });
+  const [vivo, setVivo] = React.useState({ itens: [], total: 0, totalExato: true, fonte: "consulta", pagina: 1, carregando: false, erro: null, rerankAplicado: false, rerankMotivo: null });
   const [importando, setImportando] = React.useState(null); // numero_controle em importação
 
   // filtros atuais empacotados (mesma página para todos os termos no "carregar mais").
@@ -272,7 +277,10 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
     // O pós-filtro item-level (sohServico) abaixo refina depois da avaliação.
     soBens: soCompras,
     status: statusVivo, tipo: tipoVivo, ordenacao: ordemVivo, pagina,
-  }), [termos, excluir, ufsVivo, modVivo, esferasVivo, statusVivo, tipoVivo, ordemVivo, soCompras]);
+    // re-rank só faz sentido com termo; sem termo o backend já ignora, mas
+    // evitamos mandar o flag à toa (a fonte vira "consulta" sem termo).
+    rerank: rerankVivo && termos.length > 0,
+  }), [termos, excluir, ufsVivo, modVivo, esferasVivo, statusVivo, tipoVivo, ordemVivo, soCompras, rerankVivo]);
 
   const buscarVivo = React.useCallback((pagina, concatenar) => {
     setVivo((v) => ({ ...v, carregando: true, erro: null }));
@@ -281,6 +289,9 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
         itens: concatenar ? [...v.itens, ...r.itens] : r.itens,
         total: r.total, totalExato: r.totalExato !== false, fonte: r.fonte || "busca",
         pagina, carregando: false, erro: null,
+        // re-rank é por PÁGINA: a flag/motivo refletem a resposta corrente
+        rerankAplicado: r.rerankAplicado === true,
+        rerankMotivo: r.rerankMotivo || null,
       })))
       .catch((e) => setVivo((v) => ({ ...v, carregando: false, erro: e.message || "erro" })));
   }, [filtrosVivo]);
@@ -519,6 +530,18 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
               <option value="potencial">Potencial p/ você (carregados)</option>
               <option value="valor">Maior valor (carregados)</option>
             </select>
+            {/* re-rank semântico LOCAL (opt-in): reordena a página por
+                similaridade e5 aos termos. Desabilitado sem termo (não se
+                aplica). Mesmo visual dos outros toggles da barra. */}
+            <button type="button"
+              className={"filtro-status" + (rerankVivo ? " on" : "")}
+              aria-pressed={rerankVivo} disabled={termos.length === 0}
+              onClick={() => setRerankVivo(!rerankVivo)}
+              title={termos.length === 0
+                ? "Digite uma palavra-chave para ordenar por similaridade aos seus termos."
+                : "Reordena a página atual por similaridade aos seus termos (cálculo local). A ordem oficial do PNCP é por data/relevância."}>
+              <span className="led" aria-hidden="true"></span>Ordenar por similaridade aos meus termos (local)
+            </button>
             {/* P6: faixa de valor CLIENT-SIDE (aplica aos carregados) */}
             <div className="filtro-valor mono" role="group" aria-label="Faixa de valor (aplicada aos carregados)">
               <input type="text" inputMode="decimal" className="filtro-valor-input"
@@ -624,7 +647,7 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
 function ListaVivo({ vivo, entrada, importar, importando, nTermos, aoAbrir, recarregar,
   carregarMais, margemAlvo, avaliar, avaliando, aValiar, segEstimados,
   filtroLocalAtivo, nCarregados }) {
-  const { itens, total, totalExato, fonte, carregando, erro } = vivo;
+  const { itens, total, totalExato, fonte, carregando, erro, rerankAplicado, rerankMotivo } = vivo;
 
   // P8: scroll infinito com PRÉ-BUSCA — um sentinela no fim da lista dispara
   // carregarMais() quando ainda faltam ~900px para o usuário chegar ao fim
@@ -705,6 +728,20 @@ function ListaVivo({ vivo, entrada, importar, importando, nTermos, aoAbrir, reca
       {bulk && (
         <motion.div variants={entrada} className="silk vivo-fonte-aviso">
           navegação sem palavra-chave usa a API de consulta — valor oficial instantâneo; digite termos para busca textual
+        </motion.div>
+      )}
+      {/* re-rank semântico LOCAL: rótulo discreto quando aplicado; aviso
+          quando o usuário pediu mas o e5 estava indisponível (degrada para a
+          ordem do PNCP). Outros motivos (desligado/sem_termo/ordenação) não
+          mostram nada. */}
+      {rerankAplicado && (
+        <motion.div variants={entrada} className="silk vivo-fonte-aviso">
+          Ordenado por similaridade local aos seus termos — a ordem oficial do PNCP é por data/relevância.
+        </motion.div>
+      )}
+      {!rerankAplicado && rerankMotivo === "e5_indisponivel" && (
+        <motion.div variants={entrada} className="silk vivo-fonte-aviso">
+          Re-rank indisponível — exibindo a ordem do PNCP.
         </motion.div>
       )}
       {filtroLocalAtivo && (
