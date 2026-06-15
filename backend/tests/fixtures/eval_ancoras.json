@@ -1,7 +1,7 @@
 {
   "versao": 1,
   "modelo_embed": "intfloat/multilingual-e5-small",
-  "rag_threshold": 0.855,
+  "rag_threshold": 0.858,
   "_nota": "Ancoras de eval LOCAL (M7) — sem ragas, sem chave de API. Termos confirmados no PDF real (extracao.extrair_paginas + _normalizar). 'termo_no_trecho' eh comparado normalizado (caixa baixa, espacos colapsados; acentos preservados — _normalizar usa NFC sem strip de acento). Perguntas 'nao_encontrado' sao claramente fora do escopo deste edital de aquisicao de palanques.",
   "editais": [
     {
@@ -48,6 +48,50 @@
         },
         {
           "pergunta": "Quantas horas de treinamento de mergulho profissional o fornecedor deve oferecer?",
+          "espera": "nao_encontrado"
+        }
+      ]
+    },
+    {
+      "id": "barueri_2026_400",
+      "cnpj": "46151718000180",
+      "ano": 2026,
+      "seq": 400,
+      "pdf": "data/arquivos/46151718000180_2026_400/PE_932026.pdf",
+      "_nota": "2o edital de BENS p/ validar o threshold em outro orgao/objeto (sistema integrado de seguranca predial, Barueri/SP). Termos confirmados no PDF real.",
+      "categorias_esperadas": ["juridica", "fiscal", "proposta"],
+      "perguntas": [
+        {
+          "pergunta": "Como o licitante comprova a regularidade com o FGTS?",
+          "espera": "encontrado",
+          "termo_no_trecho": "FGTS"
+        },
+        {
+          "pergunta": "Qual certidao referente a falencia o licitante deve apresentar?",
+          "espera": "encontrado",
+          "termo_no_trecho": "negativa de fal"
+        },
+        {
+          "pergunta": "Onde o ato constitutivo da empresa precisa estar registrado?",
+          "espera": "encontrado",
+          "termo_no_trecho": "Junta Comercial"
+        },
+        {
+          "pergunta": "Qual o prazo de validade da proposta comercial?",
+          "espera": "encontrado",
+          "termo_no_trecho": "validade da proposta"
+        },
+        {
+          "pergunta": "Que regularidade e exigida quanto ao INSS?",
+          "espera": "encontrado",
+          "termo_no_trecho": "INSS"
+        },
+        {
+          "pergunta": "Qual a marca da vacina exigida para imunizacao do rebanho bovino?",
+          "espera": "nao_encontrado"
+        },
+        {
+          "pergunta": "Quantos quilometros de pavimentacao asfaltica o contrato preve?",
           "espera": "nao_encontrado"
         }
       ]

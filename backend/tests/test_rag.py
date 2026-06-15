@@ -1,7 +1,7 @@
 """RAG Fase 1 — chunking verbatim, gate de citação, recuperação extrativa e
 endpoints. Tudo com embed FAKE determinístico (nunca o e5 real) e páginas
-inline (nunca PDF/modelo real). Decisões do dono: threshold 0.855 (recalibrado
-no eval M7 — gate semântico-primário), single-edital.
+inline (nunca PDF/modelo real). Decisões do dono: threshold 0.858 (recalibrado
+no eval M7 em 2 editais — gate semântico-primário), single-edital.
 """
 import numpy as np
 import pytest

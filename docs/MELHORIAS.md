@@ -57,20 +57,22 @@ abria a resposta para qualquer pergunta que compartilhasse um termo genérico
   então numa pergunta on-topic um match exato (BM25) com cosseno um pouco abaixo
   ainda entra como contexto (preserva o recall do híbrido da Onda 1; o teste
   `test_hibrido_recall_...` continua verde sem mudança).
-- **Threshold recalibrado 0.84 → 0.855** (calibrado com `scripts/calibra_gate.py`:
-  off-topic ≤ 0.8493 < on-topic ≥ 0.8615).
+- **Threshold recalibrado 0.84 → 0.858** (calibrado com `scripts/calibra_gate.py`
+  em **2 editais reais de bens** — Imbaú/PR e Barueri/SP, órgãos e objetos
+  distintos: off-topic ≤ 0.8546 < on-topic ≥ 0.8615; 0.858 = ponto médio, com
+  ~0.0035 de margem de cada lado).
 
-**Resultado (eval M7):** recall **6/6**, rejeição **2/2**, hit-rate **8/8**.
-Teste de regressão `test_gate_semantico_rejeita_match_so_lexico_generico`.
+**Resultado (eval M7 nos 2 editais):** recall **11/11**, rejeição **4/4**,
+hit-rate **15/15**; e no extrator de habilitação citação verificada **24/24** e
+cobertura de categorias **100%** (`eval_habilitacao.py`). Teste de regressão
+`test_gate_semantico_rejeita_match_so_lexico_generico`.
 
-**Tradeoff residual (documentado):** pelo floor do e5-small, as faixas de
-cosseno on/off-topic chegam a sobrepor por volta de 0.846–0.855; perguntas
-legítimas nesse limbo podem cair em "não encontrado" — erra para o lado
-**honesto** (princípio 1, melhor que inventar). Upgrade opcional para separar
-melhor sem esse tradeoff: **cross-encoder reranker** (sentence-transformers já é
-dep; modelo local, sem chave) como camada de gate, injetável e degradando
-gracioso — fica como próximo nível, não bloqueante. (`eval_habilitacao.py`
-segue sólido: citação **13/13**, cobertura de categorias **4/4**.)
+**Tradeoff residual (documentado):** pelo floor do e5-small, as faixas de cosseno
+on/off-topic ficam próximas (~0.85–0.86); uma pergunta legítima nesse limbo pode
+cair em "não encontrado" — erra para o lado **honesto** (princípio 1, melhor que
+inventar). Upgrade opcional para separar sem esse tradeoff: **cross-encoder
+reranker** (sentence-transformers já é dep; modelo local, sem chave) como camada
+de gate, injetável e degradando gracioso — próximo nível, não bloqueante.
 
 ### 2.1 Bugs confirmados (corrigir — risco de fix baixo)
 
