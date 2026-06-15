@@ -1,0 +1,10 @@
+# OCR de fallback (CLAUDE.md §6.3) — OPT-IN.
+# NÃO vai no requirements.txt principal nem no CI: docling é pesado (modelos)
+# e o backend só é exercitado em editais escaneados (densidade < RADAR_OCR_DENSIDADE).
+# Instale manualmente quando precisar de OCR:  pip install -r requirements-ocr.txt
+# e mantenha RADAR_OCR=docling (default). Para desligar o OCR: RADAR_OCR=off.
+#
+# O código em app/services/extracao.py usa a API docling 2.x
+# (docling.document_converter.DocumentConverter, resultado.document,
+#  doc.pages, doc.iterate_items()).
+docling>=2.0

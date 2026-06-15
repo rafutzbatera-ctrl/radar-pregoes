@@ -5,26 +5,60 @@ tenta fallback OCR via docling (dependência opcional — se ausente, segue com
 o texto nativo e loga aviso).
 """
 import logging
+from collections.abc import Callable
 from pathlib import Path
+
+from app import settings
 
 log = logging.getLogger("radar.extracao")
 
-DENSIDADE_MINIMA = 200  # chars por página
+DENSIDADE_MINIMA = 200  # chars por página (default; sobreponível por RADAR_OCR_DENSIDADE)
+
+# tipo do seam de OCR: recebe o caminho do PDF, devolve texto por página ou None
+OcrBackend = Callable[[Path | str], "list[str] | None"]
 
 
-def extrair_paginas(pdf_path: Path | str) -> list[str]:
-    """Retorna o texto por página (índice 0 = página 1)."""
+def _texto_nativo(pdf_path: Path | str) -> list[str]:
+    """Texto nativo por página via pymupdf4llm (ponto de monkeypatch nos testes)."""
     import pymupdf4llm
 
     paginas_md = pymupdf4llm.to_markdown(str(pdf_path), page_chunks=True)
-    paginas = [p.get("text", "") for p in paginas_md]
+    return [p.get("text", "") for p in paginas_md]
+
+
+def _ocr_backend(modo: str) -> OcrBackend:
+    """Resolve o backend de OCR pelo modo configurado (settings.OCR_MODO).
+
+    "docling" → impl atual (_fallback_ocr); "off" → desliga (sempre None).
+    Modos desconhecidos caem em docling (comportamento atual preservado).
+    """
+    if modo == "off":
+        return lambda _p: None
+    return _fallback_ocr
+
+
+def extrair_paginas(
+    pdf_path: Path | str,
+    ocr: OcrBackend | None = None,
+) -> list[str]:
+    """Retorna o texto por página (índice 0 = página 1).
+
+    `ocr` é um seam injetável (callable (pdf_path)->list[str]|None) usado quando
+    a densidade média fica abaixo de settings.OCR_DENSIDADE_MIN. Se None,
+    resolve o backend por settings.OCR_MODO (default "docling"); o default
+    preserva 100% o comportamento anterior para os chamadores.
+    """
+    if ocr is None:
+        ocr = _ocr_backend(settings.OCR_MODO)
+
+    paginas = _texto_nativo(pdf_path)
 
     densidade = (sum(len(p) for p in paginas) / len(paginas)) if paginas else 0
-    if densidade < DENSIDADE_MINIMA:
+    if densidade < settings.OCR_DENSIDADE_MIN:
         log.warning("Densidade baixa (%.0f chars/pág) em %s — tentando OCR", densidade, pdf_path)
-        ocr = _fallback_ocr(pdf_path)
-        if ocr is not None:
-            return ocr
+        resultado = ocr(pdf_path)
+        if resultado is not None:
+            return resultado
     return paginas
 
 

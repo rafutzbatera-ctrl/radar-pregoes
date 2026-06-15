@@ -22,6 +22,13 @@ EXTRATOR_HABILITACAO = os.getenv("RADAR_EXTRATOR", "heuristico")
 CLAUDE_CLI_BIN = os.getenv("RADAR_CLAUDE_CLI", "claude")
 CLAUDE_CLI_TIMEOUT = int(os.getenv("RADAR_CLAUDE_CLI_TIMEOUT", "600"))
 
+# OCR de fallback na extração de PDF (CLAUDE.md §6.3) — opt-in e plugável.
+# "docling" (padrão; dependência opcional, ver requirements-ocr.txt), "off"
+# desliga o OCR (PDF escaneado → segue só com o texto nativo). Densidade média
+# de chars/página abaixo de OCR_DENSIDADE_MIN dispara o fallback.
+OCR_MODO = os.getenv("RADAR_OCR", "docling")
+OCR_DENSIDADE_MIN = int(os.getenv("RADAR_OCR_DENSIDADE", "200"))
+
 USER_AGENT = "RadarPregoes/0.1 (uso pessoal)"
 
 # matching (CLAUDE.md §3 — atualizado P3: conservador, 0.90)

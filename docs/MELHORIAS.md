@@ -166,7 +166,7 @@ teclado/leitor; risco de regressão visual.
 |---|---|---|---|
 | **RAG Fase 3 — declarações por template** | Gera minutas de declarações de habilitação a partir dos requisitos extraídos (acelera a montagem da proposta) | médio | RAG Fase 2 (síntese) já entregue; templates a definir |
 | **Recall do RAG (k / híbrido)** | Menos "não encontrado" legítimo — ajustar `k`, busca híbrida (lexical + vetorial) | médio | RAG indexação atual; medir com editais reais |
-| **OCR para PDFs escaneados** | Habilitação/RAG funcionam em editais imagem (docling/Tesseract no fallback de baixa densidade) | alto | módulo de extração; decidir docling vs Tesseract |
+| ~~**OCR para PDFs escaneados**~~ ✅ feito (15/06/2026) | Seam injetável de OCR no fallback de baixa densidade: `extrair_paginas(..., ocr=)` despacha por `RADAR_OCR` (`docling`/`off`); docling é **opcional** (`backend/requirements-ocr.txt`, fora do CI). Densidade via `RADAR_OCR_DENSIDADE`. Testado com OCR fake (sem instalar docling). | alto | módulo de extração; decidir docling vs Tesseract |
 | **CAPAG de estados** | Cobre licitações estaduais no risco de pagamento (hoje forte em municípios) | médio | base do Tesouro/SICONFI por estado; seed |
 | **M7 — eval do extrator** | Métrica de confiança (ragas/faithfulness) sobre 3 editais reais; valor de portfólio | médio | editais baixados; dataset de referência |
 | **Notificação de novos pregões** | Avisa o dono quando o scheduler acha pregão novo (e-mail/desktop) | baixo-médio | scheduler 2×/dia já existe; canal a escolher |
