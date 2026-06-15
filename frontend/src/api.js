@@ -437,6 +437,20 @@ export const api = {
   // só vencidas + vence_em_breve (badge/dashboard) → {total, certidoes:[...]}
   alertasCertidoes: () => req("/certidoes/alertas"),
 
+  // minha empresa — cadastro do fornecedor que preenche as minutas de
+  // declaração de habilitação (RAG Fase 3). Campos podem vir null. porte ∈
+  // {"me_epp","normal",null}. PUT envia o objeto inteiro.
+  getEmpresa: () => req("/empresa"),
+  salvarEmpresa: (dados) =>
+    req("/empresa", { method: "PUT", body: JSON.stringify(dados) }),
+
+  // declarações de habilitação por pregão (minutas renderizadas com os dados
+  // da empresa). Lazy: a aba Declarações chama na abertura. Devolve
+  // {declaracoes:[{id,titulo,categoria,fundamento_legal,texto_renderizado,
+  // completo,faltando:[campos],exigido_no_edital,aviso}], aviso}. Quando
+  // completo===false, faltam dados da empresa (lista faltando).
+  declaracoesPregao: (pregaoId) => req(`/pregoes/${pregaoId}/declaracoes`),
+
   // config
   lerConfig: () => req("/config"),
   atualizarConfig: (corpo) =>

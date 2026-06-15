@@ -463,6 +463,14 @@ export const Ico = {
       <path d="M8 6.5v3.5M8 12h.01"></path>
     </svg>
   ),
+  // prédio/empresa — usado no NAV "Minha empresa"
+  predio: (
+    <svg className="nav-ico" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M3 15.5h12"></path>
+      <path d="M4.5 15.5V4c0-.8.7-1.5 1.5-1.5h6c.8 0 1.5.7 1.5 1.5v11.5"></path>
+      <path d="M7 5.5h1M10 5.5h1M7 8h1M10 8h1M7 10.5h1M10 10.5h1"></path>
+    </svg>
+  ),
   // certidão: documento com selo (roseta) — usado no NAV "Minhas certidões"
   selo: (
     <svg className="nav-ico" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">

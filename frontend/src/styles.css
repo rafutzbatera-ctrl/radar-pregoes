@@ -2613,3 +2613,53 @@ a.arq-link:hover { border-color: var(--silk); box-shadow: 0 4px 12px -6px rgba(0
   padding: 1px 6px;
 }
 .result-desagio { color: var(--sinal); font-weight: 600; }
+
+/* ==== Minha empresa (cadastro do fornecedor — minutas de declaração) ==== */
+.emp-label { display: flex; flex-direction: column; gap: 5px; flex: 1 1 0; min-width: 0; }
+.emp-label > .silk { font-size: 11px; }
+.emp-linha { display: flex; gap: 12px; flex-wrap: wrap; }
+@media (max-width: 640px) { .emp-linha { flex-direction: column; } }
+
+/* ==== Declarações de habilitação (aba do pregão — RAG Fase 3) ==== */
+.decl-aviso {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: var(--fundo-2); border: 1px solid var(--linha);
+  border-radius: 8px; padding: 10px 12px; margin-bottom: 14px;
+  font-size: 12.5px; color: var(--tinta-2);
+}
+.decl-card {
+  border: 1px solid var(--linha); border-radius: 10px;
+  padding: 14px 16px; margin-bottom: 12px; background: var(--fundo-2);
+}
+.decl-card-cab { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.decl-titulo { font-weight: 600; font-size: 14px; color: var(--tinta); }
+.decl-fundamento { font-size: 11.5px; color: var(--tinta-2); }
+.decl-chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.decl-chip {
+  font-size: 10.5px; font-family: var(--font-mono);
+  border-radius: 6px; padding: 1px 7px;
+  border: 1px solid rgba(43, 217, 127, 0.3); color: var(--sinal);
+  background: var(--fundo);
+}
+.decl-chip-cond { color: var(--pico); border-color: rgba(245, 191, 79, 0.35); }
+.decl-falta {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: rgba(245, 191, 79, 0.08);
+  border: 1px solid rgba(245, 191, 79, 0.3);
+  border-radius: 8px; padding: 9px 11px; margin: 8px 0;
+  font-size: 12px; color: var(--tinta);
+}
+.decl-falta a { color: var(--pico); font-weight: 600; text-decoration: underline; cursor: pointer; }
+.decl-texto {
+  white-space: pre-wrap; font-family: var(--font-mono);
+  font-size: 12px; line-height: 1.55; color: var(--tinta);
+  background: var(--fundo); border: 1px solid var(--linha);
+  border-radius: 8px; padding: 12px; margin-top: 8px; overflow-x: auto;
+}
+.decl-copiar {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 8px;
+  background: var(--fundo); color: var(--tinta);
+  border: 1px solid var(--linha); border-radius: 7px;
+  padding: 6px 12px; font-size: 12px; cursor: pointer;
+}
+.decl-copiar:hover { border-color: var(--sinal); color: var(--sinal); }

@@ -7,6 +7,7 @@ import { MotionCtx, Ico } from "./helpers.jsx";
 import { FindScreen, BuscasScreen, CatalogScreen, EstadoCarregando, EstadoErro } from "./FindScreen.jsx";
 import AnalysisScreen from "./AnalysisScreen.jsx";
 import CertidoesScreen from "./CertidoesScreen.jsx";
+import EmpresaScreen from "./EmpresaScreen.jsx";
 
 const LandingPage = React.lazy(() => import("./landing/LandingPage.jsx"));
 
@@ -16,6 +17,7 @@ const NAV = [
   { id: "buscas", rotulo: "Buscas salvas", ico: "raio" },
   { id: "catalogo", rotulo: "Meu catálogo (custos)", ico: "fader" },
   { id: "certidoes", rotulo: "Minhas certidões", ico: "selo" },
+  { id: "empresa", rotulo: "Minha empresa", ico: "predio" },
 ];
 
 const CONFIG_PADRAO = { regime_tributario: "simples", uf_origem: "" };
@@ -608,6 +610,9 @@ export default function App() {
       {tela.nome === "certidoes" && (
         <CertidoesScreen certidoes={certidoes} erro={erros.certidoes} recarregar={carregarTudo}
           criar={criarCertidao} atualizar={atualizarCertidao} remover={removerCertidao} />
+      )}
+      {tela.nome === "empresa" && (
+        <EmpresaScreen avisar={avisar} />
       )}
       {tela.nome === "analise" && pregaoAtivo && (
         <AnalysisScreen
