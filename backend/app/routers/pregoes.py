@@ -63,6 +63,35 @@ def _resumo_pregao(con: sqlite3.Connection, p: sqlite3.Row) -> dict:
     return d
 
 
+def _montar_resumo(p: sqlite3.Row, contagens, hab, arquivos: list) -> dict:
+    """Monta o resumo de UM pregão a partir de contagens/arquivos JÁ buscados.
+
+    É exatamente a parte "de montagem" do _resumo_pregao (mesmas chaves e
+    valores), só que sem as 3 queries por pregão — a listagem injeta os mapas
+    pré-agregados (GROUP BY). `contagens` e `hab` podem ser None (pregão sem
+    itens/habilitação), tratados como zeros — idêntico ao COUNT(*)=0 do SQL.
+    `arquivos` é a lista (possivelmente vazia) de dicts já prontos.
+    """
+    d = dict(p)
+    json_busca = d.pop("json_busca", None)
+    d["json_busca"] = json.loads(json_busca) if json_busca else None
+    itens_total = (contagens["total"] if contagens else 0) or 0
+    confirmados = (contagens["confirmados"] if contagens else 0) or 0
+    sugeridos = (contagens["sugeridos"] if contagens else 0) or 0
+    valor_itens = contagens["valor_itens"] if contagens else None
+    d["itens_total"] = itens_total
+    d["itens_confirmados"] = confirmados
+    d["itens_sugeridos"] = sugeridos
+    d["valor_itens"] = valor_itens
+    d["cobertura"] = (confirmados / itens_total) if itens_total else 0
+    d["habilitacao_total"] = (hab["total"] if hab else 0) or 0
+    d["habilitacao_pendentes"] = (hab["pendentes"] if hab else 0) or 0
+    d["habilitacao_nao_verificadas"] = (hab["nao_verificadas"] if hab else 0) or 0
+    d["arquivos"] = arquivos
+    d["sincronizado"] = bool(d.get("sincronizado_em"))
+    return d
+
+
 @router.get("")
 def listar(novos: bool | None = None, uf: str | None = None,
            salvos: bool | None = None,
@@ -83,9 +112,47 @@ def listar(novos: bool | None = None, uf: str | None = None,
     # ordem base recente = descoberto_em DESC (vem do SQL); as demais reordenam
     # em Python sobre os resumos (listas pequenas, valor efetivo já computado).
     sql += " ORDER BY descoberto_em DESC"
+    pregoes = con.execute(sql, params).fetchall()
+
+    # Pré-agregação (evita N+1): em vez de 3 SELECTs por pregão, montamos 3
+    # mapas com GROUP BY restritos aos ids desta listagem. Total de queries:
+    # 1 (pregões) + 3 (itens/habilitação/arquivos) = 4, independe de N.
+    ids = [p["id"] for p in pregoes]
+    cont_map: dict = {}
+    hab_map: dict = {}
+    arq_map: dict = {}
+    if ids:
+        ph = ",".join("?" for _ in ids)
+        for row in con.execute(
+            f"""SELECT pregao_id,
+                       COUNT(*) total,
+                       SUM(match_confirmado) confirmados,
+                       SUM(CASE WHEN produto_id IS NOT NULL AND match_confirmado=0
+                           THEN 1 ELSE 0 END) sugeridos,
+                       SUM(valor_total) valor_itens
+                FROM itens_pregao WHERE pregao_id IN ({ph})
+                GROUP BY pregao_id""", ids).fetchall():
+            cont_map[row["pregao_id"]] = row
+        for row in con.execute(
+            f"""SELECT pregao_id,
+                       COUNT(*) total,
+                       SUM(CASE WHEN status_usuario!='ok' THEN 1 ELSE 0 END) pendentes,
+                       SUM(CASE WHEN verificada=0 THEN 1 ELSE 0 END) nao_verificadas
+                FROM habilitacao WHERE pregao_id IN ({ph})
+                GROUP BY pregao_id""", ids).fetchall():
+            hab_map[row["pregao_id"]] = row
+        for a in con.execute(
+            f"""SELECT id, titulo, tipo, url, caminho_local, baixado_em, pregao_id
+                FROM arquivos WHERE pregao_id IN ({ph})
+                ORDER BY id""", ids).fetchall():
+            ad = dict(a)
+            pid = ad.pop("pregao_id")
+            arq_map.setdefault(pid, []).append(ad)
+
     itens = []
-    for p in con.execute(sql, params).fetchall():
-        d = _resumo_pregao(con, p)
+    for p in pregoes:
+        d = _montar_resumo(p, cont_map.get(p["id"]), hab_map.get(p["id"]),
+                           arq_map.get(p["id"], []))
         # valor efetivo para filtro/ordenação (valor_global ▸ Σ itens)
         ve = d["valor_global"] if d.get("valor_global") is not None else d.get("valor_itens")
         # faixa de valor inclusive; pregão sem valor efetivo só passa se não há
