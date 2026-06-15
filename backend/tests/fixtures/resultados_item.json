@@ -1,0 +1,26 @@
+[
+  {
+    "situacaoCompraItemResultadoId": 1,
+    "indicadorSubcontratacao": false,
+    "dataInclusao": "2026-06-08T09:37:20",
+    "numeroItem": 1,
+    "niFornecedor": "34318729000122",
+    "dataCancelamento": null,
+    "dataAtualizacao": "2026-06-08T09:37:20",
+    "tipoPessoa": "PJ",
+    "nomeRazaoSocialFornecedor": "MEDCOM - DISTRIBUIDORA HOSPITALAR LTDA",
+    "valorTotalHomologado": 4410.0000,
+    "reservaRemanescente": { "codigo": 1, "nome": "Não se aplica" },
+    "codigoPais": "BRA",
+    "porteFornecedorId": 3,
+    "quantidadeHomologada": 7.00000,
+    "valorUnitarioHomologado": 630.0000,
+    "percentualDesconto": 0.0000,
+    "ordemClassificacaoSrp": 1,
+    "dataResultado": "2026-05-21",
+    "motivoCancelamento": null,
+    "numeroControlePNCPCompra": "92465228000175-1-000069/2026",
+    "aplicacaoMargemPreferencia": false,
+    "aplicacaoBeneficioMeEpp": false
+  }
+]

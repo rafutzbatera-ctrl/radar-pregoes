@@ -34,7 +34,7 @@ class ClientePNCPFake:
     def __init__(self):
         self.chamadas = {
             "buscar": 0, "itens": 0, "arquivos": 0, "baixar": 0,
-            "consulta": 0, "detalhe": 0, "historico": 0,
+            "consulta": 0, "detalhe": 0, "historico": 0, "resultados": 0,
         }
         # captura dos kwargs de cada chamada a buscar (para testes de repasse)
         self.buscas = []
@@ -81,6 +81,14 @@ class ClientePNCPFake:
         self.chamadas["historico"] += 1
         # fixture pequena: 2 marcos + 3 entradas de "sincroniza" (ruído)
         return carregar_fixture("historico_amostra.json")
+
+    def resultados_item(self, cnpj, ano, seq, numero_item, usar_cache=True):
+        self.chamadas["resultados"] += 1
+        # item 1 tem resultado (fixture real); demais itens ainda sem resultado
+        # (array vazio) — permite testar item COM e SEM homologação.
+        if int(numero_item) == 1:
+            return carregar_fixture("resultados_item.json")
+        return []
 
     def baixar_arquivo(self, url, destino_dir: Path):
         self.chamadas["baixar"] += 1

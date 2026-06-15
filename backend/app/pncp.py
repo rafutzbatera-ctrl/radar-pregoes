@@ -281,6 +281,33 @@ class ClientePNCP:
             url, {"pagina": 1, "tamanhoPagina": 500}, usar_cache, pista="interativa"
         ) or []
 
+    def resultados_item(self, cnpj: str, ano: int, seq: int, numero_item: int,
+                        usar_cache: bool = True) -> list:
+        """Resultados (vencedor + valor homologado) de UM item do pregão.
+
+        `GET /pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{numeroItem}/resultados`
+        → ARRAY. Campos por resultado (CLAUDE.md / fixture real): numeroItem,
+        niFornecedor (CNPJ vencedor), nomeRazaoSocialFornecedor,
+        valorUnitarioHomologado, quantidadeHomologada, valorTotalHomologado,
+        dataResultado, ordemClassificacaoSrp (1=vencedor), dataCancelamento
+        (null=válido; != null → cancelado, IGNORAR), porteFornecedorId
+        (1 ME · 2 EPP · 3 Demais), tipoPessoa.
+
+        Edital ainda aberto → array vazio (princípio nº 1: sem resultado
+        publicado NÃO vira chute). Pista PESADA (1,0s): roda item a item em
+        loop de inteligência de mercado — fica na fila lenta para não atrapalhar
+        a paginação interativa do usuário.
+        """
+        cnpj, ano, seq = _validar_identidade(cnpj, ano, seq)
+        # numeroItem também vira segmento da URL — exigir inteiro (bloqueia
+        # path-traversal/SSRF pelo mesmo princípio de _validar_identidade).
+        try:
+            num_i = int(numero_item)
+        except (TypeError, ValueError):
+            raise ValueError(f"numero_item inválido: {numero_item!r}")
+        url = f"{BASE_API}/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num_i}/resultados"
+        return self._get_json(url, {}, usar_cache, pista="pesada") or []
+
     def baixar_arquivo(self, url: str, destino_dir: Path) -> Path:
         """Baixa o binário de um arquivo, respeitando o nome do content-disposition.
 

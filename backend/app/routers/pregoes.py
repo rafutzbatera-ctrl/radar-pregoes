@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from .. import pncp
 from ..deps import get_db
 from ..services import (analise, capag, fiscal, historico, relatorio,
-                        sincronizacao)
+                        resultados, sincronizacao)
 
 router = APIRouter(prefix="/pregoes", tags=["pregoes"])
 
@@ -413,6 +413,24 @@ def historico_pregao(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
     except RuntimeError as exc:
         raise HTTPException(503, str(exc))
     return {"eventos": historico.filtrar_eventos(cru)}
+
+
+@router.get("/{pregao_id}/resultados")
+def resultados_pregao(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
+    """Resultados do pregão (vencedor + deságio REAL por item) — inteligência
+    de mercado por edital.
+
+    Lazy: bate no PNCP ITEM A ITEM (pista pesada, cache 6h) — PODE SER LENTO em
+    pregões com muitos itens. Edital ainda aberto → {homologado: False}
+    (princípio nº 1: sem resultado publicado não vira chute). 404 se o pregão
+    não existe; 503 se o PNCP está indisponível.
+    """
+    if con.execute("SELECT 1 FROM pregoes WHERE id=?", (pregao_id,)).fetchone() is None:
+        raise HTTPException(404, "Pregão não encontrado")
+    try:
+        return resultados.resultados_do_pregao(con, pregao_id)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
 
 
 @router.get("/{pregao_id}/relatorio.pdf")
