@@ -53,7 +53,9 @@
    temas (sidebar, .aviso, hero) usam --profundo e seguem dark aqui também. */
 [data-tema="claro"] {
   --aluminio: #E4E7E1; --painel: #FAFBF8; --tinta: #171C1A; --tinta-2: #3C443F;
-  --silk: #69716C; --linha: #CDD2CA;
+  --silk: #5C635E; --linha: #CDD2CA;  /* escurecido p/ AA: o original #69716C
+                        dava ~4.0:1 sobre --aluminio claro (#E4E7E1) — falhava;
+                        #5C635E dá ~4.9:1 sobre aluminio e ~5.9:1 sobre painel */
   --sinal: #0E7C44;  /* verde do claro levemente mais fundo que o original
                         #149357 → branco sobre ele dá ~5.5:1 (AA) */
   --pico: #9A6B03; --clip: #B23A2E;  /* âmbar/clip escurecidos p/ AA sobre claro */
@@ -1863,6 +1865,16 @@ body {
   width: 7px; height: 7px; border-radius: 50%; flex: none;
   background: var(--toast-cor); box-shadow: 0 0 5px var(--toast-cor);
 }
+/* botão fechar (×) do toast — cor EXPLÍCITA (botão não herda cor no tema) */
+.toast-fechar {
+  flex: none; margin-left: 4px; padding: 2px; line-height: 0;
+  background: none; border: none; cursor: pointer;
+  color: var(--silk); display: inline-flex; align-items: center;
+  border-radius: 4px;
+}
+.toast-fechar:hover { color: var(--tinta); }
+.toast-fechar:focus-visible { outline: 2px solid var(--sinal); outline-offset: 1px; }
+.toast-fechar svg { width: 14px; height: 14px; }
 
 /* status Ativa/Pausada agora é um toggle real (botão) */
 button.busca-card-status { border: none; background: none; padding: 0; cursor: pointer; }

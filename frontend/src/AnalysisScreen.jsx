@@ -42,6 +42,7 @@ export default function AnalysisScreen({
   const [aba, setAba] = React.useState("itens");
   const [itemAberto, setItemAberto] = React.useState(null);
   const linhaOrigem = React.useRef(null);
+  const tablistRef = React.useRef(null);
 
   const fiscalItens = a.itens.map((it) => ({ it, f: it.produto || it.ncmPncp ? fiscalDoItem(it, pregao, config) : null }));
   const prontos = fiscalItens.filter((x) => x.f && x.f.pronto).length;
@@ -253,14 +254,34 @@ export default function AnalysisScreen({
           : <EstadoCarregando entrada={entrada} />
       ) : (
         <React.Fragment>
-          {/* ABAS */}
-          <motion.div className="abas" variants={entrada} role="tablist" aria-label="Seções da análise">
+          {/* ABAS — padrão ARIA tablist + roving tabindex (←/→/Home/End) */}
+          <motion.div
+            className="abas" variants={entrada} role="tablist" aria-label="Seções da análise"
+            ref={tablistRef}
+            onKeyDown={(e) => {
+              const i = ABAS.findIndex((x) => x.id === aba);
+              if (i < 0) return;
+              let prox = null;
+              if (e.key === "ArrowRight") prox = (i + 1) % ABAS.length;
+              else if (e.key === "ArrowLeft") prox = (i - 1 + ABAS.length) % ABAS.length;
+              else if (e.key === "Home") prox = 0;
+              else if (e.key === "End") prox = ABAS.length - 1;
+              else return;
+              e.preventDefault();
+              setAba(ABAS[prox].id);
+              const el = tablistRef.current && tablistRef.current.querySelector("#tab-" + ABAS[prox].id);
+              if (el) el.focus();
+            }}
+          >
             {ABAS.map((ab) => (
               <button
                 key={ab.id}
                 type="button"
                 role="tab"
+                id={"tab-" + ab.id}
                 aria-selected={aba === ab.id}
+                aria-controls={"panel-" + ab.id}
+                tabIndex={aba === ab.id ? 0 : -1}
                 className={"aba" + (aba === ab.id ? " ativa" : "")}
                 onClick={() => setAba(ab.id)}
               >
@@ -270,7 +291,10 @@ export default function AnalysisScreen({
             ))}
           </motion.div>
 
-          <motion.div variants={entrada} key={aba} className="aba-painel">
+          <motion.div
+            variants={entrada} key={aba} className="aba-painel"
+            role="tabpanel" id={"panel-" + aba} aria-labelledby={"tab-" + aba} tabIndex={0}
+          >
             {aba === "itens" && (
               <ItensTab a={a} pregao={pregao} abrir={abrirItem} setCusto={setCusto} confirmarCusto={confirmarCusto}
                 limparCusto={limparCusto} definirMargemAlvo={definirMargemAlvo} config={config} desagio={desagio}

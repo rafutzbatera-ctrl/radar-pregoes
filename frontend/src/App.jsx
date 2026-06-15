@@ -58,11 +58,20 @@ export default function App() {
      "aviso" (âmbar/--pico, padrão). Default mantém o comportamento original. */
   const [aviso, setAviso] = React.useState(null); // { texto, tipo } | null
   const avisoTimer = React.useRef(null);
-  const avisar = React.useCallback((texto, tipo = "aviso") => {
-    setAviso({ texto, tipo });
+  const fecharAviso = React.useCallback(() => {
+    clearTimeout(avisoTimer.current);
+    setAviso(null);
+  }, []);
+  // (re)agenda o auto-dismiss; usado na criação e no fim do hover (a11y: a
+  // pessoa pausa o timer ao passar o mouse para terminar de ler)
+  const agendarFecharAviso = React.useCallback(() => {
     clearTimeout(avisoTimer.current);
     avisoTimer.current = setTimeout(() => setAviso(null), 5500);
   }, []);
+  const avisar = React.useCallback((texto, tipo = "aviso") => {
+    setAviso({ texto, tipo });
+    agendarFecharAviso();
+  }, [agendarFecharAviso]);
 
   /* ---------- carga inicial (paralela) + "Tentar de novo" ---------- */
   const carregarTudo = React.useCallback(() => {
@@ -678,9 +687,19 @@ export default function App() {
             className={"toast toast-" + aviso.tipo}
             role={aviso.tipo === "erro" ? "alert" : "status"}
             aria-live={aviso.tipo === "erro" ? "assertive" : "polite"}
+            onMouseEnter={() => clearTimeout(avisoTimer.current)}
+            onMouseLeave={agendarFecharAviso}
           >
             <span className="aviso-led" aria-hidden="true"></span>
             <span>{aviso.texto}</span>
+            <button
+              type="button"
+              className="toast-fechar"
+              aria-label="Fechar aviso"
+              onClick={fecharAviso}
+            >
+              {Ico.fechar}
+            </button>
           </div>
         )}
       </div>
