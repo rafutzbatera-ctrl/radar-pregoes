@@ -10,6 +10,7 @@ cache 6h, princípio 6). Duas fontes:
   editais recebendo proposta — TODO registro já traz `valorTotalEstimado`, então
   os valores oficiais aparecem embutidos em todos os cartões instantaneamente.
 """
+import logging
 import sqlite3
 import unicodedata
 from datetime import date, timedelta
@@ -22,6 +23,8 @@ from .. import pncp
 from ..deps import get_db
 from ..services import avaliacao, classificador, descoberta
 from .pregoes import _resumo_pregao
+
+log = logging.getLogger("radar.descobrir")
 
 router = APIRouter(prefix="/descobrir", tags=["descobrir"])
 
@@ -170,6 +173,7 @@ def descobrir(
     modalidades: str = "",
     esferas: str = "",
     so_bens: bool = False,
+    rerank: bool = False,
     pagina: int = Query(1, ge=1),
     con: sqlite3.Connection = Depends(get_db),
 ):
@@ -202,6 +206,17 @@ def descobrir(
     - `total_exato`: true ⇔ uma única consulta E sem exclusão E sem so_bens
       (caso contrário a soma dos totais pode ter sobreposição ou o pós-filtro
       reduzir; a UI sinaliza "até N").
+    - `rerank` (opt-in, OFF por padrão): RE-ORDENA APENAS POSICIONALMENTE a
+      página corrente por similaridade local (e5) dos cartões aos termos de
+      busca. NÃO altera nenhum valor/data/total oficial, NÃO muda quais hits
+      vêm nem a paginação (princípio 3) — só a ordem de exibição. Aplica-se
+      SÓ na fonte "busca" (com termo) E quando `ordenacao` está ausente/é
+      "relevancia" (a escolha explícita de data/-data é respeitada; o re-rank
+      é uma alternativa ao "relevancia"). Degradação graciosa: se o e5 falhar,
+      devolve a ordem original do PNCP com `rerank_aplicado=false` +
+      `rerank_motivo`. Envelope ganha `rerank_aplicado` (bool) e, quando
+      `false`, `rerank_motivo` ("desligado"|"sem_termo"|"ordenacao_explicita"|
+      "e5_indisponivel"); cada cartão re-rankeado ganha `rerank_score` (float).
     """
     if len(q) > MAX_TERMOS:
         raise HTTPException(422, f"máx. {MAX_TERMOS} termos de busca")
@@ -252,7 +267,11 @@ def descobrir(
         ).fetchone() if nc else None
         itens.append(_adaptar(hit, local is not None, local["id"] if local else None))
 
-    return {
+    rerank_aplicado, rerank_motivo = _aplicar_rerank(
+        itens, rerank, fonte, tem_q, termos, ordenacao,
+    )
+
+    envelope = {
         # exclusão ou so_bens → o total bruto superestima (pós-filtro client-side)
         "total": total,
         "total_exato": total_exato and not excl and not so_bens,
@@ -260,7 +279,60 @@ def descobrir(
         "tamanho": TAMANHO,
         "fonte": fonte,
         "itens": itens,
+        "rerank_aplicado": rerank_aplicado,
     }
+    if not rerank_aplicado and rerank_motivo:
+        envelope["rerank_motivo"] = rerank_motivo
+    return envelope
+
+
+def _aplicar_rerank(itens, rerank, fonte, tem_q, termos, ordenacao):
+    """Re-rank POSICIONAL local (e5) da página corrente, in-place em `itens`.
+
+    Reordena APENAS a ordem de exibição dos cartões já montados/filtrados — não
+    toca valor/data/total oficial nem a paginação (princípio 3). Retorna
+    (aplicado: bool, motivo: str | None). Só roda na fonte "busca" com termo e
+    quando o usuário NÃO pediu ordenação explícita por data (ordenacao ausente/
+    default "-data" não dispara; "relevancia" é o gatilho — o re-rank substitui
+    o "relevancia" do PNCP por similaridade local). Degrada gracioso: e5 ausente
+    ou qualquer erro de embed → ordem original do PNCP + motivo "e5_indisponivel".
+    """
+    if not rerank:
+        return False, "desligado"
+    if fonte != "busca" or not tem_q:
+        return False, "sem_termo"
+    # respeita a escolha explícita do usuário por data; re-rank só substitui o
+    # "relevancia" (default "-data" do endpoint NÃO é uma escolha de relevância).
+    if ordenacao != "relevancia":
+        return False, "ordenacao_explicita"
+    if not itens:
+        return True, None
+
+    try:
+        import numpy as np
+
+        from ..services import matching
+
+        consulta = "query: " + " ".join(t for t in termos if t)
+        passagens = [
+            "passage: " + " ".join(filter(None, (
+                it.get("titulo"), it.get("descricao"),
+            )))
+            for it in itens
+        ]
+        vet_q = np.asarray(matching.embed_padrao([consulta]), dtype=float)[0]
+        vet_p = np.asarray(matching.embed_padrao(passagens), dtype=float)
+        # vetores e5 já normalizados → produto escalar = cosseno
+        scores = vet_p @ vet_q
+    except Exception:  # e5 indisponível / erro de embed → NÃO derruba a busca
+        log.warning("re-rank local indisponível; mantendo ordem do PNCP", exc_info=True)
+        return False, "e5_indisponivel"
+
+    for it, s in zip(itens, scores):
+        it["rerank_score"] = float(s)
+    # sort estável por score desc (empate preserva a ordem original do PNCP)
+    itens.sort(key=lambda it: it["rerank_score"], reverse=True)
+    return True, None
 
 
 def _merge_round_robin(listas: list[list[dict]]) -> list[dict]:

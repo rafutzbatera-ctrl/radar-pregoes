@@ -4,6 +4,7 @@ Usa o cliente_fake (fixture real de busca) monkeypatchado em pncp.cliente,
 sem bater na API.
 """
 from app import pncp as pncp_mod
+from app.services import matching as matching_mod
 
 
 def _patch_pncp(monkeypatch, cliente):
@@ -347,6 +348,119 @@ def test_so_bens_filtra_tambem_na_busca_textual(client, monkeypatch):
     _patch_pncp(monkeypatch, cli)
     ncs = [i["numero_controle"] for i in client.get("/descobrir?q=x&so_bens=true").json()["itens"]]
     assert ncs == ["BEM"]
+
+
+# --------- re-rank LOCAL opcional (e5) da página corrente ---------
+
+def _fake_embed_por_palavra(textos):
+    """Embed determinístico 2D: o eixo escolhido depende de uma palavra-chave no
+    texto. Vetores unitários → produto escalar = cosseno. "microfone" aponta p/
+    o eixo 0, "cadeira" p/ o eixo 1; a query "microfone" casa 1.0 com microfone
+    e 0.0 com cadeira (ordena microfone acima)."""
+    import numpy as np
+    vets = []
+    for t in textos:
+        low = t.lower()
+        if "microfone" in low:
+            vets.append([1.0, 0.0])
+        elif "cadeira" in low:
+            vets.append([0.0, 1.0])
+        else:
+            vets.append([0.7071, 0.7071])
+    return np.asarray(vets, dtype=float)
+
+
+def test_rerank_reordena_por_similaridade(client, monkeypatch):
+    # PNCP devolve cadeira ANTES de microfone; com rerank=true e termo
+    # "microfone" o microfone deve subir (similaridade local), sem mudar quais
+    # hits vêm nem o total.
+    cli = ClienteCapturador(por_termo={"microfone": [
+        _hit("CADEIRA", title="Aquisição de cadeiras", description="mobiliário"),
+        _hit("MIC", title="Aquisição de microfone", description="áudio"),
+    ]}, total_por_termo=2)
+    _patch_pncp(monkeypatch, cli)
+    monkeypatch.setattr(matching_mod, "embed_padrao", _fake_embed_por_palavra)
+    r = client.get("/descobrir?q=microfone&ordenacao=relevancia&rerank=true")
+    assert r.status_code == 200
+    corpo = r.json()
+    assert corpo["rerank_aplicado"] is True
+    ncs = [i["numero_controle"] for i in corpo["itens"]]
+    assert ncs == ["MIC", "CADEIRA"]          # microfone subiu
+    assert corpo["total"] == 2                # total oficial intacto
+
+
+def test_rerank_anexa_score_e_flag(client, monkeypatch):
+    cli = ClienteCapturador(por_termo={"microfone": [
+        _hit("MIC", title="microfone", description="áudio"),
+        _hit("CAD", title="cadeira", description="mobiliário"),
+    ]}, total_por_termo=2)
+    _patch_pncp(monkeypatch, cli)
+    monkeypatch.setattr(matching_mod, "embed_padrao", _fake_embed_por_palavra)
+    corpo = client.get("/descobrir?q=microfone&ordenacao=relevancia&rerank=true").json()
+    assert corpo["rerank_aplicado"] is True
+    assert "rerank_motivo" not in corpo
+    for it in corpo["itens"]:
+        assert "rerank_score" in it
+        assert isinstance(it["rerank_score"], float)
+    # o microfone (score ~1.0) acima da cadeira (~0.0)
+    assert corpo["itens"][0]["numero_controle"] == "MIC"
+    assert corpo["itens"][0]["rerank_score"] > corpo["itens"][1]["rerank_score"]
+
+
+def test_rerank_e5_indisponivel_degrada_gracioso(client, monkeypatch):
+    # embed lança → ordem ORIGINAL do PNCP, status 200, rerank_aplicado=false + motivo
+    cli = ClienteCapturador(por_termo={"microfone": [
+        _hit("A", title="cadeira"),
+        _hit("B", title="microfone"),
+    ]}, total_por_termo=2)
+    _patch_pncp(monkeypatch, cli)
+
+    def _boom(textos):
+        raise RuntimeError("e5 não carregou")
+
+    monkeypatch.setattr(matching_mod, "embed_padrao", _boom)
+    r = client.get("/descobrir?q=microfone&ordenacao=relevancia&rerank=true")
+    assert r.status_code == 200
+    corpo = r.json()
+    assert corpo["rerank_aplicado"] is False
+    assert corpo["rerank_motivo"] == "e5_indisponivel"
+    ncs = [i["numero_controle"] for i in corpo["itens"]]
+    assert ncs == ["A", "B"]                  # ordem original preservada
+    assert all("rerank_score" not in i for i in corpo["itens"])
+
+
+def test_rerank_off_mantem_ordem_e_sem_score(client, monkeypatch):
+    cli = ClienteCapturador(por_termo={"microfone": [
+        _hit("A", title="cadeira"),
+        _hit("B", title="microfone"),
+    ]}, total_por_termo=2)
+    _patch_pncp(monkeypatch, cli)
+    # sem rerank → não chama o e5; ordem intacta, sem score
+    corpo = client.get("/descobrir?q=microfone&ordenacao=relevancia").json()
+    assert corpo["rerank_aplicado"] is False
+    assert corpo["rerank_motivo"] == "desligado"
+    ncs = [i["numero_controle"] for i in corpo["itens"]]
+    assert ncs == ["A", "B"]
+    assert all("rerank_score" not in i for i in corpo["itens"])
+
+
+def test_rerank_ignorado_quando_ordenacao_por_data(client, monkeypatch):
+    # usuário escolheu ordenacao=-data (default) → re-rank NÃO aplica (respeita escolha)
+    cli = ClienteCapturador(por_termo={"x": [_hit("A"), _hit("B")]}, total_por_termo=2)
+    _patch_pncp(monkeypatch, cli)
+    corpo = client.get("/descobrir?q=x&rerank=true").json()
+    assert corpo["rerank_aplicado"] is False
+    assert corpo["rerank_motivo"] == "ordenacao_explicita"
+
+
+def test_rerank_ignorado_sem_termo_na_fonte_consulta(client, monkeypatch):
+    # sem termo → fonte "consulta"/bulk; re-rank não toca essa fonte
+    cli = ClienteBulkCapturador([_reg("BEM", "Aquisição de cadeiras")])
+    _patch_pncp(monkeypatch, cli)
+    corpo = client.get("/descobrir?rerank=true&ordenacao=relevancia").json()
+    assert corpo["fonte"] == "consulta"
+    assert corpo["rerank_aplicado"] is False
+    assert corpo["rerank_motivo"] == "sem_termo"
 
 
 # --------- hit malformado: 422 (não 500) e segurança cnpj/ano/seq ---------
