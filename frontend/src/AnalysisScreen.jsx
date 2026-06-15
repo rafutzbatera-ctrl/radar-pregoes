@@ -1151,12 +1151,16 @@ function LinhaItem({ item, variants, ativa, abrir, setCusto, confirmarCusto, lim
         ref={ref}
         className={"tbl-row mark-" + cls + (ativa ? " ativa" : "") + (sigiloso ? " fora" : "")}
         role="row"
-        tabIndex={0}
-        aria-label={"Item " + item.n + " — " + item.nome}
-        onClick={(e) => { if (e.target.closest("input,button,select")) return; podeAbrir(); }}
-        onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !e.target.closest("input,button,select")) { e.preventDefault(); podeAbrir(); } }}
       >
-        <div className="c-num" role="cell">{String(item.n).padStart(2, "0")}</div>
+        <div className="c-num" role="cell">
+          {/* gatilho real de abertura: botão nativo (Tab/Enter/Espaço de
+              graça), estilizado como overlay transparente cobrindo a linha;
+              os controles aninhados ficam acima e param a propagação */}
+          <button type="button" className="tbl-row-abrir"
+            aria-label={"Item " + item.n + " — " + item.nome}
+            onClick={podeAbrir}></button>
+          {String(item.n).padStart(2, "0")}
+        </div>
         <div className="c-desc" role="cell">
           <div className="d-nome">{item.nome}</div>
           <div className="d-spec">{item.spec}</div>

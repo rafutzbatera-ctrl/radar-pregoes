@@ -664,6 +664,24 @@ body {
 .tbl-row.fora .c-desc .d-nome { color: var(--silk); }
 
 .c-num { font-family: var(--font-mono); font-size: 12px; color: var(--silk); text-align: left; }
+/* a11y: gatilho real de abertura da linha — botão nativo (foco/Enter/Espaço
+   de graça) estilizado como overlay transparente preenchendo a linha inteira
+   (.tbl-row é position:relative). Fica no fundo do empilhamento; os controles
+   aninhados (inputs/botões) ficam acima via .tbl-row > [role=cell] { z-index } */
+.tbl-row-abrir {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  color: inherit;
+}
+.tbl-row.fora .tbl-row-abrir { cursor: default; }
+/* controles e conteúdo das células acima do overlay clicável */
+.tbl-row > [role="cell"] { position: relative; z-index: 1; }
 .c-desc { text-align: left; min-width: 0; }
 .d-nome { font-weight: 600; font-size: 13.5px; line-height: 1.25; }
 .d-spec {
