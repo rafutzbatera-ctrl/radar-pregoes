@@ -317,6 +317,44 @@ MIGRACOES = [
     """
     ALTER TABLE pregoes ADD COLUMN descartado INTEGER NOT NULL DEFAULT 0;
     """,
+    # v15 — inteligência de mercado: 1 linha por item HOMOLOGADO, denormalizada
+    # (orgao_nome/uf/cnpj/ano/seq copiados do pregão) para AGREGAÇÃO rápida e
+    # para SOBREVIVER mesmo se o pregão for descartado/removido — é um registro
+    # histórico do MERCADO (quem venceu, por quanto, com qual deságio real), não
+    # um cache derivável da linha do pregão. Fonte: services/resultados.py
+    # (resultados_do_pregao → cliente.resultados_item, §4). Só itens com
+    # homologado=True entram (princípio nº 1: item sem resultado não vira linha).
+    # ncm: resolvido de itens_pregao(pregao_id, numero) na coleta; NULL se ausente
+    # (NUNCA inventado). UNIQUE(pregao_id, numero_item) → upsert idempotente.
+    # Índices em vencedor_cnpj (quem concorre) e ncm (que produto/mercado) para
+    # as agregações futuras de inteligência (Dores #8/#9).
+    """
+    CREATE TABLE resultados_itens(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pregao_id INTEGER,
+        cnpj TEXT,
+        ano INTEGER,
+        seq INTEGER,
+        numero_item INTEGER,
+        descricao TEXT,
+        ncm TEXT,
+        unidade TEXT,
+        qtd_homologada REAL,
+        valor_estimado_unit REAL,
+        valor_homologado_unit REAL,
+        desagio_real_pct REAL,
+        vencedor_cnpj TEXT,
+        vencedor_nome TEXT,
+        vencedor_porte TEXT,
+        data_resultado TEXT,
+        orgao_nome TEXT,
+        uf TEXT,
+        coletado_em TEXT,
+        UNIQUE(pregao_id, numero_item)
+    );
+    CREATE INDEX idx_resultados_itens_vencedor ON resultados_itens(vencedor_cnpj);
+    CREATE INDEX idx_resultados_itens_ncm ON resultados_itens(ncm);
+    """,
 ]
 
 

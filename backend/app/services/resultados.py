@@ -203,3 +203,129 @@ def resultados_do_pregao(con: sqlite3.Connection, pregao_id: int,
     if not algum:
         return {"homologado": False, "itens": itens, "resumo": None}
     return {"homologado": True, "itens": itens, "resumo": _resumo(itens)}
+
+
+# Cap defensivo da coleta em massa: bater item a item no PNCP por pregão é
+# LENTO (pista pesada). Acima disso, trunca e loga (uso manual/sob demanda).
+_CAP_PREGOES = 200
+
+
+def _ncm_do_item(con: sqlite3.Connection, pregao_id: int, numero: int):
+    """NCM do item em itens_pregao (ncm_pncp) por (pregao_id, numero).
+
+    resultados_do_pregao NÃO traz ncm; aqui resolvemos da tabela de itens.
+    Ausente/sem linha → None (NUNCA inventado — princípio nº 1)."""
+    r = con.execute(
+        "SELECT ncm_pncp, unidade FROM itens_pregao WHERE pregao_id=? AND numero=?",
+        (pregao_id, numero),
+    ).fetchone()
+    if r is None:
+        return None, None
+    return r["ncm_pncp"], r["unidade"]
+
+
+def coletar_resultados(con: sqlite3.Connection, pregao_ids=None,
+                       cliente=None) -> dict:
+    """ETL de inteligência de mercado: persiste itens HOMOLOGADOS em
+    resultados_itens (denormalizado, upsert idempotente por pregao+item).
+
+    - `pregao_ids` None → varre TODOS os pregões (cap defensivo _CAP_PREGOES,
+      logando se truncar). Pregões sem resultado simplesmente não gravam nada.
+    - Para cada pregão: lê a linha (orgao/uf/cnpj/ano/seq), chama
+      `resultados_do_pregao`; se homologado, faz UPSERT de cada item
+      homologado=True com os campos do item + denormalização + ncm/unidade de
+      itens_pregao + coletado_em=datetime('now').
+    - Robustez: falha de UM pregão é logada e NÃO derruba o lote.
+
+    LENTO: bate no PNCP item a item por pregão — é manual/sob demanda.
+    Retorna {pregoes_processados, pregoes_homologados, itens_gravados}.
+    """
+    if cliente is None:
+        from .. import pncp
+        cliente = pncp.cliente()
+
+    if pregao_ids is None:
+        linhas = con.execute(
+            "SELECT id FROM pregoes ORDER BY id"
+        ).fetchall()
+        ids = [r["id"] for r in linhas]
+        if len(ids) > _CAP_PREGOES:
+            log.warning(
+                "coletar_resultados: %d pregões > cap %d — truncado ao cap",
+                len(ids), _CAP_PREGOES,
+            )
+            ids = ids[:_CAP_PREGOES]
+    else:
+        ids = list(pregao_ids)
+
+    pregoes_processados = 0
+    pregoes_homologados = 0
+    itens_gravados = 0
+
+    for pid in ids:
+        try:
+            p = con.execute(
+                "SELECT cnpj, ano, seq, orgao, uf FROM pregoes WHERE id=?",
+                (pid,),
+            ).fetchone()
+            if p is None:
+                log.warning("coletar_resultados: pregão %s inexistente — pulado", pid)
+                continue
+            pregoes_processados += 1
+            out = resultados_do_pregao(con, pid, cliente)
+            if not out.get("homologado"):
+                continue
+            pregoes_homologados += 1
+            for d in out["itens"]:
+                if not d.get("homologado"):
+                    continue
+                ncm, unidade = _ncm_do_item(con, pid, d["numero"])
+                con.execute(
+                    """
+                    INSERT INTO resultados_itens(
+                        pregao_id, cnpj, ano, seq, numero_item, descricao,
+                        ncm, unidade, qtd_homologada, valor_estimado_unit,
+                        valor_homologado_unit, desagio_real_pct,
+                        vencedor_cnpj, vencedor_nome, vencedor_porte,
+                        data_resultado, orgao_nome, uf, coletado_em
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+                    ON CONFLICT(pregao_id, numero_item) DO UPDATE SET
+                        cnpj=excluded.cnpj, ano=excluded.ano, seq=excluded.seq,
+                        descricao=excluded.descricao, ncm=excluded.ncm,
+                        unidade=excluded.unidade,
+                        qtd_homologada=excluded.qtd_homologada,
+                        valor_estimado_unit=excluded.valor_estimado_unit,
+                        valor_homologado_unit=excluded.valor_homologado_unit,
+                        desagio_real_pct=excluded.desagio_real_pct,
+                        vencedor_cnpj=excluded.vencedor_cnpj,
+                        vencedor_nome=excluded.vencedor_nome,
+                        vencedor_porte=excluded.vencedor_porte,
+                        data_resultado=excluded.data_resultado,
+                        orgao_nome=excluded.orgao_nome, uf=excluded.uf,
+                        coletado_em=excluded.coletado_em
+                    """,
+                    (
+                        pid, p["cnpj"], p["ano"], p["seq"], d["numero"],
+                        d["descricao"], ncm, unidade, d["qtd_homologada"],
+                        d["valor_estimado_unit"], d["valor_homologado_unit"],
+                        d["desagio_real_pct"], d["vencedor_cnpj"],
+                        d["vencedor_nome"], d["porte"], d["data_resultado"],
+                        p["orgao"], p["uf"],
+                    ),
+                )
+                itens_gravados += 1
+            con.commit()
+        except Exception as exc:  # falha de UM pregão não derruba o lote
+            log.warning(
+                "coletar_resultados: pregão %s falhou: %s — pulado", pid, exc,
+            )
+            try:
+                con.rollback()
+            except Exception:
+                pass
+
+    return {
+        "pregoes_processados": pregoes_processados,
+        "pregoes_homologados": pregoes_homologados,
+        "itens_gravados": itens_gravados,
+    }
