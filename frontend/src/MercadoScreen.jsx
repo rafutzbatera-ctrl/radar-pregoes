@@ -169,8 +169,23 @@ function PrecosAba({ registrarBuscar }) {
                 Preço unit. mín <strong>{r.preco_unit_min != null ? fmtBRL(r.preco_unit_min) : "—"}</strong>
                 {" · "}mediana <strong>{r.preco_unit_mediana != null ? fmtBRL(r.preco_unit_mediana) : "—"}</strong>
                 {" · "}máx <strong>{r.preco_unit_max != null ? fmtBRL(r.preco_unit_max) : "—"}</strong>
-                {" · "}deságio médio <strong>{fmtPctFrac(r.desagio_medio_pct)}</strong>
+                {" · "}deságio médio{" "}
+                {(r.amostra_desagio ?? 0) > 0
+                  ? <strong>{fmtPctFrac(r.desagio_medio_pct)} <span className="silk">(em {r.amostra_desagio} {r.amostra_desagio === 1 ? "item" : "itens"})</span></strong>
+                  : <strong title="sem deságio na amostra">—</strong>}
               </div>
+              {Array.isArray(r.unidades) && r.unidades.length > 1 ? (
+                <div className="cert-aviso mercado-unidades-aviso" role="note">
+                  {Ico.alerta}
+                  <span>
+                    Preço unitário mistura unidades: {r.unidades.map((u) => `${u.unidade || "?"}(${u.n})`).join(", ")} — compare dentro da mesma unidade.
+                  </span>
+                </div>
+              ) : Array.isArray(r.unidades) && r.unidades.length === 1 ? (
+                <div className="result-resumo-nota silk">
+                  Unidade: <strong>{r.unidades[0].unidade || "—"}</strong>
+                </div>
+              ) : null}
               <div className="result-resumo-nota silk">
                 Amostra: <strong>{amostra}</strong> {amostra === 1 ? "item homologado" : "itens homologados"} — só dos editais que você coletou.
               </div>
@@ -221,7 +236,6 @@ function PrecosAba({ registrarBuscar }) {
                 <div role="cell">
                   <span className="m-label mobile-only">Ano</span>
                   {it.ano || "—"}
-                  {it.data_resultado && <small className="silk"><br />{it.data_resultado}</small>}
                 </div>
               </div>
             ))}
@@ -318,12 +332,25 @@ function ConcorrentesAba({ registrarBuscar }) {
                 </div>
                 <div role="cell">
                   <span className="m-label mobile-only">Deságio médio</span>
-                  <span className="result-desagio">{fmtPctFrac(c.desagio_medio_pct)}</span>
+                  {(c.n_com_desagio ?? 0) > 0 ? (
+                    <span className="result-desagio">
+                      {fmtPctFrac(c.desagio_medio_pct)}
+                      {c.n_com_desagio < (c.n_vitorias ?? 0) && (
+                        <small className="silk"> (em {c.n_com_desagio}/{c.n_vitorias})</small>
+                      )}
+                    </span>
+                  ) : <span style={{ color: "var(--silk)" }}>—</span>}
                 </div>
                 <div role="cell">
                   <span className="m-label mobile-only">Total homologado</span>
-                  {c.valor_total_homologado != null ? fmtBRL(c.valor_total_homologado)
-                    : <span style={{ color: "var(--silk)" }}>—</span>}
+                  {c.valor_total_homologado != null ? (
+                    <React.Fragment>
+                      {fmtBRL(c.valor_total_homologado)}
+                      {(c.n_com_valor ?? 0) < (c.n_vitorias ?? 0) && (
+                        <small className="silk"> (em {c.n_com_valor ?? 0}/{c.n_vitorias})</small>
+                      )}
+                    </React.Fragment>
+                  ) : <span style={{ color: "var(--silk)" }}>—</span>}
                 </div>
                 <div role="cell">
                   <span className="m-label mobile-only">Órgãos</span>

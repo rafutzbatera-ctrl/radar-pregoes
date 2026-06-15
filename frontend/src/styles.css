@@ -2730,6 +2730,7 @@ a.arq-link:hover { border-color: var(--silk); box-shadow: 0 4px 12px -6px rgba(0
 .result-resumo-linha { font-size: 14px; line-height: 1.5; color: var(--tinta); }
 .result-resumo-linha strong { color: var(--sinal); }
 .result-resumo-nota { font-size: 12px; margin-top: 6px; }
+.mercado-unidades-aviso { margin: 8px 0 0; }
 
 /* grid próprio: Nº · descrição · estimado · vencedor · homologado · deságio.
    Override do .tbl-head/.tbl-row (que têm 9 colunas) só para esta tabela. */
