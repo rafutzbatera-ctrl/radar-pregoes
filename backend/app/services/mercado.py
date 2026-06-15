@@ -64,8 +64,13 @@ def historico_precos(con: sqlite3.Connection, termo: str | None = None,
 
     Retorna {amostra, resumo, itens}:
       - resumo = {preco_unit_min, preco_unit_mediana, preco_unit_max,
-        desagio_medio_pct} (mediana via statistics.median em Python; deságio =
-        média aritmética dos desagio_real_pct NÃO-nulos);
+        desagio_medio_pct, amostra_desagio, unidades} (mediana via
+        statistics.median em Python; deságio = média aritmética dos
+        desagio_real_pct NÃO-nulos);
+        `amostra_desagio` = nº de itens com desagio_real_pct não-nulo (o N REAL
+        sobre o qual desagio_medio_pct foi calculado, ≤ amostra);
+        `unidades` = lista de {unidade, n} (contagem por unidade na amostra),
+        para a UI avisar quando o "preço unitário" mistura unidades (UN, m...);
       - itens = até `limite`, ordenados por data_resultado desc;
       - sem dados → {amostra: 0, resumo: None, itens: []}.
     """
@@ -93,11 +98,20 @@ def historico_precos(con: sqlite3.Connection, termo: str | None = None,
     precos = [float(r["valor_homologado_unit"]) for r in linhas]
     desagios = [float(r["desagio_real_pct"]) for r in linhas
                 if r["desagio_real_pct"] is not None]
+    # contagem por unidade na amostra (None vira "?" para não sumir da conta)
+    cont_unid: dict = {}
+    for r in linhas:
+        u = r["unidade"] if r["unidade"] is not None else "?"
+        cont_unid[u] = cont_unid.get(u, 0) + 1
+    unidades = [{"unidade": u, "n": n} for u, n in
+                sorted(cont_unid.items(), key=lambda kv: (-kv[1], kv[0]))]
     resumo = {
         "preco_unit_min": min(precos),
         "preco_unit_mediana": statistics.median(precos),
         "preco_unit_max": max(precos),
         "desagio_medio_pct": (sum(desagios) / len(desagios)) if desagios else None,
+        "amostra_desagio": len(desagios),
+        "unidades": unidades,
     }
     itens = [
         {
@@ -151,11 +165,18 @@ def concorrentes(con: sqlite3.Connection, uf: str | None = None,
 
     Por concorrente: {cnpj, nome (vencedor_nome mais frequente), porte (idem,
     mais frequente não-nulo), n_vitorias, desagio_medio_pct (média dos
-    desagio_real_pct não-nulos), valor_total_homologado (Σ homologado_unit*qtd
-    quando ambos), n_orgaos (órgãos distintos), ufs (UFs distintas)}.
+    desagio_real_pct não-nulos), n_com_desagio (nº de linhas com desagio não-
+    nulo — base do desagio_medio_pct, ≤ n_vitorias), valor_total_homologado
+    (Σ homologado_unit*qtd quando ambos), n_com_valor (nº de linhas que entraram
+    nesse total, ≤ n_vitorias), n_orgaos (órgãos distintos), ufs (UFs distintas)}.
+    n_com_desagio/n_com_valor deixam a UI mostrar que esses agregados podem vir
+    de MENOS linhas que n_vitorias.
 
-    Retorna {amostra_itens, concorrentes (ordenado por n_vitorias desc, até
-    `limite`)}; sem dados → {amostra_itens: 0, concorrentes: []}.
+    O corte por `limite` é POR n_vitorias (quem mais venceu). Desempate
+    determinístico/reproduzível: key=(-n_vitorias, -(valor_total or 0), cnpj).
+
+    Retorna {amostra_itens, concorrentes (até `limite`)}; sem dados →
+    {amostra_itens: 0, concorrentes: []}.
     """
     where = ["vencedor_cnpj IS NOT NULL"]
     params: list = []
@@ -194,6 +215,10 @@ def concorrentes(con: sqlite3.Connection, uf: str | None = None,
                 tem_valor = True
         orgaos = {x["orgao_nome"] for x in rows if x["orgao_nome"] is not None}
         ufs = sorted({x["uf"] for x in rows if x["uf"] is not None})
+        n_com_valor = sum(
+            1 for x in rows
+            if x["valor_homologado_unit"] is not None and x["qtd_homologada"] is not None
+        )
         saida.append({
             "cnpj": cnpj,
             "nome": _mais_frequente([x["vencedor_nome"] for x in rows]),
@@ -201,10 +226,15 @@ def concorrentes(con: sqlite3.Connection, uf: str | None = None,
                                      ignorar_none=True),
             "n_vitorias": len(rows),
             "desagio_medio_pct": (sum(desagios) / len(desagios)) if desagios else None,
+            "n_com_desagio": len(desagios),
             "valor_total_homologado": valor_total if tem_valor else None,
+            "n_com_valor": n_com_valor,
             "n_orgaos": len(orgaos),
             "ufs": ufs,
         })
 
-    saida.sort(key=lambda c: c["n_vitorias"], reverse=True)
+    # desempate determinístico: mais vitórias, depois maior valor, depois cnpj.
+    saida.sort(key=lambda c: (-c["n_vitorias"],
+                              -(c["valor_total_homologado"] or 0),
+                              c["cnpj"]))
     return {"amostra_itens": len(linhas), "concorrentes": saida[:limite]}

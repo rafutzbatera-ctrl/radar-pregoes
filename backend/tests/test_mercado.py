@@ -193,7 +193,7 @@ def test_endpoint_precos_ok(con, client):
     assert body["amostra"] == 1
     assert set(body["resumo"]) == {
         "preco_unit_min", "preco_unit_mediana", "preco_unit_max",
-        "desagio_medio_pct",
+        "desagio_medio_pct", "amostra_desagio", "unidades",
     }
     assert "itens" in body
 
@@ -216,7 +216,8 @@ def test_endpoint_concorrentes_ok(con, client):
     c = body["concorrentes"][0]
     assert set(c) == {
         "cnpj", "nome", "porte", "n_vitorias", "desagio_medio_pct",
-        "valor_total_homologado", "n_orgaos", "ufs",
+        "n_com_desagio", "valor_total_homologado", "n_com_valor",
+        "n_orgaos", "ufs",
     }
 
     r2 = client.get("/mercado/concorrentes", params={"uf": "SP", "q": "caixa"})
