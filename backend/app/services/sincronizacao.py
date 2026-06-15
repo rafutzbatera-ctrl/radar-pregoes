@@ -112,7 +112,17 @@ def sincronizar_itens(con: sqlite3.Connection, pregao_id: int,
 
 
 def _persistir_itens(con: sqlite3.Connection, pregao_id: int, itens: list) -> int:
+    persistidos = 0
     for it in itens:
+        # numero (numeroItem) é INTEGER NOT NULL + parte do UNIQUE(pregao_id,
+        # numero). Se o PNCP omitir numeroItem (None), o INSERT levantaria
+        # IntegrityError e — como o commit é só no fim — abortaria a persistência
+        # do LOTE INTEIRO (pregão ficaria sem itens). Pular o item defeituoso e
+        # seguir é melhor-esforço: registra e não derruba os demais.
+        if it.get("numeroItem") is None:
+            log.warning("Pregão %s: item sem numeroItem ignorado (%r)",
+                        pregao_id, it.get("descricao"))
+            continue
         con.execute(
             """INSERT INTO itens_pregao
                  (pregao_id, numero, descricao, qtd, unidade, valor_unit_estimado,
@@ -140,8 +150,9 @@ def _persistir_itens(con: sqlite3.Connection, pregao_id: int, itens: list) -> in
                 it.get("materialOuServicoNome"),
             ),
         )
+        persistidos += 1
     con.commit()
-    return len(itens)
+    return persistidos
 
 
 def _baixar_arquivos(con: sqlite3.Connection, pregao: sqlite3.Row,

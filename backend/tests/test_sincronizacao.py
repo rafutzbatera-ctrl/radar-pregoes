@@ -79,6 +79,28 @@ def test_sincronizar_itens_leve_sem_arquivos(con, cliente_fake):
     assert soma == 4659.0 + 43840.0 + 18504.0 + 76180.0  # fixture real Imbaú
 
 
+def test_persistir_itens_pula_item_sem_numero(con):
+    """Item sem numeroItem (órgão omitiu) não pode derrubar a persistência do
+    LOTE inteiro: é pulado com log; os demais entram normalmente. (numero é
+    INTEGER NOT NULL + parte do UNIQUE → None levantaria IntegrityError e
+    abortaria todos os itens do pregão.)"""
+    pregao_id = _criar_pregao(con)
+    lote = [
+        {"numeroItem": 1, "descricao": "Microfone", "quantidade": 2,
+         "valorUnitarioEstimado": 100.0, "valorTotal": 200.0},
+        {"numeroItem": None, "descricao": "Sem número", "quantidade": 1,
+         "valorUnitarioEstimado": 50.0, "valorTotal": 50.0},
+        {"numeroItem": 3, "descricao": "Caixa de som", "quantidade": 4,
+         "valorUnitarioEstimado": 80.0, "valorTotal": 320.0},
+    ]
+    persistidos = sincronizacao._persistir_itens(con, pregao_id, lote)
+    assert persistidos == 2  # o item sem número foi pulado, não abortou o lote
+    numeros = [r["numero"] for r in con.execute(
+        "SELECT numero FROM itens_pregao WHERE pregao_id=? ORDER BY numero",
+        (pregao_id,))]
+    assert numeros == [1, 3]
+
+
 def test_sincronizar_com_habilitacao_heuristico_nao_explode(
     con, cliente_fake, tmp_path, monkeypatch
 ):
