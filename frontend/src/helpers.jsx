@@ -476,6 +476,15 @@ export const Ico = {
       <path d="M7 5.5h1M10 5.5h1M7 8h1M10 8h1M7 10.5h1M10 10.5h1"></path>
     </svg>
   ),
+  // gráfico de barras — usado no NAV "Inteligência de mercado"
+  grafico: (
+    <svg className="nav-ico" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M2.5 15.5h13"></path>
+      <rect x="3.5" y="9" width="2.6" height="5" rx="0.6"></rect>
+      <rect x="7.7" y="5.5" width="2.6" height="8.5" rx="0.6"></rect>
+      <rect x="11.9" y="2.5" width="2.6" height="11.5" rx="0.6"></rect>
+    </svg>
+  ),
   // certidão: documento com selo (roseta) — usado no NAV "Minhas certidões"
   selo: (
     <svg className="nav-ico" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">

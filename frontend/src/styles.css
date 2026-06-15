@@ -2764,6 +2764,34 @@ a.arq-link:hover { border-color: var(--silk); box-shadow: 0 4px 12px -6px rgba(0
 }
 .result-desagio { color: var(--sinal); font-weight: 600; }
 
+/* ==== Inteligência de mercado (histórico de preços + concorrentes) ==== */
+.mercado-acoes {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.mercado-acoes-nota { font-size: 12px; max-width: 360px; line-height: 1.4; }
+.mercado-aba { margin-top: 16px; }
+.mercado-filtros {
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+  margin-bottom: 16px;
+}
+.mercado-orgao { font-size: 12.5px; }
+.mercado-orgao em { font-style: normal; }
+
+/* grids próprios (override do .tbl-head/.tbl-row de 9 colunas) */
+.mercado-precos-tbl .tbl-head.mercado-precos-head,
+.mercado-precos-tbl .tbl-row.mercado-precos-row {
+  grid-template-columns: minmax(180px, 1.5fr) 120px 80px minmax(150px, 1.2fr) minmax(130px, 1fr) 80px;
+}
+.mercado-conc-tbl .tbl-head.mercado-conc-head,
+.mercado-conc-tbl .tbl-row.mercado-conc-row {
+  grid-template-columns: minmax(180px, 1.6fr) 80px 110px 140px 80px minmax(90px, 1fr);
+}
+.mercado-precos-tbl .tbl-row.mercado-precos-row:hover,
+.mercado-conc-tbl .tbl-row.mercado-conc-row:hover {
+  transform: none; box-shadow: none; background: var(--painel);
+}
+
 /* ==== Minha empresa (cadastro do fornecedor — minutas de declaração) ==== */
 .emp-label { display: flex; flex-direction: column; gap: 5px; flex: 1 1 0; min-width: 0; }
 .emp-label > .silk { font-size: 11px; }

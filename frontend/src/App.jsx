@@ -8,6 +8,7 @@ import { FindScreen, BuscasScreen, CatalogScreen, EstadoCarregando, EstadoErro }
 import AnalysisScreen from "./AnalysisScreen.jsx";
 import CertidoesScreen from "./CertidoesScreen.jsx";
 import EmpresaScreen from "./EmpresaScreen.jsx";
+import MercadoScreen from "./MercadoScreen.jsx";
 
 const LandingPage = React.lazy(() => import("./landing/LandingPage.jsx"));
 
@@ -18,6 +19,7 @@ const NAV = [
   { id: "catalogo", rotulo: "Meu catálogo (custos)", ico: "fader" },
   { id: "certidoes", rotulo: "Minhas certidões", ico: "selo" },
   { id: "empresa", rotulo: "Minha empresa", ico: "predio" },
+  { id: "mercado", rotulo: "Inteligência de mercado", ico: "grafico" },
 ];
 
 const CONFIG_PADRAO = { regime_tributario: "simples", uf_origem: "" };
@@ -621,6 +623,9 @@ export default function App() {
       )}
       {tela.nome === "empresa" && (
         <EmpresaScreen avisar={avisar} />
+      )}
+      {tela.nome === "mercado" && (
+        <MercadoScreen avisar={avisar} />
       )}
       {tela.nome === "analise" && pregaoAtivo && (
         <AnalysisScreen

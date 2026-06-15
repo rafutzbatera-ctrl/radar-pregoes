@@ -459,6 +459,35 @@ export const api = {
   // completo===false, faltam dados da empresa (lista faltando).
   declaracoesPregao: (pregaoId) => req(`/pregoes/${pregaoId}/declaracoes`),
 
+  // inteligência de mercado — histórico de preços + concorrentes.
+  // A amostra reflete SÓ os editais já coletados (não é base nacional); a UI
+  // sempre mostra o N. coletar bate no PNCP item a item → LENTO (timeout 180s).
+  // coletar → {pregoes_processados, pregoes_homologados, itens_gravados}.
+  mercadoColetar: (pregaoIds) =>
+    req("/mercado/coletar", {
+      method: "POST",
+      body: JSON.stringify(pregaoIds && pregaoIds.length ? { pregao_ids: pregaoIds } : {}),
+      timeoutMs: 180000,
+    }),
+  // precos → {amostra, resumo:{preco_unit_min, preco_unit_mediana,
+  // preco_unit_max, desagio_medio_pct}|null, itens:[...]}. desagio_*_pct é FRAÇÃO 0..1.
+  mercadoPrecos: (q, ncm) => {
+    const p = new URLSearchParams();
+    if (q) p.set("q", q);
+    if (ncm) p.set("ncm", ncm);
+    const s = p.toString();
+    return req("/mercado/precos" + (s ? `?${s}` : ""));
+  },
+  // concorrentes → {amostra_itens, concorrentes:[{cnpj, nome, porte, n_vitorias,
+  // desagio_medio_pct, valor_total_homologado, n_orgaos, ufs:[...]}]} (já ordenado por vitórias).
+  mercadoConcorrentes: (uf, q) => {
+    const p = new URLSearchParams();
+    if (uf) p.set("uf", uf);
+    if (q) p.set("q", q);
+    const s = p.toString();
+    return req("/mercado/concorrentes" + (s ? `?${s}` : ""));
+  },
+
   // config
   lerConfig: () => req("/config"),
   atualizarConfig: (corpo) =>
