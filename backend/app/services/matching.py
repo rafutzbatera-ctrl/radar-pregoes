@@ -71,27 +71,38 @@ def sugerir_matches(con: sqlite3.Connection, pregao_id: int,
     if not produtos or not itens:
         return 0
 
-    vet_itens = embed(["query: " + (i["descricao"] or "") for i in itens])
-    vet_prod = embed(["passage: " + p["nome"] for p in produtos])
+    import numpy as np
+
+    # embed pode devolver listas Python (testes) ou np.ndarray (e5 real) →
+    # asarray normaliza para a matmul. Linhas = itens, colunas = produtos.
+    vet_itens = np.asarray(embed(["query: " + (i["descricao"] or "") for i in itens]),
+                           dtype=float)
+    vet_prod = np.asarray(embed(["passage: " + p["nome"] for p in produtos]),
+                          dtype=float)
+    # matriz de scores (n_itens × n_produtos) — mesmo cosseno do _dot, em bloco
+    scores = vet_itens @ vet_prod.T
+    prod_ids = [p["id"] for p in produtos]
 
     sugeridos = 0
     for i, item in enumerate(itens):
         recusados = _recusados(item["produtos_recusados"])  # recusa memorizada
-        melhor_score = -1.0
-        melhor_prod = None
-        for j, prod in enumerate(produtos):
-            if prod["id"] in recusados:
-                continue  # não re-sugere produto recusado para este item
-            score = float(_dot(vet_itens[i], vet_prod[j]))
-            if score > melhor_score:
-                melhor_score = score
-                melhor_prod = prod
-        if melhor_prod is not None and melhor_score >= threshold:
+        linha = scores[i].copy()
+        # mascara produtos recusados ANTES do argmax (não re-sugere recusado);
+        # -inf garante que nunca vencem mesmo se todos os demais forem baixos.
+        for j, pid in enumerate(prod_ids):
+            if pid in recusados:
+                linha[j] = -np.inf
+        j = int(np.argmax(linha))
+        melhor_score = float(linha[j])
+        # all-refused (ou nenhuma coluna válida) → -inf, abaixo do threshold;
+        # também respeita o piso. Idêntico ao loop antigo (melhor_prod=None ou
+        # melhor_score<threshold → nada gravado).
+        if melhor_score >= threshold:
             con.execute(
                 """UPDATE itens_pregao
                    SET produto_id=?, match_score=?, match_confirmado=0
                    WHERE id=?""",
-                (melhor_prod["id"], round(melhor_score, 4), item["id"]),
+                (prod_ids[j], round(melhor_score, 4), item["id"]),
             )
             sugeridos += 1
     con.commit()

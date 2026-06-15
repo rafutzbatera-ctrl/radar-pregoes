@@ -16,6 +16,8 @@ SEM importar nada para o radar local. Tudo roda em memória:
 """
 import sqlite3
 
+import numpy as np
+
 from .. import settings
 from . import analise, matching
 
@@ -91,11 +93,14 @@ def avaliar_alvos(con: sqlite3.Connection, alvos: list[dict],
         receita_aderente = 0.0
         if vet_prod is not None and itens:
             vet_itens = embed(["query: " + (it.get("descricao") or "") for it in itens])
+            # matmul em bloco: melhor cosseno de cada item contra o catálogo, o
+            # mesmo número do max(_dot ...) por item, só sem o for aninhado.
+            # asarray normaliza embed fake (listas) e e5 real (ndarray).
+            mat_itens = np.asarray(vet_itens, dtype=float)
+            mat_prod = np.asarray(vet_prod, dtype=float)
+            melhores = (mat_itens @ mat_prod.T).max(axis=1)
             for i, it in enumerate(itens):
-                melhor = max(
-                    (matching._dot(vet_itens[i], vet_prod[j]) for j in range(len(produtos))),
-                    default=-1.0,
-                )
+                melhor = float(melhores[i])
                 if melhor < settings.MATCH_THRESHOLD:
                     continue
                 preco = _preco_esperado_cru(it, desagio)
