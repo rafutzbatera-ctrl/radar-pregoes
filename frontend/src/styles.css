@@ -1251,6 +1251,18 @@ body {
   border-radius: 9px;
   margin-left: 8px;
 }
+/* custo do produto sugerido — sinal de plausibilidade (NAO e margem). Chip
+   neutro p/ distinguir do ambar da similaridade; cor explicita, tema-agnostico. */
+.match-custo {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--tinta);
+  background: rgba(127, 127, 127, .12);
+  padding: 1px 7px;
+  border-radius: 9px;
+  margin-left: 8px;
+}
+.match-custo.sem { color: var(--silk); background: transparent; font-style: italic; }
 .match-acoes { display: flex; gap: 7px; margin-left: auto; flex-wrap: wrap; }
 .match-seletor { display: flex; gap: 7px; margin-left: auto; flex-wrap: wrap; align-items: center; }
 .match-btn {

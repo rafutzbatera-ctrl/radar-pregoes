@@ -1433,6 +1433,10 @@ function MatchBar({ item, setMatch, catalogo }) {
   const [trocando, setTrocando] = React.useState(false);
   const cat = catalogo || [];
   const m = item.matchAtual;
+  // produto sugerido no catálogo (p/ mostrar o CUSTO ao lado da sugestão — sinal
+  // de plausibilidade: pega match "nada a ver" antes de confirmar). É o valor do
+  // catálogo, NÃO uma prévia de margem (sugeridos seguem sem margem — §6.2).
+  const prodSug = m ? cat.find((p) => p.cod === m.cod) : null;
 
   if (item.status === "fora" && !m) {
     return (
@@ -1455,6 +1459,9 @@ function MatchBar({ item, setMatch, catalogo }) {
       <span className="match-txt">
         Sugestão: <strong>{item.produto ? item.produto.nome : m.cod}</strong>
         {m.score != null && <span className="match-score">similaridade {(m.score * 100).toFixed(0)}%</span>}
+        {prodSug && (prodSug.custo != null
+          ? <span className="match-custo">custo cat. {fmtBRL(prodSug.custo)}</span>
+          : <span className="match-custo sem">sem custo no catálogo</span>)}
       </span>
       {!trocando ? (
         <div className="match-acoes">
