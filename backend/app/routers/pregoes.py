@@ -252,7 +252,7 @@ _EXPORT_COLUNAS: list[tuple[str, str]] = [
     ("unidade", "unidade"),
     ("valor_unit_estimado", "valor_unit_estimado"),
     ("valor_total", "valor_total"),
-    ("material_ou_servico", "materialOuServico"),  # nome legível mapeado abaixo
+    ("material_ou_servico", "material_ou_servico"),  # None → "" em _valor_export
     ("beneficio", "beneficio"),
     ("criterio", "criterio"),
     ("ncm", "ncm_pncp"),
@@ -267,9 +267,10 @@ def _valor_export(d: dict, chave: str):
     """Extrai o valor de uma coluna do export a partir do item calculado.
     Sigiloso esconde os valores oficiais; margem_pct = margem×100 (2 casas)."""
     sig = d.get("sigiloso")
-    if chave == "materialOuServico":
+    if chave == "material_ou_servico":
         # material/serviço do PNCP (§4.2, coluna v8 persistida na sync). Itens
-        # pré-v8 não têm o dado → vazio (honesto, sem backfill).
+        # pré-v8 não têm o dado → vazio (honesto, sem backfill). Mantém o
+        # mesmo None→"" do export anterior (saída idêntica).
         return d.get("material_ou_servico") or ""
     if chave in ("valor_unit_estimado", "valor_total") and sig:
         return "sigiloso"
