@@ -95,6 +95,7 @@ export default function AnalysisScreen({
     { id: "itens", rotulo: "Itens & margem", contador: a.sugeridos > 0 ? a.sugeridos + " a casar" : null, tipo: a.sugeridos > 0 ? "pico" : null },
     { id: "habilitacao", rotulo: "Habilitação", contador: habil.length ? pendentesHabil + "/" + habil.length : "—", tipo: pendentesHabil > 0 ? "pico" : "sinal" },
     { id: "fiscal", rotulo: "Fiscal · NF-e", contador: prontos + "/" + fiscalTotal, tipo: prontos === fiscalTotal ? "sinal" : "pico" },
+    { id: "resultados", rotulo: "Resultados", contador: null, tipo: null },
     { id: "capag", rotulo: "CAPAG", contador: null, tipo: null },
     { id: "historico", rotulo: "Histórico", contador: null, tipo: null },
     { id: "perguntar", rotulo: "Perguntar ao edital", contador: null, tipo: null },
@@ -282,6 +283,9 @@ export default function AnalysisScreen({
             )}
             {aba === "fiscal" && (
               <FiscalTab fiscalItens={fiscalItens} prontos={prontos} total={fiscalTotal} config={config} setRegime={setRegime} pregao={pregao} />
+            )}
+            {aba === "resultados" && (
+              <ResultadosTab pregao={pregao} />
             )}
             {aba === "capag" && (
               <CapagTab pregao={pregao} />
@@ -606,6 +610,145 @@ function dataHist(iso) {
   const hh = String(d.getHours()).padStart(2, "0");
   const mi = String(d.getMinutes()).padStart(2, "0");
   return `${dd}/${mm}/${d.getFullYear()} ${hh}:${mi}`;
+}
+
+/* ============ ABA RESULTADOS — homologação do pregão (PNCP) ============
+   Dados REAIS do PNCP item a item (operação LENTA — timeout 120s no api.js).
+   Carrega lazy: só chama /pregoes/{id}/resultados quando a aba abre. Princípio 1
+   (nunca inventar): item sem vencedor publicado mostra "—", nunca um chute. */
+
+// deságio em fração 0..1 → "30%" (inteiro, espelha o estilo dos controles)
+function fmtPctReal(frac) {
+  if (frac == null || Number.isNaN(frac)) return "—";
+  return Math.round(Number(frac) * 100) + "%";
+}
+
+function ResultadosTab({ pregao }) {
+  const [estado, setEstado] = React.useState({ carregando: true, dados: null, erro: null });
+
+  React.useEffect(() => {
+    let vivo = true;
+    setEstado({ carregando: true, dados: null, erro: null });
+    api.resultadosPregao(pregao.id)
+      .then((d) => { if (vivo) setEstado({ carregando: false, dados: d, erro: null }); })
+      .catch((e) => { if (vivo) setEstado({ carregando: false, dados: null, erro: (e && e.message) || "erro" }); });
+    return () => { vivo = false; };
+  }, [pregao.id]);
+
+  if (estado.carregando) {
+    return (
+      <div className="result-wrap" aria-busy="true">
+        <div className="card-pregao mod skel">
+          <span className="skel-bar w30"></span>
+          <span className="skel-bar w70"></span>
+          <span className="skel-bar w90"></span>
+        </div>
+        <p className="result-loading silk">Buscando resultados item a item no PNCP — pode demorar.</p>
+      </div>
+    );
+  }
+
+  if (estado.erro) {
+    return (
+      <div className="result-wrap">
+        <div className="estado-vazio mod">
+          <h3>Não foi possível carregar os resultados</h3>
+          <p>{estado.erro}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const d = estado.dados || {};
+
+  // ainda sem resultado publicado no PNCP — vazio honesto (princípio 1)
+  if (!d.homologado) {
+    return (
+      <div className="result-wrap">
+        <div className="tbl-titulo">
+          <span className="silk">Resultados — homologação no PNCP</span>
+        </div>
+        <div className="capag-card mod capag-vazio">
+          <div className="capag-vazio-tit silk">Sem resultado publicado</div>
+          <p className="capag-vazio-txt silk">
+            Este pregão ainda não tem resultado publicado no PNCP.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const itens = d.itens || [];
+  const r = d.resumo || {};
+  return (
+    <div className="result-wrap">
+      <div className="tbl-titulo">
+        <span className="silk">Resultados — homologação no PNCP</span>
+      </div>
+
+      <div className="capag-card mod result-resumo">
+        <div className="result-resumo-linha">
+          Deságio real médio <strong>{fmtPctReal(r.desagio_medio_real)}</strong>
+          {" · "}Economia <strong>{r.economia_total != null ? fmtBRL(r.economia_total) : "—"}</strong>
+          {" · "}<strong>{r.n_homologados ?? 0}</strong> {r.n_homologados === 1 ? "item homologado" : "itens homologados"}
+        </div>
+        <div className="result-resumo-nota silk">Compare com seu deságio esperado (config).</div>
+      </div>
+
+      <div className="mod tbl result-tbl" role="table" aria-label="Resultados por item">
+        <div className="tbl-head result-head" role="row">
+          <div className="silk" role="columnheader">Nº</div>
+          <div className="silk" role="columnheader">Descrição</div>
+          <div className="silk" role="columnheader">Valor estimado (unit)</div>
+          <div className="silk" role="columnheader">Vencedor</div>
+          <div className="silk" role="columnheader">Homologado (unit)</div>
+          <div className="silk" role="columnheader">Deságio real</div>
+        </div>
+        {itens.map((it) => (
+          <div className="tbl-row result-row" role="row" key={it.numero}>
+            <div className="c-num" role="cell">{String(it.numero).padStart(2, "0")}</div>
+            <div className="c-desc" role="cell">
+              <div className="d-nome">{it.descricao}</div>
+            </div>
+            <div role="cell">
+              <span className="m-label mobile-only">Valor estimado (unit)</span>
+              {it.valor_estimado_unit != null ? fmtBRL(it.valor_estimado_unit) : "—"}
+            </div>
+            <div role="cell">
+              <span className="m-label mobile-only">Vencedor</span>
+              {it.homologado && it.vencedor_nome ? (
+                <span className="result-venc">
+                  {it.vencedor_nome}
+                  {it.porte && <span className="result-porte">{it.porte}</span>}
+                </span>
+              ) : (
+                <span style={{ color: "var(--silk)" }}>—</span>
+              )}
+            </div>
+            <div role="cell">
+              <span className="m-label mobile-only">Homologado (unit)</span>
+              {it.homologado && it.valor_homologado_unit != null
+                ? fmtBRL(it.valor_homologado_unit)
+                : <span style={{ color: "var(--silk)" }}>—</span>}
+            </div>
+            <div role="cell">
+              <span className="m-label mobile-only">Deságio real</span>
+              {it.homologado && it.desagio_real_pct != null
+                ? <span className="result-desagio">{fmtPctReal(it.desagio_real_pct)}</span>
+                : <span style={{ color: "var(--silk)" }}>—</span>}
+            </div>
+          </div>
+        ))}
+        {itens.length === 0 && (
+          <div className="tbl-row fora" role="row">
+            <div role="cell" style={{ gridColumn: "1 / -1", color: "var(--silk)", padding: "6px 0" }}>
+              Nenhum item retornado para este pregão.
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /* ============ ABA PERGUNTAR AO EDITAL — RAG Fase 1 (extrativo, 100% local) ============

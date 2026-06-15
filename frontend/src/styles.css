@@ -2534,3 +2534,48 @@ a.arq-link:hover { border-color: var(--silk); box-shadow: 0 4px 12px -6px rgba(0
 @media (prefers-reduced-motion: reduce) {
   .rag-spinner { animation: none; }
 }
+
+/* ---- aba Resultados (homologação no PNCP) ---- */
+.result-loading {
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin: 12px 0 0 0;
+  max-width: 60ch;
+}
+.result-resumo { margin-bottom: 12px; }
+.result-resumo-linha { font-size: 14px; line-height: 1.5; color: var(--tinta); }
+.result-resumo-linha strong { color: var(--sinal); }
+.result-resumo-nota { font-size: 12px; margin-top: 6px; }
+
+/* grid próprio: Nº · descrição · estimado · vencedor · homologado · deságio.
+   Override do .tbl-head/.tbl-row (que têm 9 colunas) só para esta tabela. */
+.result-tbl .tbl-head.result-head,
+.result-tbl .tbl-row.result-row {
+  grid-template-columns: 34px minmax(190px, 1.4fr) 120px minmax(140px, 1fr) 120px 92px;
+}
+.result-tbl .tbl-row.result-row {
+  cursor: default;
+}
+.result-tbl .tbl-row.result-row:hover {
+  transform: none;
+  box-shadow: none;
+  background: var(--painel);
+}
+.result-venc {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+}
+.result-porte {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--sinal);
+  background: var(--fundo-2);
+  border: 1px solid rgba(43, 217, 127, 0.3);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+.result-desagio { color: var(--sinal); font-weight: 600; }

@@ -278,6 +278,12 @@ export const api = {
   // justificativa,documento}]}.
   historico: (pregaoId) => req(`/pregoes/${pregaoId}/historico`),
 
+  // resultados/homologação do pregão (PNCP). Lazy: a aba Resultados chama na
+  // abertura. Bate item a item no PNCP → LENTO; timeout generoso (120s, espelha
+  // o /descobrir e o rag/indexar). Devolve {homologado, itens:[...], resumo|null}.
+  resultadosPregao: (pregaoId) =>
+    req(`/pregoes/${pregaoId}/resultados`, { timeoutMs: 120000 }),
+
   // RAG "Perguntar ao edital" (Fase 1, 100% local). Lazy: a aba Perguntar chama
   // ragStatus na abertura. Respostas são EXTRATIVAS — trechos verbatim do PDF.
   // status → {indexado, n_chunks?, n_paginas?, ingerido_em?, modelo?}.
