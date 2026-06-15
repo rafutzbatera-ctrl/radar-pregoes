@@ -91,6 +91,55 @@ def test_download_recusa_acima_do_teto_sem_arquivo_truncado(tmp_path, monkeypatc
     # cli._http foi trocado pelo fake (sem .close); nada a fechar.
 
 
+class _RespStreamSemCL:
+    """Resposta de stream fake SEM content-length: o teto só pode ser detectado
+    DENTRO do loop de streaming (total += len(bloco) > MAX_PDF_BYTES). Exercita
+    o caminho do aborto-no-meio-do-stream (pncp.py:380-396), distinto da recusa
+    determinística por Content-Length do _RespFake (B2)."""
+
+    def __init__(self):
+        self.headers = {}  # sem content-length → não recusa antes de baixar
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def raise_for_status(self):
+        pass
+
+    def iter_bytes(self):
+        # emite blocos somando ACIMA do teto (com MAX_PDF_BYTES=10, 16 bytes basta)
+        yield b"AAAAAAAA"
+        yield b"BBBBBBBB"
+
+
+class _HttpStreamFake:
+    def stream(self, metodo, url):
+        return _RespStreamSemCL()
+
+
+def test_download_aborta_no_stream_apaga_truncado(tmp_path, monkeypatch):
+    """Sem content-length, o teto estoura no meio do iter_bytes: o ValueError
+    'excede o teto' propaga (não é httpx.* → não entra no retry) e o .pdf
+    parcialmente escrito é apagado (destino.unlink())."""
+    cli = pncp.ClientePNCP(cache_dir=tmp_path / "cache")
+    # teto minúsculo: poucos bytes já estouram no stream
+    monkeypatch.setattr(pncp, "MAX_PDF_BYTES", 10)
+    monkeypatch.setattr(cli, "_esperar_vez", lambda pista="pesada": None)
+    # defensivo: se algum backoff for alcançado, não dorme de verdade
+    monkeypatch.setattr(pncp.time, "sleep", lambda *_: None)
+    cli._http = _HttpStreamFake()
+
+    destino = tmp_path / "dl"
+    with pytest.raises(ValueError, match="excede o teto"):
+        cli.baixar_arquivo("https://exemplo/edital.pdf", destino)
+
+    # nenhum .pdf truncado ficou no destino
+    assert list(destino.glob("*.pdf")) == []
+
+
 # ------------------------------------------------------------------ B3
 def _criar_pregao(con) -> int:
     cur = con.execute(
