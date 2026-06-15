@@ -24,6 +24,9 @@ class PregaoPatch(BaseModel):
                              "ganho", "perdido", "suspenso"] | None = None
     data_disputa: str | None = None
     valor_final: float | None = None
+    # soft-delete reversível (v14): descartar=True tira do radar; PATCH
+    # descartado=false desfaz (undo). Persistido em atualizar() via exclude_unset.
+    descartado: bool | None = None
 
 
 def _resumo_pregao(con: sqlite3.Connection, p: sqlite3.Row) -> dict:
@@ -95,11 +98,18 @@ def _montar_resumo(p: sqlite3.Row, contagens, hab, arquivos: list) -> dict:
 @router.get("")
 def listar(novos: bool | None = None, uf: str | None = None,
            salvos: bool | None = None,
+           descartados: bool | None = None,
            valor_min: float | None = None, valor_max: float | None = None,
            ordem: Literal["recente", "potencial", "valor", "prazo"] = "recente",
            con: sqlite3.Connection = Depends(get_db)):
     sql = "SELECT * FROM pregoes WHERE 1=1"
     params: list = []
+    # soft-delete (v14): por padrão (None/False) os descartados ficam OCULTOS;
+    # descartados=True lista SÓ os tombstones (futura tela de restaurar).
+    if descartados:
+        sql += " AND descartado=1"
+    else:
+        sql += " AND descartado=0"
     if novos is not None:
         sql += " AND novo=?"
         params.append(int(novos))
@@ -210,8 +220,31 @@ def atualizar(pregao_id: int, corpo: PregaoPatch,
             "UPDATE pregoes SET status_pipeline='cotacao' "
             "WHERE id=? AND status_pipeline IS NULL", (pregao_id,)
         )
+    # undo do descarte (v14): restaurar volta como NÃO-novo (novo=0) para o
+    # pregão não reaparecer com a flag "novo" piscando. NÃO mexe em salvo.
+    if campos.get("descartado") is False:
+        con.execute("UPDATE pregoes SET novo=0 WHERE id=?", (pregao_id,))
     con.commit()
     return detalhe(pregao_id, con)
+
+
+@router.delete("/{pregao_id}")
+def descartar(pregao_id: int, con: sqlite3.Connection = Depends(get_db)):
+    """Descarta o pregão do radar (soft-delete reversível, v14).
+
+    NÃO apaga a linha — marca descartado=1 (tombstone). Some das listagens por
+    padrão e a DESCOBERTA não o ressuscita (services/descoberta.py). Também tira
+    do funil (salvo=0, status_pipeline=NULL). Reversível por PATCH
+    descartado=false. 404 se o pregão não existe.
+    """
+    cur = con.execute(
+        "UPDATE pregoes SET descartado=1, salvo=0, status_pipeline=NULL WHERE id=?",
+        (pregao_id,),
+    )
+    if not cur.rowcount:
+        raise HTTPException(404, "Pregão não encontrado")
+    con.commit()
+    return {"ok": True}
 
 
 @router.post("/{pregao_id}/sincronizar")

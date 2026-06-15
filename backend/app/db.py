@@ -309,6 +309,14 @@ MIGRACOES = [
         atualizado_em TEXT
     );
     """,
+    # v14 — descartar pregão do radar (soft-delete reversível). O dono remove
+    # pregões que não interessam mais SEM perder dado: a linha vira tombstone
+    # (descartado=1), some das listagens por padrão e — crucial — a DESCOBERTA
+    # não o ressuscita. NÃO é hard-delete (seguro; reversível por PATCH
+    # descartado=false). Pregões já existentes entram com descartado=0 (DEFAULT).
+    """
+    ALTER TABLE pregoes ADD COLUMN descartado INTEGER NOT NULL DEFAULT 0;
+    """,
 ]
 
 

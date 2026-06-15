@@ -147,6 +147,12 @@ def persistir_hit(con: sqlite3.Connection, hit: dict,
               esfera, novo)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)
            ON CONFLICT(numero_controle) DO NOTHING""",
+        # ANTI-RESSURREIÇÃO (v14): DO NOTHING é o que protege o tombstone. Um
+        # pregão descartado já existe (numero_controle UNIQUE) → o INSERT colide
+        # e NÃO faz nada: descartado continua 1, novo não é re-marcado, e
+        # rowcount=0 faz persistir_hit retornar None (não conta como "novo").
+        # Se um dia isto virar UPSERT, é OBRIGATÓRIO excluir descartado/novo do
+        # SET — senão a descoberta ressuscita pregões que o dono já removeu.
         (
             cnpj, ano, seq, numero_controle,
             hit.get("title"), hit.get("description"),
