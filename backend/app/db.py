@@ -284,6 +284,31 @@ MIGRACOES = [
         atualizado_em TEXT
     );
     """,
+    # v13 — Cadastro da EMPRESA do licitante (RAG Fase 3, geração de minutas de
+    # declarações de habilitação). Tabela de LINHA ÚNICA (id=1): os dados do
+    # próprio fornecedor (razão social, CNPJ, endereço, representante, porte)
+    # usados para PREENCHER os templates de declaração — NÃO é extração de
+    # edital, é texto-padrão do licitante (o gate de citação não se aplica).
+    # Por que NÃO usar a tabela `config`: config é allowlist rígida de
+    # parâmetros do sistema (routers/config.py CHAVES_VALIDAS), não dado de
+    # negócio. Tudo TEXT nullable: cadastro incremental — o usuário preenche aos
+    # poucos e cada campo vazio vira lacuna VISÍVEL na minuta (princípio 1:
+    # nunca chutar; lacuna explícita "[CAMPO — preencher]"). porte ∈
+    # {'me_epp','normal'} ou NULL (não declarado). A linha 1 é criada no PUT
+    # (upsert), não aqui — GET sem linha devolve objeto com campos null.
+    """
+    CREATE TABLE empresa(
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        razao_social TEXT,
+        cnpj TEXT,
+        endereco TEXT,
+        representante_nome TEXT,
+        representante_cpf TEXT,
+        representante_cargo TEXT,
+        porte TEXT,                      -- 'me_epp' | 'normal' | NULL
+        atualizado_em TEXT
+    );
+    """,
 ]
 
 
