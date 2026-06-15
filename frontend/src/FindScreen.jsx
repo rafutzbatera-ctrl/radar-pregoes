@@ -134,7 +134,7 @@ function ChipsInput({ termos, excluir, aoMudar }) {
   );
 }
 
-export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, aoImportar, mudarPipeline, margemAlvo = 0.2 }) {
+export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, aoImportar, mudarPipeline, margemAlvo = 0.2, avisar, onDescartado }) {
   const { reduzido, estatico } = React.useContext(MotionCtx);
   const [busca, setBusca] = React.useState("");          // input texto (modo radar)
   const [uf, setUf] = React.useState("todas");
@@ -628,7 +628,8 @@ export function FindScreen({ aoAbrir, apenasSalvos, pregoes, erro, recarregar, a
             {apenasSalvos ? " salvas" : " encontradas"}
           </motion.div>
           {lista.map((p) => (
-            <CartaoPregao key={p.id} pregao={p} variants={entrada} margemAlvo={margemAlvo} onClick={() => aoAbrir(p.id)} />
+            <CartaoPregao key={p.id} pregao={p} variants={entrada} margemAlvo={margemAlvo}
+              onClick={() => aoAbrir(p.id)} avisar={avisar} onDescartado={onDescartado} />
           ))}
           {lista.length === 0 && (
             <motion.div variants={entrada} className="estado-vazio mod">
@@ -849,9 +850,41 @@ export function CartaoPregaoVivo({ pregao, variants, importar, importando, aoAbr
   );
 }
 
-export function CartaoPregao({ pregao, variants, onClick, margemAlvo = 0.2 }) {
+export function CartaoPregao({ pregao, variants, onClick, margemAlvo = 0.2, avisar, onDescartado }) {
   const ag = pregao.agregados || {};
   const veredito = normalizarVeredito(ag.veredito);
+  // descartar do radar: clique acidental é guardado por confirmação inline —
+  // 1º clique arma "Confirmar?" por alguns segundos; 2º clique confirma. O botão
+  // fica fora do <button> do card (HTML não permite botão dentro de botão) e usa
+  // stopPropagation para nunca abrir o pregão. Só aparece para pregões do radar
+  // (têm id numérico do backend; cartões ao vivo usam CartaoPregaoVivo).
+  const [confirmando, setConfirmando] = React.useState(false);
+  const [descartando, setDescartando] = React.useState(false);
+  const armarRef = React.useRef(null);
+  React.useEffect(() => () => clearTimeout(armarRef.current), []);
+  const podeDescartar = typeof onDescartado === "function";
+  const aoClicarDescartar = (e) => {
+    e.stopPropagation();
+    if (descartando) return;
+    if (!confirmando) {
+      setConfirmando(true);
+      clearTimeout(armarRef.current);
+      armarRef.current = setTimeout(() => setConfirmando(false), 4000);
+      return;
+    }
+    clearTimeout(armarRef.current);
+    setDescartando(true);
+    api.descartarPregao(pregao.id)
+      .then(() => {
+        if (avisar) avisar("Pregão descartado do radar", "ok");
+        onDescartado(pregao.id);
+      })
+      .catch((err) => {
+        if (avisar) avisar((err && err.message) || "erro ao descartar", "erro");
+        setDescartando(false);
+        setConfirmando(false);
+      });
+  };
   const linhaSilk = [
     pregao.modalidade,
     pregao.municipio ? pregao.municipio + "/" + pregao.uf : pregao.uf,
@@ -864,7 +897,8 @@ export function CartaoPregao({ pregao, variants, onClick, margemAlvo = 0.2 }) {
   const potencial = nAderentes > 0 && pregao.receitaAderente != null
     ? pregao.receitaAderente * margemAlvo : null;
   return (
-    <motion.button type="button" className="card-pregao mod" variants={variants} onClick={onClick}
+    <motion.div className="card-pregao-wrap" variants={variants}>
+    <button type="button" className="card-pregao mod" onClick={onClick}
       aria-label={"Abrir análise de " + pregao.titulo + (veredito ? " — veredito prévio: " + VEREDITO_TXT[veredito] : "")}>
       <span className="card-edital silk">
         {pregao.novo && <em className="card-novo">novo</em>}
@@ -895,7 +929,22 @@ export function CartaoPregao({ pregao, variants, onClick, margemAlvo = 0.2 }) {
           : <span className="card-sync silk">{pregao.sincronizado ? "sem matches confirmados" : "abrir para analisar"}</span>}
         {!pregao.sincronizado && <span className="card-sync silk">sincronizar p/ habilitação</span>}
       </span>
-    </motion.button>
+    </button>
+    {podeDescartar && (
+      <button type="button"
+        className={"card-descartar" + (confirmando ? " confirmar" : "")}
+        onClick={aoClicarDescartar}
+        disabled={descartando}
+        aria-label={confirmando ? "Confirmar descarte do pregão do radar" : "Descartar pregão do radar"}
+        title={confirmando ? "Confirmar?" : "Descartar do radar"}
+        style={{ color: confirmando ? "var(--clip)" : "var(--silk)" }}>
+        {Ico.lixeira}
+        <span className="card-descartar-txt">
+          {descartando ? "descartando…" : confirmando ? "Confirmar?" : "Descartar"}
+        </span>
+      </button>
+    )}
+    </motion.div>
   );
 }
 

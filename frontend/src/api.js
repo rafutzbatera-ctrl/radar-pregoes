@@ -255,6 +255,14 @@ export const api = {
   pregao: (id) => req(`/pregoes/${id}`).then(adaptarPregao),
   atualizarPregao: (id, corpo) =>
     req(`/pregoes/${id}`, { method: "PATCH", body: JSON.stringify(corpo) }).then(adaptarPregao),
+  // descartar pregão do radar (soft-delete no backend: some da lista e não
+  // volta; PATCH {descartado:false} desfaz). DELETE responde 204 sem corpo →
+  // req() faz r.json() e estoura; 204 = ok (mesmo padrão de removerCertidao).
+  descartarPregao: (id) =>
+    req(`/pregoes/${id}`, { method: "DELETE" }).catch((e) => {
+      if (e instanceof SyntaxError) return null;
+      throw e;
+    }),
   sincronizar: (id) => req(`/pregoes/${id}/sincronizar`, { method: "POST" }),
   sincronizarItens: (id) => req(`/pregoes/${id}/sincronizar-itens`, { method: "POST" }),
   pipelineResumo: () => req("/pipeline/resumo"),

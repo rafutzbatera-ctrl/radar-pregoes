@@ -549,6 +549,12 @@ export default function App() {
 
   const salvarPregao = (id, salvo) => mudarPipeline(id, { salvo });
 
+  // descartar pregão do radar: o card chama a API e a confirmação; aqui só
+  // removemos o card da lista (o backend faz soft-delete e listar() já exclui
+  // descartados, então não volta no próximo carregarTudo).
+  const removerDoRadar = (id) =>
+    setPregoes((ps) => (ps || []).filter((p) => p.id !== id));
+
   /* ---------- pregão ativo (detalhe + lista como fallback do cabeçalho) ---------- */
   const pregaoLista = idAtivo != null && pregoes ? pregoes.find((p) => p.id === idAtivo) : null;
   const detalheDoAtivo = detalhe && detalhe.id === idAtivo ? detalhe : null;
@@ -592,12 +598,14 @@ export default function App() {
       {tela.nome === "find" && (
         <FindScreen aoAbrir={abrirPregao} apenasSalvos={false}
           pregoes={pregoes} erro={erros.pregoes} recarregar={carregarTudo}
-          aoImportar={importarPregao} margemAlvo={margemAlvoConfig} />
+          aoImportar={importarPregao} margemAlvo={margemAlvoConfig}
+          avisar={avisar} onDescartado={removerDoRadar} />
       )}
       {tela.nome === "meus" && (
         <FindScreen aoAbrir={abrirPregao} apenasSalvos={true}
           pregoes={pregoes} erro={erros.pregoes} recarregar={carregarTudo}
-          mudarPipeline={mudarPipeline} margemAlvo={margemAlvoConfig} />
+          mudarPipeline={mudarPipeline} margemAlvo={margemAlvoConfig}
+          avisar={avisar} onDescartado={removerDoRadar} />
       )}
       {tela.nome === "buscas" && (
         <BuscasScreen buscas={buscas} erro={erros.buscas} recarregar={carregarTudo}

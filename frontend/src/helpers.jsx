@@ -430,6 +430,11 @@ export const Ico = {
       <path d="M9 2 4 7l5 5"></path>
     </svg>
   ),
+  lixeira: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.6 9.5h6.8L12 4M6.5 6.5v5M9.5 6.5v5"></path>
+    </svg>
+  ),
   externo: (
     <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
       <path d="M5 2H2.5v9.5h9.5V9M8 2h4v4M12 2 6.5 7.5"></path>
