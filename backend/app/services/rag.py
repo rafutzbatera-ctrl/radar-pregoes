@@ -12,11 +12,13 @@ Pipeline:
   preferindo fronteiras de cláusula numerada; empacota até RAG_CHUNK_MAX chars
   com overlap, preservando offsets verbatim.
 - indexar_chunks: embeda os chunks com o e5 ("passage: ") e grava o vetor como
-  BLOB float32; idempotente por pregão.
+  BLOB float32; popula tb. o índice léxico FTS5 (rag_fts); idempotente por pregão.
 - ingerir: parte de IO — obtém os PDFs (já baixados ou via PNCP), extrai páginas
   e chama indexar_chunks.
-- perguntar: embeda a pergunta ("query: "), faz cosseno (numpy) contra a matriz
-  de vetores e devolve os top-k acima do threshold.
+- perguntar: recuperação HÍBRIDA — cosseno e5 (semântico) + BM25 via SQLite
+  FTS5 (léxico) fundidos por Reciprocal Rank Fusion (RRF). FTS5 é nativo do
+  SQLite (zero dependência nova); sem ele, degrada para só-vetor. Gate de
+  honestidade preserva o "não encontrado" (cosseno ≥ threshold OU match léxico).
 
 Reusa: matching.embed_padrao (e5, vetores normalizados), extracao.extrair_paginas,
 sincronizacao._baixar_arquivos, pncp.cliente().
@@ -172,6 +174,142 @@ def _vetor_para_blob(v) -> bytes:
     return np.asarray(v, dtype=np.float32).tobytes()
 
 
+# ----------------------------- FTS5 (léxica BM25) -----------------------------
+# A recuperação híbrida soma o ranking SEMÂNTICO (cosseno e5) com o LÉXICO (BM25
+# via SQLite FTS5) por Reciprocal Rank Fusion. O FTS5 é NATIVO do SQLite (zero
+# dependência nova), mas pode faltar em builds exóticos — por isso TUDO aqui é
+# tolerante: se a tabela virtual não puder ser criada/consultada, o RAG degrada
+# graciosamente para só-vetor (comportamento idêntico ao da Fase 1).
+
+# tokenize unicode61 remove_diacritics 2 → casa "prazo"/"prázo" (sem acento) e
+# quebra por não-alfanumérico, o que combina com a sanitização da pergunta.
+_FTS_DDL = (
+    "CREATE VIRTUAL TABLE IF NOT EXISTS rag_fts USING fts5("
+    "  texto, chunk_id UNINDEXED, pregao_id UNINDEXED,"
+    "  tokenize='unicode61 remove_diacritics 2')"
+)
+
+# RRF: ranking fundido = Σ 1/(_RRF_K + rank_naquela_lista). k=60 é o valor
+# canônico do paper (Cormack et al.) — amortece o peso das primeiras posições.
+_RRF_K = 60
+# candidatos por lista antes da fusão (amplo p/ a fusão ter material; o top-k
+# final é settings.RAG_TOP_K).
+_CAND_N = 20
+
+# extrai termos alfanuméricos (inclui acentuados) da pergunta p/ o MATCH.
+_RE_TERMO = re.compile(r"[0-9A-Za-zÀ-ÿ]+", re.UNICODE)
+
+# stopwords PT-BR (palavras de função). Sem elas o MATCH só casa em termos de
+# CONTEÚDO — crucial para a HONESTIDADE do gate: uma pergunta fora do tema
+# ("qual a cor do papel timbrado?") não pode "casar" o FTS só porque compartilha
+# "a"/"do"/"qual" com o edital (match espúrio que reabriria a porta a respostas
+# inventadas). Lista enxuta e estática (determinística p/ teste; sem dependência
+# externa). Termos de 1 letra também caem (filtro de tamanho), então não preciso
+# listar "a"/"o"/"e".
+_STOPWORDS = frozenset({
+    "qual", "quais", "quanto", "quantos", "quanta", "quantas", "quando",
+    "onde", "como", "porque", "por", "que", "qye", "para", "pra", "com",
+    "sem", "sobre", "the", "de", "do", "da", "dos", "das", "no", "na", "nos",
+    "nas", "em", "um", "uma", "uns", "umas", "ao", "aos", "se", "ou", "mas",
+    "os", "as", "ser", "está", "esta", "este", "isso", "essa", "esse", "ela",
+    "ele", "eu", "me", "meu", "minha", "qual", "tem", "ter", "há", "foi",
+})
+
+
+def _e_termo_util(termo: str) -> bool:
+    """True se o termo deve entrar no MATCH: não é stopword e tem ≥ 2 chars
+    (termos de 1 letra são ruído léxico — pegam tudo, não discriminam)."""
+    return len(termo) >= 2 and termo.lower() not in _STOPWORDS
+
+
+# hook de teste para simular ambiente SEM FTS5 (degradação para só-vetor) sem
+# precisar de um build do SQLite sem o módulo. False em produção.
+_FTS_FORCE_OFF = False
+
+
+def _fts_disponivel(con: sqlite3.Connection) -> bool:
+    """Garante (idempotente) a tabela virtual rag_fts e diz se o FTS5 existe.
+
+    Cria a tabela sob demanda — a migração v11 é só um marcador (ver db.py),
+    pois `CREATE VIRTUAL TABLE` num build sem FTS5 quebraria `db.abrir()`. O DDL
+    usa IF NOT EXISTS (idempotente e barato), então é seguro chamar a cada
+    request — não há cache (sqlite3.Connection desta build não aceita atributos
+    nem weakref; um cache por id() corromperia em reuso de id após GC da
+    conexão). Em qualquer erro (build sem FTS5) loga e devolve False: o RAG
+    segue só-vetor. _FTS_FORCE_OFF (teste) força a degradação.
+    """
+    if _FTS_FORCE_OFF:
+        return False
+    try:
+        con.execute(_FTS_DDL)
+        return True
+    except sqlite3.Error as exc:
+        log.warning("FTS5 indisponível — RAG degrada para só-vetor: %s", exc)
+        return False
+
+
+def _sanitizar_match(pergunta: str) -> str:
+    """Monta a expressão MATCH do FTS5 a partir da pergunta do usuário.
+
+    Extrai os termos alfanuméricos de CONTEÚDO (descarta stopwords e termos de 1
+    letra — ver _e_termo_util), envolve cada um em aspas duplas (escapando aspas
+    internas — sintaxe de string FTS5: "" dentro de "...") e junta com OR. OR
+    (não AND) para NÃO exigir todos os termos — recall amplo; quem ordena é o
+    BM25 (rank) + o RRF. Sem termos úteis → "" (o chamador trata como sem-léxico,
+    e o gate cai só no critério semântico — preserva a honestidade do RAG).
+    """
+    termos = [t for t in _RE_TERMO.findall(pergunta or "") if _e_termo_util(t)]
+    if not termos:
+        return ""
+    return " OR ".join('"' + t.replace('"', '""') + '"' for t in termos)
+
+
+def _indexar_fts(con: sqlite3.Connection, pregao_id: int,
+                 linhas: list[tuple[int, str]]) -> None:
+    """Popula o FTS do pregão (idempotente). `linhas` = [(chunk_id, texto)].
+
+    Apaga as linhas do pregão antes de inserir (espelha o DELETE de rag_chunks).
+    Tolerante: se o FTS estiver indisponível, não faz nada (degrada p/ só-vetor).
+    """
+    if not _fts_disponivel(con):
+        return
+    try:
+        con.execute("DELETE FROM rag_fts WHERE pregao_id=?", (pregao_id,))
+        con.executemany(
+            "INSERT INTO rag_fts(texto, chunk_id, pregao_id) VALUES (?,?,?)",
+            [(texto, chunk_id, pregao_id) for chunk_id, texto in linhas],
+        )
+    except sqlite3.Error as exc:
+        log.warning("Falha ao popular FTS do pregão %s (segue só-vetor): %s",
+                    pregao_id, exc)
+
+
+def _buscar_fts(con: sqlite3.Connection, pregao_id: int,
+                pergunta: str, limite: int = _CAND_N) -> list[int]:
+    """Ranking léxico (BM25): lista de chunk_id ordenada por relevância FTS5.
+
+    Vazia se o FTS estiver indisponível, a pergunta não tiver termos, ou nada
+    casar. O `rank` do FTS5 já vem ordenável (menor = mais relevante); o ORDER
+    BY rank devolve do melhor ao pior — a POSIÇÃO na lista é o rank usado no RRF.
+    """
+    if not _fts_disponivel(con):
+        return []
+    match = _sanitizar_match(pergunta)
+    if not match:
+        return []
+    try:
+        linhas = con.execute(
+            "SELECT chunk_id FROM rag_fts "
+            "WHERE rag_fts MATCH ? AND pregao_id=? ORDER BY rank LIMIT ?",
+            (match, pregao_id, limite),
+        ).fetchall()
+    except sqlite3.Error as exc:
+        log.warning("Falha na busca FTS do pregão %s (segue só-vetor): %s",
+                    pregao_id, exc)
+        return []
+    return [ln[0] for ln in linhas]
+
+
 def indexar_chunks(con: sqlite3.Connection, pregao_id: int, fontes,
                    embed=matching.embed_padrao) -> dict:
     """Chunka, embeda e persiste os chunks de um pregão. Idempotente.
@@ -194,10 +332,11 @@ def indexar_chunks(con: sqlite3.Connection, pregao_id: int, fontes,
 
     con.execute("DELETE FROM rag_chunks WHERE pregao_id=?", (pregao_id,))
 
+    fts_linhas: list[tuple[int, str]] = []  # (chunk_id, texto) p/ popular o FTS
     if registros:
         vetores = embed(textos)
         for ch, vetor in zip(registros, vetores):
-            con.execute(
+            cur = con.execute(
                 """INSERT INTO rag_chunks
                      (pregao_id, arquivo_id, pagina, ordem, offset_inicio,
                       offset_fim, texto, vetor)
@@ -206,6 +345,11 @@ def indexar_chunks(con: sqlite3.Connection, pregao_id: int, fontes,
                  ch["offset_inicio"], ch["offset_fim"], ch["texto"],
                  _vetor_para_blob(vetor)),
             )
+            fts_linhas.append((cur.lastrowid, ch["texto"]))
+
+    # popular o índice léxico (BM25) — idempotente (apaga as linhas do pregão
+    # antes); se o FTS5 estiver indisponível, pula silenciosamente (só-vetor).
+    _indexar_fts(con, pregao_id, fts_linhas)
 
     con.execute(
         """INSERT OR REPLACE INTO rag_status
@@ -297,11 +441,26 @@ def perguntar(con: sqlite3.Connection, pregao_id: int, pergunta: str,
               k: int | None = None, embed=matching.embed_padrao,
               threshold: float | None = None, sintetizar: bool = False,
               sintetizador=None) -> dict:
-    """Recuperação extrativa (Fase 1): devolve os trechos do edital mais
-    próximos da pergunta (cosseno ≥ threshold). Os trechos são a resposta.
+    """Recuperação extrativa HÍBRIDA: devolve os trechos do edital mais
+    relevantes para a pergunta. Os trechos SÃO a resposta (verbatim).
+
+    Recuperação = fusão de dois rankings por Reciprocal Rank Fusion (RRF):
+      - SEMÂNTICO: cosseno e5 de TODOS os chunks; top _CAND_N candidatos.
+      - LÉXICO (BM25): SQLite FTS5 sobre os termos da pergunta; top _CAND_N.
+    score_rrf(c) = Σ 1/(_RRF_K + rank_c). Ordena por RRF desc e pega top-k. O
+    FTS5 pega o match léxico EXATO que o e5-small às vezes deixa fora do topo
+    (ex.: "prazo de entrega"); o e5 pega a semântica. Sem FTS5 (build sem o
+    módulo) → degrada para só-vetor, idêntico à Fase 1.
+
+    GATE de honestidade (não regride): um trecho só entra se tiver SINAL real —
+    cosseno ≥ threshold OU match léxico FTS para a pergunta. Pergunta fora do
+    tema não casa o FTS nem tem cosseno alto → nao_encontrado (princípio 1).
 
     Sem chunks → disponivel=False, motivo "nao_indexado".
-    max(score) < threshold → disponivel=False, motivo "nao_encontrado".
+    Nenhum trecho com sinal → disponivel=False, motivo "nao_encontrado".
+    Cada trecho mantém o shape da Fase 1 (texto/arquivo_id/arquivo_titulo/
+    pagina/offsets/score=cosseno) e ganha `fonte_rank` ("vetor"|"lexico"|
+    "ambos") só para transparência — o frontend não quebra.
 
     `sintetizar=True` (opt-in, Fase 2): quando há trechos E
     settings.RAG_SINTESE_MODO != "off", anexa uma síntese em prosa em
@@ -326,13 +485,53 @@ def perguntar(con: sqlite3.Connection, pregao_id: int, pergunta: str,
         return {"disponivel": False, "motivo": "reindexar", "trechos": []}
     scores = matriz @ q  # cosseno (vetores e5 já normalizados)
 
-    ordem = np.argsort(scores)[::-1][:k]
-    if len(ordem) == 0 or float(scores[ordem[0]]) < threshold:
+    # mapeia chunk_id (rag_chunks.id) → posição na matriz/rows, p/ casar o
+    # ranking léxico (que vem por chunk_id) com os índices da matriz.
+    id_para_idx = {r["id"]: i for i, r in enumerate(rows)}
+
+    # --- ranking VETORIAL: top _CAND_N candidatos por cosseno desc ---
+    rank_vetor: dict[int, int] = {}  # idx_matriz → rank (0-based) na lista vetor
+    ordem_vetor = np.argsort(scores)[::-1][:_CAND_N]
+    for pos, idx in enumerate(ordem_vetor):
+        rank_vetor[int(idx)] = pos
+
+    # --- ranking LÉXICO (BM25/FTS5): top _CAND_N chunk_id por relevância ---
+    rank_lexico: dict[int, int] = {}  # idx_matriz → rank (0-based) na lista FTS
+    for pos, chunk_id in enumerate(_buscar_fts(con, pregao_id, pergunta, _CAND_N)):
+        idx = id_para_idx.get(chunk_id)
+        if idx is not None:  # ignora chunk órfão (FTS dessincronizado)
+            rank_lexico[idx] = pos
+
+    # --- Reciprocal Rank Fusion (RRF) sobre a UNIÃO dos dois rankings ---
+    # score_rrf(c) = Σ 1/(_RRF_K + rank_c_naquela_lista). Quem aparece nas duas
+    # listas soma duas parcelas → sobe. fonte_rank registra de onde o chunk veio.
+    candidatos = set(rank_vetor) | set(rank_lexico)
+    fundidos: list[tuple[float, int]] = []  # (score_rrf, idx_matriz)
+    for idx in candidatos:
+        rrf = 0.0
+        if idx in rank_vetor:
+            rrf += 1.0 / (_RRF_K + rank_vetor[idx])
+        if idx in rank_lexico:
+            rrf += 1.0 / (_RRF_K + rank_lexico[idx])
+        fundidos.append((rrf, idx))
+    # ordena por RRF desc; desempate determinístico pelo cosseno (idx estável)
+    fundidos.sort(key=lambda t: (t[0], float(scores[t[1]])), reverse=True)
+    topo = fundidos[:k]
+
+    # --- GATE de honestidade (não pode regredir): só responde se houver SINAL
+    # real. disponivel=True se algum chunk do topo tiver cosseno ≥ threshold OU
+    # vier do ranking léxico (match BM25 = termo exato da pergunta no chunk). A
+    # pergunta fora do tema não casa o FTS nem tem cosseno alto → nao_encontrado.
+    def _tem_sinal(idx: int) -> bool:
+        return float(scores[idx]) >= threshold or idx in rank_lexico
+
+    if not topo or not any(_tem_sinal(idx) for _rrf, idx in topo):
         return {"disponivel": False, "motivo": "nao_encontrado", "trechos": []}
 
     # títulos dos arquivos (JOIN arquivos.titulo) — um lookup por arquivo_id
     titulos: dict[int, str] = {}
-    arq_ids = {rows[i]["arquivo_id"] for i in ordem if rows[i]["arquivo_id"] is not None}
+    arq_ids = {rows[idx]["arquivo_id"] for _r, idx in topo
+               if rows[idx]["arquivo_id"] is not None}
     for aid in arq_ids:
         a = con.execute(
             "SELECT titulo FROM arquivos WHERE id=?", (aid,)
@@ -341,11 +540,18 @@ def perguntar(con: sqlite3.Connection, pregao_id: int, pergunta: str,
             titulos[aid] = a["titulo"]
 
     trechos = []
-    for i in ordem:
-        score = float(scores[i])
-        if score < threshold:
-            break  # top-k ordenado; abaixo do threshold não entra
-        r = rows[i]
+    for _rrf, idx in topo:
+        # só entram chunks com SINAL real (cosseno alto OU match léxico) — um
+        # candidato que só veio "de carona" no top-k sem sinal não vira resposta
+        # (mantém a honestidade do nao_encontrado por trecho).
+        if not _tem_sinal(idx):
+            continue
+        score = float(scores[idx])
+        no_vetor = idx in rank_vetor
+        no_lexico = idx in rank_lexico
+        fonte = ("ambos" if no_vetor and no_lexico
+                 else "lexico" if no_lexico else "vetor")
+        r = rows[idx]
         trechos.append({
             "texto": r["texto"],
             "arquivo_id": r["arquivo_id"],
@@ -353,7 +559,8 @@ def perguntar(con: sqlite3.Connection, pregao_id: int, pergunta: str,
             "pagina": r["pagina"],
             "offset_inicio": r["offset_inicio"],
             "offset_fim": r["offset_fim"],
-            "score": round(score, 4),
+            "score": round(score, 4),  # cosseno (como na Fase 1)
+            "fonte_rank": fonte,       # "vetor"|"lexico"|"ambos" (transparência)
         })
 
     if not trechos:

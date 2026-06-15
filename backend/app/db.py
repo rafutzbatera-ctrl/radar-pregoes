@@ -251,6 +251,19 @@ MIGRACOES = [
     CREATE INDEX IF NOT EXISTS idx_pregoes_status_pipeline ON pregoes(status_pipeline);
     CREATE INDEX IF NOT EXISTS idx_pregoes_busca_id ON pregoes(busca_id);
     """,
+    # v11 — busca híbrida do RAG (léxica BM25 + semântica e5). Esta migração é
+    # só um MARCADOR de versão: NÃO cria a tabela FTS5 aqui. Motivo: a tabela
+    # virtual FTS5 é opcional (degradação graciosa) e `executescript` não captura
+    # erro por statement — se o build do SQLite não tivesse FTS5, criar a virtual
+    # table aqui quebraria `db.abrir()` inteiro. Em vez disso, o índice FTS é
+    # criado SOB DEMANDA, de forma tolerante, em rag.indexar_chunks
+    # (services/rag.py → _garantir_fts, com try/except). Sem FTS5, o RAG degrada
+    # para só-vetor e o resto do schema segue intacto. Schema da tabela (criada
+    # lá): rag_fts USING fts5(texto, chunk_id UNINDEXED, pregao_id UNINDEXED,
+    #   tokenize='unicode61 remove_diacritics 2')  -- remove acento (prazo/prázo).
+    """
+    INSERT OR IGNORE INTO config(chave, valor) VALUES ('rag_busca', 'hibrida');
+    """,
 ]
 
 

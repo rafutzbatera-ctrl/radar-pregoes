@@ -601,6 +601,159 @@ def test_endpoint_perguntar_sem_sintese_default(client, con, cliente_fake, monke
     assert "sintese" not in r.json()
 
 
+# --------- Busca híbrida: BM25 (FTS5) + e5 fundidos por RRF ---------
+
+# Cenário de RECALL controlado. O alvo (cláusula com "prazo de entrega") recebe
+# cosseno fake LIGEIRAMENTE menor que vários decoys semanticamente próximos;
+# sem hibridização ele cai FORA do top-k vetorial. O BM25 casa o termo exato e o
+# RRF traz o alvo de volta ao topo. Embed fake (2D, ângulos controlados) — nunca
+# o e5 real; o FTS5 é REAL (determinístico, sem modelo).
+import math
+
+# páginas: cada uma vira ≥1 chunk próprio (separadas por linha em branco). O
+# ALVO ("prazo de entrega") fica entre decoys que NÃO contêm esse termo exato
+# mas falam do mesmo assunto (logística/cronograma) — alto cosseno, zero match
+# léxico no termo da pergunta.
+_PG_ALVO = "2.1 O prazo de entrega dos produtos é de 30 (trinta) dias corridos.\n"
+_PG_DECOY1 = "5.1 O cronograma de fornecimento segue o anexo logístico II.\n"
+_PG_DECOY2 = "5.2 A logística de remessa observa o calendário do anexo III.\n"
+_PG_DECOY3 = "5.3 O fornecimento programado consta no plano de remessas IV.\n"
+_PAGINAS_RECALL = [_PG_ALVO, _PG_DECOY1, _PG_DECOY2, _PG_DECOY3]
+
+
+class EmbedRecallFake:
+    """Embed 2D determinístico que dá ao ALVO um cosseno < ao dos decoys.
+
+    A pergunta é o vetor de referência (ângulo 0). Cada chunk recebe um ângulo:
+    decoys bem próximos (cosseno ~0.97–0.99) e o alvo mais distante (~0.70).
+    Assim, em top-k pequeno, o alvo fica de FORA na recuperação só-vetor — é o
+    BM25 + RRF que o resgata.
+    """
+
+    def _ang(self, corpo: str) -> float:
+        t = corpo.lower()
+        if "prazo de entrega" in t:
+            return math.radians(45)   # alvo: cosseno ~0.707 com a pergunta
+        if "cronograma" in t:
+            return math.radians(8)    # decoy: cosseno ~0.990
+        if "logística" in t or "logistica" in t:
+            return math.radians(10)   # decoy: ~0.985
+        if "fornecimento programado" in t:
+            return math.radians(12)   # decoy: ~0.978
+        return math.radians(90)       # fora do tema: ortogonal
+
+    def __call__(self, textos):
+        out = []
+        for t in textos:
+            corpo = t.split(": ", 1)[-1]
+            if corpo == "qual o prazo de entrega dos produtos?":
+                ang = 0.0  # a pergunta é a referência
+            else:
+                ang = self._ang(corpo)
+            out.append([math.cos(ang), math.sin(ang)])
+        return out
+
+
+def test_hibrido_recall_traz_alvo_que_so_vetor_perderia(con, monkeypatch):
+    """RECALL: com k pequeno, a recuperação só-vetor deixaria o alvo de fora
+    (decoys têm cosseno maior); a hibridização (BM25 casa 'prazo de entrega' +
+    RRF) traz o alvo de volta ao topo."""
+    pid = _criar_pregao(con)
+    embed = EmbedRecallFake()
+    rag.indexar_chunks(con, pid, [(None, _PAGINAS_RECALL)], embed=embed)
+    pergunta = "qual o prazo de entrega dos produtos?"
+
+    # baseline SÓ-VETOR: força a ausência do FTS → o alvo cai de fora do top-2.
+    monkeypatch.setattr(rag, "_FTS_FORCE_OFF", True)
+    so_vetor = rag.perguntar(con, pid, pergunta, k=2, embed=embed)
+    textos_vetor = [t["texto"].lower() for t in so_vetor["trechos"]]
+    assert not any("prazo de entrega" in x for x in textos_vetor), \
+        "baseline: só-vetor (k=2) NÃO deveria trazer o alvo (decoys vencem)"
+
+    # HÍBRIDO: reabilita o FTS (o indexar já o populou) e refaz a pergunta.
+    monkeypatch.setattr(rag, "_FTS_FORCE_OFF", False)
+    hibrido = rag.perguntar(con, pid, pergunta, k=2, embed=embed)
+    assert hibrido["disponivel"] is True
+    textos_hib = [t["texto"].lower() for t in hibrido["trechos"]]
+    assert any("prazo de entrega" in x for x in textos_hib), \
+        "híbrido: BM25 + RRF deveriam trazer o alvo ao top-k"
+    # o alvo veio do ranking léxico (sozinho ou junto do vetor)
+    alvo = next(t for t in hibrido["trechos"] if "prazo de entrega" in t["texto"].lower())
+    assert alvo["fonte_rank"] in ("lexico", "ambos")
+    # shape da Fase 1 preservado (frontend não quebra)
+    assert "score" in alvo and "pagina" in alvo and "offset_inicio" in alvo
+
+
+def test_hibrido_off_topic_continua_nao_encontrado(con):
+    """Honestidade: pergunta fora do tema não casa o FTS (só conteúdo, sem
+    stopwords) nem tem cosseno alto → nao_encontrado (não regride)."""
+    pid = _criar_pregao(con)
+    embed = EmbedFake()
+    rag.indexar_chunks(con, pid, [(None, PAGINAS)], embed=embed)
+    r = rag.perguntar(con, pid, "qual a cor do papel timbrado?", embed=embed)
+    assert r["disponivel"] is False
+    assert r["motivo"] == "nao_encontrado"
+    assert r["trechos"] == []
+
+
+def test_fts_populado_no_indexar_e_idempotente(con):
+    """O FTS é populado no indexar e reindexar não duplica linhas (idempotente,
+    espelha o DELETE de rag_chunks)."""
+    pid = _criar_pregao(con)
+    embed = EmbedFake()
+    rag.indexar_chunks(con, pid, [(None, PAGINAS)], embed=embed)
+    n_chunks = con.execute(
+        "SELECT COUNT(*) c FROM rag_chunks WHERE pregao_id=?", (pid,)
+    ).fetchone()["c"]
+    n_fts1 = con.execute(
+        "SELECT COUNT(*) c FROM rag_fts WHERE pregao_id=?", (pid,)
+    ).fetchone()["c"]
+    assert n_fts1 == n_chunks, "uma linha FTS por chunk"
+    # cada linha FTS referencia um chunk_id real
+    ids_chunks = {r["id"] for r in con.execute(
+        "SELECT id FROM rag_chunks WHERE pregao_id=?", (pid,)).fetchall()}
+    ids_fts = {r["chunk_id"] for r in con.execute(
+        "SELECT chunk_id FROM rag_fts WHERE pregao_id=?", (pid,)).fetchall()}
+    assert ids_fts == ids_chunks
+    # reindexar não duplica
+    rag.indexar_chunks(con, pid, [(None, PAGINAS)], embed=embed)
+    n_fts2 = con.execute(
+        "SELECT COUNT(*) c FROM rag_fts WHERE pregao_id=?", (pid,)
+    ).fetchone()["c"]
+    assert n_fts2 == n_fts1
+
+
+def test_degradacao_sem_fts_funciona_so_vetor(con, monkeypatch):
+    """Sem FTS (build sem o módulo, simulado forçando indisponível), perguntar
+    ainda funciona em modo só-vetor — comportamento idêntico à Fase 1."""
+    pid = _criar_pregao(con)
+    embed = EmbedFake()
+    # simula ambiente SEM FTS5: _fts_disponivel devolve False, o indexar não
+    # popula o FTS e perguntar cai no caminho só-vetor.
+    monkeypatch.setattr(rag, "_FTS_FORCE_OFF", True)
+    rag.indexar_chunks(con, pid, [(None, PAGINAS)], embed=embed)
+    # sem FTS5, nenhuma tabela rag_fts foi populada (e nem precisa existir)
+    r = rag.perguntar(con, pid, "qual o prazo de entrega?", embed=embed)
+    assert r["disponivel"] is True
+    assert any("prazo de entrega" in t["texto"].lower() for t in r["trechos"])
+    # todos os trechos vieram só do vetor (sem léxico disponível)
+    assert all(t["fonte_rank"] == "vetor" for t in r["trechos"])
+
+
+def test_sanitizar_match_descarta_stopwords_e_termos_curtos(con):
+    """O MATCH usa só termos de CONTEÚDO (sem stopwords/1-char). Cada termo vem
+    entre aspas (string FTS5), o que neutraliza pontuação como sintaxe."""
+    assert rag._sanitizar_match("qual o prazo de entrega?") == '"prazo" OR "entrega"'
+    # só stopwords / 1-char → vazio (gate cai no critério semântico)
+    assert rag._sanitizar_match("qual o de a o e?") == ""
+    # pergunta com aspas/operadores não estoura o FTS5 (termos entre aspas) e
+    # ainda casa o conteúdo — exercita o MATCH de verdade contra o índice.
+    pid = _criar_pregao(con)
+    rag.indexar_chunks(con, pid, [(None, PAGINAS)], embed=EmbedFake())
+    ids = rag._buscar_fts(con, pid, 'qual a "garantia" AND OR mínima?')
+    assert ids, "deveria casar o chunk de garantia sem quebrar a sintaxe"
+
+
 # --------- helpers ---------
 
 def _criar_pregao(con) -> int:
