@@ -13,6 +13,9 @@ from . import sincronizacao
 
 log = logging.getLogger("radar.descoberta")
 
+class HitInvalido(ValueError):
+    """Hit do PNCP com cnpj/ano/seq malformado (não vira pregão)."""
+
 
 def rodar_busca(con: sqlite3.Connection, busca_id: int,
                 cliente: pncp.ClientePNCP | None = None,
@@ -40,7 +43,13 @@ def rodar_busca(con: sqlite3.Connection, busca_id: int,
             hits = resp.get("items", [])
             for hit in hits:
                 vistos += 1
-                pid = persistir_hit(con, hit, busca_id)
+                try:
+                    pid = persistir_hit(con, hit, busca_id)
+                except HitInvalido as exc:
+                    # hit malformado não derruba o lote (monitoramento agendado):
+                    # pula, registra e segue para os demais.
+                    log.warning("Hit ignorado na busca %s: %s", busca_id, exc)
+                    continue
                 if pid is not None:
                     novos += 1
                     ids_novos.append(pid)
@@ -114,8 +123,22 @@ def persistir_hit(con: sqlite3.Connection, hit: dict,
     if not numero_controle:
         return None
     cnpj = hit.get("orgao_cnpj")
-    ano = int(hit.get("ano") or 0)
-    seq = int(hit.get("numero_sequencial") or 0)
+    # Validação de segurança/integridade: cnpj SÓ dígitos, ano/seq inteiros.
+    # Qualquer não-dígito no cnpj (ex.: '../', '/', '@host', letras) é barrado —
+    # é o que habilitaria SSRF (path da URL do PNCP) ou path traversal (diretório
+    # ARQUIVOS_DIR/{cnpj}_{ano}_{seq}). Hit malformado vira HitInvalido: não grava
+    # pregão com dado inválido nem deixa o cnpj malicioso chegar a URL/path.
+    # Antes: int(... or 0) gravava ano=0/seq=0 (link PNCP quebrado, viola
+    # princípio 3) ou estourava ValueError cru → 500 no /importar.
+    if cnpj is None or not str(cnpj).isdigit():
+        raise HitInvalido(f"cnpj inválido (só dígitos): {cnpj!r}")
+    try:
+        ano = int(hit.get("ano"))
+        seq = int(hit.get("numero_sequencial"))
+    except (TypeError, ValueError):
+        raise HitInvalido(
+            f"ano/seq inválidos: {hit.get('ano')!r}/{hit.get('numero_sequencial')!r}"
+        )
     cur = con.execute(
         """INSERT INTO pregoes
              (cnpj, ano, seq, numero_controle, titulo, descricao, orgao, unidade,

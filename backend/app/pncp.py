@@ -41,7 +41,30 @@ _TENTATIVAS = 5
 _CACHE_TTL = 6 * 3600  # 6 h
 
 
+def _validar_identidade(cnpj, ano, seq) -> tuple[str, int, int]:
+    """Sanitiza a identidade do pregão antes de virar URL ou caminho de arquivo.
+
+    cnpj/ano/seq vêm de hits do PNCP (e, no /descobrir/importar, do corpo do
+    usuário). Sem validação, um cnpj com `../`, `/` ou `@host` desvia o request
+    (SSRF) ou escapa de ARQUIVOS_DIR (path traversal). Regra mínima:
+    - cnpj: SÓ dígitos (qualquer não-dígito → rejeita; bloqueia traversal/host);
+    - ano/seq: inteiros (int() conversível).
+    Inválido → ValueError (não monta URL nem path). NÃO força 14 dígitos aqui
+    para preservar os cnpj curtos dos testes do cliente; a forma canônica
+    (^\\d{14}$) é exigida no ponto de ENTRADA (persistir_hit)."""
+    s = "" if cnpj is None else str(cnpj)
+    if not s.isdigit():
+        raise ValueError(f"cnpj inválido (só dígitos): {cnpj!r}")
+    try:
+        ano_i = int(ano)
+        seq_i = int(seq)
+    except (TypeError, ValueError):
+        raise ValueError(f"ano/seq inválidos: {ano!r}/{seq!r}")
+    return s, ano_i, seq_i
+
+
 def link_pncp(cnpj: str, ano: int, seq: int) -> str:
+    cnpj, ano, seq = _validar_identidade(cnpj, ano, seq)
     return f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}"
 
 
@@ -200,6 +223,7 @@ class ClientePNCP:
         antigo `api/pncp/v1/...` dá 301). Disponível e testado; ainda não usado
         pela UI (o bulk já embute o valor em cada registro).
         """
+        cnpj, ano, seq = _validar_identidade(cnpj, ano, seq)
         url = f"{BASE_CONSULTA}/orgaos/{cnpj}/compras/{ano}/{seq}"
         # pista interativa: detalhe avulso (1 compra por ação)
         return self._get_json(url, {}, usar_cache, pista="interativa")
@@ -210,6 +234,7 @@ class ClientePNCP:
         Pista PESADA (1,0s): roda em loops de avaliação/sincronização — fica na
         fila lenta para não atrapalhar a paginação interativa do usuário.
         """
+        cnpj, ano, seq = _validar_identidade(cnpj, ano, seq)
         todos: list = []
         pagina = 1
         while True:
@@ -232,6 +257,7 @@ class ClientePNCP:
         Pista INTERATIVA (0,3s): só metadados (lista de URLs), 1 chamada por
         ação — o download do binário é que vai na pista pesada.
         """
+        cnpj, ano, seq = _validar_identidade(cnpj, ano, seq)
         url = f"{BASE_API}/orgaos/{cnpj}/compras/{ano}/{seq}/arquivos"
         return self._get_json(
             url, {"pagina": 1, "tamanhoPagina": 20}, usar_cache, pista="interativa"
@@ -249,6 +275,7 @@ class ClientePNCP:
         O FILTRO de ruído de sincronização NÃO mora aqui (cliente devolve cru) —
         é feito num helper testável (services/historico.py). Retorna a lista crua.
         """
+        cnpj, ano, seq = _validar_identidade(cnpj, ano, seq)
         url = f"{BASE_API}/orgaos/{cnpj}/compras/{ano}/{seq}/historico"
         return self._get_json(
             url, {"pagina": 1, "tamanhoPagina": 500}, usar_cache, pista="interativa"

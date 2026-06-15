@@ -107,6 +107,41 @@ def test_link_pncp():
         "https://pncp.gov.br/app/editais/01613770000172/2026/67"
 
 
+def test_validar_identidade_rejeita_cnpj_malformado():
+    """cnpj/ano/seq vêm de hits do PNCP e entram em URL (SSRF) e em caminho de
+    diretório (path traversal). Validar no ponto que monta a URL: cnpj só
+    dígitos, ano/seq inteiros. Malformado → ValueError, sem montar URL/path."""
+    # cnpj só-dígitos é aceito (preserva fixtures e o cnpj curto "123" dos testes)
+    cnpj, ano, seq = pncp._validar_identidade("01613770000172", 2026, 67)
+    assert (cnpj, ano, seq) == ("01613770000172", 2026, 67)
+    assert pncp._validar_identidade("123", "2026", "1") == ("123", 2026, 1)
+
+    # path traversal / letras / barras / host → rejeitado
+    for ruim in ("../../../evil", "01x", "0161377/000172", "@host", ""):
+        with pytest.raises(ValueError):
+            pncp._validar_identidade(ruim, 2026, 67)
+    # ano/seq não-inteiros → rejeitado
+    with pytest.raises(ValueError):
+        pncp._validar_identidade("01613770000172", "abc", 67)
+    with pytest.raises(ValueError):
+        pncp._validar_identidade("01613770000172", 2026, "12.5")
+
+
+def test_itens_com_cnpj_malformado_nao_faz_request(tmp_path, monkeypatch):
+    """cnpj com path traversal não vira request HTTP (rejeitado antes)."""
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    chamadas = {"n": 0}
+
+    def handler(request):
+        chamadas["n"] += 1
+        return httpx.Response(200, json=[])
+
+    cli = _cliente_com_transport(tmp_path, handler)
+    with pytest.raises(ValueError):
+        cli.itens("../../evil", 2026, 67, usar_cache=False)
+    assert chamadas["n"] == 0  # nenhuma requisição foi disparada
+
+
 def test_fixtures_reais_tem_campos_esperados():
     """As respostas reais gravadas têm o shape documentado no CLAUDE.md §4."""
     from tests.conftest import carregar_fixture

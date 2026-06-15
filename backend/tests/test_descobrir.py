@@ -347,3 +347,54 @@ def test_so_bens_filtra_tambem_na_busca_textual(client, monkeypatch):
     _patch_pncp(monkeypatch, cli)
     ncs = [i["numero_controle"] for i in client.get("/descobrir?q=x&so_bens=true").json()["itens"]]
     assert ncs == ["BEM"]
+
+
+# --------- hit malformado: 422 (não 500) e segurança cnpj/ano/seq ---------
+
+def test_importar_hit_cnpj_malformado_da_422(client, con):
+    """cnpj fora de ^\\d{14}$ (path traversal / letras) → 422, sem gravar pregão
+    nem montar URL/diretório com o cnpj malicioso."""
+    hit = _hit("NC-EVIL")
+    hit["orgao_cnpj"] = "../../../etc"
+    r = client.post("/descobrir/importar", json={"numero_controle": "NC-EVIL", "hit": hit})
+    assert r.status_code == 422
+    assert con.execute("SELECT COUNT(*) c FROM pregoes").fetchone()["c"] == 0
+
+
+def test_importar_hit_ano_invalido_da_422(client, con):
+    """ano/seq não-conversíveis para int → 422 (antes era 500 do ValueError)."""
+    hit = _hit("NC-BAD")
+    hit["ano"] = "abc"
+    r = client.post("/descobrir/importar", json={"numero_controle": "NC-BAD", "hit": hit})
+    assert r.status_code == 422
+    assert con.execute("SELECT COUNT(*) c FROM pregoes").fetchone()["c"] == 0
+
+    hit2 = _hit("NC-BAD2")
+    hit2["numero_sequencial"] = "12.5"
+    r2 = client.post("/descobrir/importar", json={"numero_controle": "NC-BAD2", "hit": hit2})
+    assert r2.status_code == 422
+
+
+def test_descoberta_pula_hit_malformado_sem_quebrar_lote(con):
+    """Na descoberta agendada, um hit malformado é pulado (não derruba o lote
+    nem grava pregão com cnpj/ano inválido)."""
+    from app.services import descoberta
+
+    busca_id = con.execute(
+        "INSERT INTO buscas_salvas (nome, termos, ufs) VALUES ('b','x','SP')"
+    ).lastrowid
+    con.commit()
+
+    bom = _hit("NC-OK")
+    ruim = _hit("NC-RUIM")
+    ruim["orgao_cnpj"] = "../evil"
+
+    class ClienteMisto:
+        def buscar(self, q="", **k):
+            return {"items": [ruim, bom], "total": 2}
+
+    r = descoberta.rodar_busca(con, busca_id, ClienteMisto(), enriquecer=False)
+    ncs = [p["numero_controle"]
+           for p in con.execute("SELECT numero_controle FROM pregoes")]
+    assert ncs == ["NC-OK"]            # só o hit válido entrou
+    assert r["novos"] == 1

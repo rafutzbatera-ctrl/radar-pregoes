@@ -418,7 +418,12 @@ def importar(corpo: ImportarIn, con: sqlite3.Connection = Depends(get_db)):
     Reaproveita persistir_hit (busca_id=None: pregão sem busca salva de origem).
     Retorna o pregão local no mesmo shape de GET /pregoes/{id}.
     """
-    descoberta.persistir_hit(con, corpo.hit, busca_id=None)
+    try:
+        descoberta.persistir_hit(con, corpo.hit, busca_id=None)
+    except descoberta.HitInvalido as exc:
+        # cnpj/ano/seq malformado (path traversal/SSRF, ou não-numérico) → 422
+        # com mensagem clara, NUNCA 500 nem pregão com dado inválido gravado.
+        raise HTTPException(422, f"Hit inválido: {exc}")
     con.commit()
     p = con.execute(
         "SELECT * FROM pregoes WHERE numero_controle=?", (corpo.numero_controle,)
