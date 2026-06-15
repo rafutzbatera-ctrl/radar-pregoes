@@ -50,11 +50,13 @@ export default function App() {
     return m;
   }, [catalogo]);
 
-  /* ---------- toast de aviso (erros de mutação etc.) ---------- */
-  const [aviso, setAviso] = React.useState(null);
+  /* ---------- toast de aviso (erros de mutação, confirmações etc.) ----------
+     `tipo`: "erro" (vermelho/--clip, role=alert) | "ok" (verde/--sinal) |
+     "aviso" (âmbar/--pico, padrão). Default mantém o comportamento original. */
+  const [aviso, setAviso] = React.useState(null); // { texto, tipo } | null
   const avisoTimer = React.useRef(null);
-  const avisar = React.useCallback((texto) => {
-    setAviso(texto);
+  const avisar = React.useCallback((texto, tipo = "aviso") => {
+    setAviso({ texto, tipo });
     clearTimeout(avisoTimer.current);
     avisoTimer.current = setTimeout(() => setAviso(null), 5500);
   }, []);
@@ -234,7 +236,7 @@ export default function App() {
       })
       .catch(() => {
         mutarEstado(pregaoId, "custos", item.n, undefined);
-        avisar("Não foi possível salvar o custo — valor revertido.");
+        avisar("Não foi possível salvar o custo — valor revertido.", "erro");
       });
   };
 
@@ -257,7 +259,7 @@ export default function App() {
       })
       .catch(() => {
         mutarEstado(pregaoId, "lances", item.n, undefined);
-        avisar("Não foi possível salvar o lance — valor revertido.");
+        avisar("Não foi possível salvar o lance — valor revertido.", "erro");
       });
   };
 
@@ -270,7 +272,7 @@ export default function App() {
     setCatalogo((cs) => (cs || []).map((c) => (c.id === produto.id ? { ...c, custo: valor } : c)));
     api.atualizarProduto(produto.id, { custo_unit: valor }).catch(() => {
       setCatalogo((cs) => (cs || []).map((c) => (c.id === produto.id ? { ...c, custo: anterior } : c)));
-      avisar("Não foi possível salvar o custo — valor revertido.");
+      avisar("Não foi possível salvar o custo — valor revertido.", "erro");
     });
   };
 
@@ -291,7 +293,7 @@ export default function App() {
       })
       .catch(() => {
         mutarEstado(pregaoId, "matches", item.n, anterior);
-        avisar("Não foi possível salvar o match — alteração revertida.");
+        avisar("Não foi possível salvar o match — alteração revertida.", "erro");
       });
   };
 
@@ -304,7 +306,7 @@ export default function App() {
     mutarEstado(pregaoId, "habilitacao", h.id, status);
     api.definirStatusHabilitacao(h.id, status).catch(() => {
       mutarEstado(pregaoId, "habilitacao", h.id, anterior);
-      avisar("Não foi possível salvar o status do requisito — revertido.");
+      avisar("Não foi possível salvar o status do requisito — revertido.", "erro");
     });
   };
 
@@ -327,7 +329,7 @@ export default function App() {
       })
       .catch(() => {
         setConfig(anterior);
-        avisar("Não foi possível salvar a margem alvo — revertido.");
+        avisar("Não foi possível salvar a margem alvo — revertido.", "erro");
       });
   };
 
@@ -364,7 +366,7 @@ export default function App() {
       })
       .catch(() => {
         setConfig(anterior);
-        avisar("Não foi possível salvar o deságio esperado — revertido.");
+        avisar("Não foi possível salvar o deságio esperado — revertido.", "erro");
       });
   };
 
@@ -376,7 +378,7 @@ export default function App() {
       .then(setConfig)
       .catch(() => {
         setConfig(anterior);
-        avisar("Não foi possível trocar o regime tributário — revertido.");
+        avisar("Não foi possível trocar o regime tributário — revertido.", "erro");
       });
   };
 
@@ -390,7 +392,7 @@ export default function App() {
         carregarDetalhe(id),
         api.listarPregoes().then(setPregoes).catch(() => {}),
       ]))
-      .catch((e) => avisar("Sincronização falhou: " + (e.message || "erro inesperado")))
+      .catch((e) => avisar("Sincronização falhou: " + (e.message || "erro inesperado"), "erro"))
       .finally(() => setSincronizando(false));
   };
 
@@ -400,7 +402,7 @@ export default function App() {
       .then((r) => {
         avisar(r && typeof r.novos === "number"
           ? "Busca concluída — " + r.novos + (r.novos === 1 ? " pregão novo." : " pregões novos.")
-          : "Busca concluída.");
+          : "Busca concluída.", "ok");
         return Promise.all([
           api.listarBuscas().then(setBuscas),
           api.listarPregoes().then(setPregoes),
@@ -409,14 +411,14 @@ export default function App() {
       .catch((e) => {
         avisar(e.status === 503
           ? "PNCP indisponível no momento (rate limit ou instabilidade) — tente de novo em instantes."
-          : "Não foi possível rodar a busca: " + (e.message || "erro"));
+          : "Não foi possível rodar a busca: " + (e.message || "erro"), "erro");
       });
 
   const criarBusca = (corpo) =>
     api.criarBusca(corpo)
       .then(() => api.listarBuscas().then(setBuscas))
       .catch((e) => {
-        avisar("Não foi possível criar a busca: " + (e.message || "erro"));
+        avisar("Não foi possível criar a busca: " + (e.message || "erro"), "erro");
         throw e;
       });
 
@@ -425,7 +427,7 @@ export default function App() {
     setBuscas((bs) => (bs || []).map((x) => (x.id === b.id ? { ...x, ativo: alvo } : x)));
     api.atualizarBusca(b.id, { ativo: alvo }).catch(() => {
       setBuscas((bs) => (bs || []).map((x) => (x.id === b.id ? { ...x, ativo: b.ativo } : x)));
-      avisar("Não foi possível atualizar a busca — revertido.");
+      avisar("Não foi possível atualizar a busca — revertido.", "erro");
     });
   };
 
@@ -446,7 +448,7 @@ export default function App() {
       .catch((e) => {
         avisar(e.status === 503
           ? "PNCP indisponível no momento — tente de novo em instantes."
-          : "Não foi possível adicionar ao radar: " + (e.message || "erro"));
+          : "Não foi possível adicionar ao radar: " + (e.message || "erro"), "erro");
         throw e;
       });
 
@@ -455,7 +457,7 @@ export default function App() {
     api.criarProduto(corpo)
       .then(() => api.listarCatalogo().then(setCatalogo))
       .catch((e) => {
-        avisar("Não foi possível adicionar o produto: " + (e.message || "erro"));
+        avisar("Não foi possível adicionar o produto: " + (e.message || "erro"), "erro");
         throw e;
       });
 
@@ -484,7 +486,7 @@ export default function App() {
       setPregoes((ps) => (ps || []).map((p) => (p.id === id ? anterior : p)));
       setDetalhe((d) => (d && d.id === id && anteriorDetalhe
         ? { ...d, pregao: anteriorDetalhe } : d));
-      avisar("Não foi possível atualizar o funil — revertido.");
+      avisar("Não foi possível atualizar o funil — revertido.", "erro");
       throw e;
     });
   };
@@ -622,9 +624,13 @@ export default function App() {
         </div>
 
         {aviso && (
-          <div className="toast" role="alert">
+          <div
+            className={"toast toast-" + aviso.tipo}
+            role={aviso.tipo === "erro" ? "alert" : "status"}
+            aria-live={aviso.tipo === "erro" ? "assertive" : "polite"}
+          >
             <span className="aviso-led" aria-hidden="true"></span>
-            <span>{aviso}</span>
+            <span>{aviso.texto}</span>
           </div>
         )}
       </div>

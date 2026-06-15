@@ -1726,18 +1726,30 @@ body {
 /* edição direta */
 
 /* ==== adições port real ==== */
-/* toast das mutações (erro/confirmação) — acima do aviso fixo, mesmo idioma visual */
+/* toast das mutações (erro/confirmação) — acima do aviso fixo, mesmo idioma visual.
+   Variantes por tipo via --toast-cor (token semântico do tema, claro/escuro):
+   .toast-erro → --clip (vermelho) · .toast-ok → --sinal (verde) ·
+   .toast-aviso → --pico (âmbar, padrão). Borda esquerda + LED na cor; o texto
+   segue em --tinta (contraste AA garantido pelo painel nos dois temas). */
 .toast {
+  --toast-cor: var(--pico); /* padrão = aviso (âmbar) */
   position: fixed; right: 16px; bottom: 52px; z-index: 80;
   display: flex; align-items: center; gap: 9px;
   background: var(--painel); color: var(--tinta);
-  border: 1px solid rgba(224, 162, 27, 0.45);
+  border: 1px solid var(--linha);
+  border-left: 3px solid var(--toast-cor);
   font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.02em;
   padding: 10px 14px; border-radius: 8px;
   box-shadow: 0 10px 26px -12px rgba(0, 0, 0, 0.7);
   max-width: min(440px, calc(100vw - 32px));
 }
-.toast .aviso-led { width: 7px; height: 7px; border-radius: 50%; background: var(--pico); flex: none; }
+.toast-erro  { --toast-cor: var(--clip); }
+.toast-ok    { --toast-cor: var(--sinal); }
+.toast-aviso { --toast-cor: var(--pico); }
+.toast .aviso-led {
+  width: 7px; height: 7px; border-radius: 50%; flex: none;
+  background: var(--toast-cor); box-shadow: 0 0 5px var(--toast-cor);
+}
 
 /* status Ativa/Pausada agora é um toggle real (botão) */
 button.busca-card-status { border: none; background: none; padding: 0; cursor: pointer; }
