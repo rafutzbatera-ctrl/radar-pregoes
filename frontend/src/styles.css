@@ -665,13 +665,16 @@ body {
 
 .c-num { font-family: var(--font-mono); font-size: 12px; color: var(--silk); text-align: left; }
 /* a11y: gatilho real de abertura da linha — botão nativo (foco/Enter/Espaço
-   de graça) estilizado como overlay transparente preenchendo a linha inteira
-   (.tbl-row é position:relative). Fica no fundo do empilhamento; os controles
-   aninhados (inputs/botões) ficam acima via .tbl-row > [role=cell] { z-index } */
+   de graça) estilizado como overlay transparente cobrindo a linha INTEIRA.
+   Fica POR CIMA do conteúdo estático (z-index:1) para a linha toda ser
+   clicável (padrão "stretched link"); só a área de edição (.custo-cel) sobe
+   acima dele (z-index:2) para os inputs/botão-limpar seguirem operáveis.
+   .tbl-row é position:relative e .c-num fica static, então o inset:0 do botão
+   resolve contra a linha (cobre toda a largura, não só a 1ª célula). */
 .tbl-row-abrir {
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: 1;
   background: transparent;
   border: none;
   padding: 0;
@@ -680,8 +683,8 @@ body {
   color: inherit;
 }
 .tbl-row.fora .tbl-row-abrir { cursor: default; }
-/* controles e conteúdo das células acima do overlay clicável */
-.tbl-row > [role="cell"] { position: relative; z-index: 1; }
+/* área de edição (custo/lance) acima do overlay: inputs e botão limpar clicáveis */
+.tbl-row .custo-cel { position: relative; z-index: 2; }
 .c-desc { text-align: left; min-width: 0; }
 .d-nome { font-weight: 600; font-size: 13.5px; line-height: 1.25; }
 .d-spec {
