@@ -26,6 +26,16 @@ log = logging.getLogger("radar.resultados")
 _PORTE = {1: "ME", 2: "EPP", 3: "Demais"}
 
 
+def _cnpj_digitos(cnpj) -> str | None:
+    """CNPJ só com dígitos. O PNCP costuma mandar assim, mas isto blinda contra
+    formatação variada que fragmentaria o MESMO concorrente em grupos distintos
+    na agregação de mercado (#9). Vazio/None → None (nunca inventa)."""
+    if not cnpj:
+        return None
+    d = "".join(c for c in str(cnpj) if c.isdigit())
+    return d or None
+
+
 def _porte_rotulo(porte_id) -> str | None:
     """Mapeia porteFornecedorId para rótulo; desconhecido/ausente → None."""
     try:
@@ -308,7 +318,7 @@ def coletar_resultados(con: sqlite3.Connection, pregao_ids=None,
                         pid, p["cnpj"], p["ano"], p["seq"], d["numero"],
                         d["descricao"], ncm, unidade, d["qtd_homologada"],
                         d["valor_estimado_unit"], d["valor_homologado_unit"],
-                        d["desagio_real_pct"], d["vencedor_cnpj"],
+                        d["desagio_real_pct"], _cnpj_digitos(d["vencedor_cnpj"]),
                         d["vencedor_nome"], d["porte"], d["data_resultado"],
                         p["orgao"], p["uf"],
                     ),
