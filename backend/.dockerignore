@@ -1,0 +1,9 @@
+# não vai para a imagem (reduz contexto e tamanho)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+data/
+*.egg-info/
+.env

@@ -38,6 +38,13 @@ disponível".
 - **Fiscal / prontidão NF-e** — NCM (PNCP → catálogo → vazio), CFOP por regra,
   CST/CSOSN por regime tributário, com selo de prontidão por item. Tudo
   rotulado como sugestão, nunca como orientação contábil.
+- **Resultados / inteligência de mercado** — em pregão já homologado, mostra o
+  **vencedor por item** (CNPJ, porte) e o **deságio real praticado** vindo do
+  PNCP — referência concreta para calibrar o deságio esperado. Edital ainda
+  aberto → "sem resultado publicado", nunca um chute.
+- **Minhas certidões** — cadastro das certidões do fornecedor com **aviso de
+  vencimento** (vencida / vencendo em ≤30 dias / ok) e badge no menu, para não
+  perder o prazo de uma habilitação por documento vencido.
 
 ## Diferencial — honestidade
 
@@ -64,7 +71,7 @@ disso:
 **Backend:** Python 3.11+ · FastAPI · SQLite (`data/radar.db`) · httpx (retry +
 backoff, rate-limit gentil com a API pública) · APScheduler (monitoramento 2×/dia).
 **Frontend:** React + Vite + Framer Motion.
-**Testes:** pytest — **260 testes**, verdes, rodando no CI a cada push.
+**Testes:** pytest — **312 testes**, verdes, rodando no CI a cada push.
 
 Destaques:
 
@@ -104,11 +111,27 @@ npm run dev
 A chave da Anthropic é **opcional** — o extrator de habilitação roda local por
 padrão. Detalhes da configuração (`.env`, seed de catálogo) em `COMO_RODAR.md`.
 
+### Docker (preview local / portfólio)
+
+Há um `docker-compose.yml` que sobe a API (FastAPI) e a UI (build do Vite servido
+por nginx, com proxy `/api` same-origin) em dois containers. É **preparo** para
+preview/portfólio — não é um deploy publicado.
+
+```bash
+docker compose up --build      # UI em http://localhost:8080
+docker compose down            # para; os volumes preservam os dados
+```
+
+- O backend **não** publica porta no host (só rede interna), então roda sem
+  conflitar com o `iniciar.bat` de desenvolvimento (que ocupa a 8000).
+- 1º `up`: baixa o modelo e5 (~470 MB) num volume nomeado; demora.
+- `ANTHROPIC_API_KEY` é opcional (só a síntese RAG usa); o resto funciona sem ela.
+
 ## Testes
 
 ```powershell
 cd backend
-.\.venv\Scripts\python -m pytest -q   # 260 testes
+.\.venv\Scripts\python -m pytest -q   # 312 testes
 ```
 
 O mesmo comando roda no GitHub Actions (Python 3.12, ubuntu) a cada push e PR no

@@ -1,0 +1,40 @@
+# PREPARO para preview local / portfólio — NÃO é um deploy publicado.
+# Sobe a API (FastAPI) e a UI (nginx servindo o build do Vite) atrás de um proxy
+# same-origin (/api). Dados e o modelo e5 persistem em volumes nomeados.
+#
+# Uso:   docker compose up --build      → UI em http://localhost:8080
+# Parar: docker compose down            (os volumes persistem os dados)
+#
+# Observações:
+# - O backend NÃO publica porta no host (só `expose`), então NÃO conflita com o
+#   backend de desenvolvimento do iniciar.bat (que ocupa a 8000 do host).
+# - 1º `up`: o backend baixa o modelo e5 (~470 MB) no volume hf-cache; demora.
+# - ANTHROPIC_API_KEY é OPCIONAL (só para a síntese RAG, que é opt-in). Sem ela,
+#   o RAG extrativo e o resto do sistema funcionam normalmente.
+services:
+  backend:
+    build: ./backend
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - HF_HOME=/app/hf-cache
+    volumes:
+      - radar-data:/app/data      # radar.db + cache PNCP + PDFs baixados
+      - hf-cache:/app/hf-cache    # modelo e5 (evita re-download a cada recriação)
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: /api
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  radar-data:
+  hf-cache:
