@@ -117,11 +117,14 @@ def capag_do_pregao(con: sqlite3.Connection, cnpj: str | None,
       1. Casamento direto por CNPJ em capag_entes (esfera M/E) → nota por
          cod_ibge → disponível. Vale SEMPRE que casar, independente da esfera
          informada — o CNPJ ser um ente já prova que é municipal/estadual.
-      2. Fallback por (município normalizado + UF) SOMENTE se esfera ∈ {M, E}:
+      2. Resolução ESTADUAL por UF (1 nota por UF, esfera='E') quando a esfera
+         resolvida é 'E' — do PNCP OU do ente casado por CNPJ. Determinística:
+         NÃO usa nome de cidade (o seed grava o nome do estado em .municipio).
+      3. Fallback por (município normalizado + UF) SOMENTE se esfera ∈ {M, E}:
          a esfera confirma que é municipal/estadual; o CNPJ do comprador é um
          sub-órgão (fundo/secretaria) do mesmo município. Esfera None/desconhecida
          NÃO faz fallback (evita misatribuir — bug do órgão federal em SP).
-      3. Sem nada → {disponivel: False, motivo: "nao_avaliado"}.
+      4. Sem nada → {disponivel: False, motivo: "nao_avaliado"}.
 
     Nunca inventa nota (princípio nº 1). NÃO afirma "federal" por ausência de
     CNPJ em capag_entes (isso rotulava errado fundos/secretarias municipais);
@@ -157,10 +160,30 @@ def capag_do_pregao(con: sqlite3.Connection, cnpj: str | None,
         if nota_row is not None:
             return _montar_disponivel(nota_row, ente_row["ente"], ente_row["esfera"])
 
-    # 2. fallback por (município normalizado + UF) — SÓ se a esfera do PNCP
+    # 2. resolução ESTADUAL determinística por UF — ANTES do fallback municipal.
+    #    Para estados, o seed grava o NOME DO ESTADO em capag_notas.municipio, NÃO
+    #    a cidade-sede do órgão; logo o fallback por município (que compara
+    #    pregoes.municipio=cidade com capag_notas.municipio=nome-do-estado) nunca
+    #    casa. Há 1 nota estadual por UF (esfera='E') → busca determinística por UF.
+    #    O sinal de "estadual" vem de DUAS fontes: a esfera do PNCP ('E') OU o ente
+    #    casado por CNPJ ser de esfera 'E' (ex.: secretaria/fundo estadual com CNPJ
+    #    próprio que casou em capag_entes mas sem nota por cod_ibge). NUNCA roda
+    #    para 'F' (já barrado no caso 0) nem infere estadual sem sinal explícito.
+    esf_estadual = (esf == "E") or (ente_row is not None and ente_row["esfera"] == "E")
+    if esf_estadual and uf:
+        uf_up = uf.strip().upper()
+        nota_uf = con.execute(
+            "SELECT * FROM capag_notas WHERE UPPER(uf)=? AND esfera='E'",
+            (uf_up,),
+        ).fetchone()
+        if nota_uf is not None:
+            return _montar_disponivel(nota_uf, nota_uf["municipio"], "E")
+
+    # 3. fallback por (município normalizado + UF) — SÓ se a esfera do PNCP
     #    confirma municipal/estadual. Aí é seguro: o comprador é um sub-órgão
     #    (fundo/secretaria) do mesmo município/estado. Sem esfera M/E, NÃO faz
     #    fallback (um órgão federal sediado num município não herda a nota dele).
+    #    Para esfera 'M', compara a cidade pelo nome (caso 2 acima já cobre 'E').
     if esf in ("M", "E") and municipio and uf:
         mun_norm = _normalizar_nome(municipio)
         uf_up = uf.strip().upper()
@@ -171,7 +194,7 @@ def capag_do_pregao(con: sqlite3.Connection, cnpj: str | None,
             if _normalizar_nome(c["municipio"]) == mun_norm:
                 return _montar_disponivel(c, c["municipio"], c["esfera"])
 
-    # 3. sem nota: não avaliado. NÃO inferimos "federal" por ausência de CNPJ
+    # 4. sem nota: não avaliado. NÃO inferimos "federal" por ausência de CNPJ
     #    em capag_entes (rotulava errado fundos/secretarias municipais com CNPJ
     #    próprio). Só dizemos "federal" quando a esfera do PNCP diz F (caso 0).
     return {

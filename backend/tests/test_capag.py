@@ -125,6 +125,46 @@ def test_cnpj_desconhecido_sem_esfera_nao_avaliado(con):
     assert r.get("nota") is None
 
 
+def _montar_capag_estadual_pr(con):
+    """Nota ESTADUAL do Paraná (esfera='E'): o seed grava o NOME DO ESTADO em
+    capag_notas.municipio e cod_ibge de 2 díg ('41'). Sem ente por CNPJ casado e
+    sem nota municipal p/ a cidade-sede — só casa por UF."""
+    con.execute(
+        "INSERT OR REPLACE INTO capag_notas"
+        "(cod_ibge, municipio, uf, nota, ind1, nota1, ind2, nota2,"
+        " ind3, nota3, icf, origem, esfera)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        ("41", "Paraná", "PR", "B",
+         0.30, "A", 0.90, "B", 0.05, "B",
+         "Bicf", "CAPAG Ano Base 2024", "E"),
+    )
+    con.commit()
+
+
+def test_estadual_por_uf(con):
+    """Pregão ESTADUAL no PR (esfera 'E'), sem nota municipal p/ a cidade-sede →
+    casa a nota ESTADUAL por UF (determinística, 1 por UF). NÃO usa nome de
+    cidade (capag_notas.municipio guarda o nome do estado)."""
+    _montar_capag_estadual_pr(con)
+    r = capag.capag_do_pregao(con, "12345678000199", "PR", "Curitiba",
+                              esfera="E")
+    assert r["disponivel"] is True
+    assert r["nota"] == "B"
+    assert r["esfera"] == "E"
+    assert r["uf"] == "PR"
+
+
+def test_federal_em_estado_nao_herda(con):
+    """Órgão FEDERAL (esfera 'F') num estado que TEM nota estadual → NÃO herda a
+    nota do estado. motivo 'federal', sem nota (esfera-aware)."""
+    _montar_capag_estadual_pr(con)
+    r = capag.capag_do_pregao(con, "10882594000165", "PR", "Curitiba",
+                              esfera="F")
+    assert r["disponivel"] is False
+    assert r["motivo"] == "federal"
+    assert r.get("nota") is None
+
+
 def test_nao_avaliado_sem_entes(con):
     """Sem nenhum ente carregado (base não populada) e sem esfera → nao_avaliado."""
     r = capag.capag_do_pregao(con, "12345678000199", "MG", "Cidade Nova")
